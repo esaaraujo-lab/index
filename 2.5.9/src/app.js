@@ -1,7 +1,14 @@
 const FILE_TYPES={video:["mp4","webm","avi","mpg","mpeg","mkv","rm","rmvb","mov","wmv","asf","ts","flv","3gp","m4v"],audio:["mp3","flac","wav","ogg","m4a","aac","wma","alac"],image:["bmp","jpg","jpeg","png","gif","svg","tiff","ico"],code:["php","css","go","java","js","json","txt","sh","html","xml","py","rb","c","cpp","h","hpp"],archive:["zip","rar","tar","7z","gz"],document:["pdf","doc","docx","xls","xlsx","ppt","pptx"],markdown:["md"]},GDOC_TYPES={"application/vnd.google-apps.document":{icon:'<i class="bi bi-file-earmark-text gdi-icon-doc"></i>',name:"Google Doc",formats:[{label:"PDF",ext:"pdf"},{label:"DOCX",ext:"docx"},{label:"TXT",ext:"txt"}]},"application/vnd.google-apps.spreadsheet":{icon:'<i class="bi bi-file-earmark-spreadsheet gdi-icon-doc"></i>',name:"Google Sheet",formats:[{label:"PDF",ext:"pdf"},{label:"XLSX",ext:"xlsx"},{label:"CSV",ext:"csv"}]},"application/vnd.google-apps.presentation":{icon:'<i class="bi bi-file-earmark-slides gdi-icon-doc"></i>',name:"Google Slides",formats:[{label:"PDF",ext:"pdf"},{label:"PPTX",ext:"pptx"}]}};
 
-console.log('[GDI app] build v14.0-full');
+console.log('[GDI app] build v15.1-loginfix');
 
+// ═══════════════════════════════════════════════════════════════
+// v15.1 — CORREÇÃO: "Retomar" levava ao login.
+// Causa: aulas abertas pela busca guardavam só "/fallback" como
+// último endereço (meio-torto → servidor devolve login).
+// Agora: endereço completo guardado + registros antigos quebrados
+// são limpos sozinhos + link só aparece se for válido.
+// ═══════════════════════════════════════════════════════════════
 (function(){if(document.getElementById('gdi-style'))return;const s=document.createElement('style');s.id='gdi-style';s.textContent=`
 .gdi-study-left{overflow-x:hidden;}
 .gdi-study-left>*{min-width:0;max-width:100%;}
@@ -90,12 +97,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-toast-btn:hover{background:rgba(255,255,255,.32);}
 .gdi-playlist-item{transition:background .15s,transform .15s!important;}
 .gdi-playlist-item:hover{background:rgba(255,255,255,.12)!important;}
-/* ── extras v14 ── */
 #gdi-note-marks{position:relative;height:16px;margin-top:4px;cursor:pointer;display:none;}
 .gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
   border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
 .gdi-note-mark:hover{background:#ffd43b;transform:translateX(-50%) scale(1.35);}
-#gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#8b949e;}
+#gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#8b949e;flex-wrap:wrap;}
 #gdi-home-card{animation:gdi-card-in .3s ease;}
 @keyframes gdi-card-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 #gdi-pom-root{position:fixed;bottom:76px;right:16px;z-index:10000;font-family:inherit;}
@@ -145,7 +151,7 @@ function getFileIcon(i){const e=i?.toLowerCase();return isFileType(e,"video")?'<
 
 function generateBreadcrumb(i){const e=i.split("/");let t="",n="";for(let a=0;a<e.length;a++){let c=e[a];n+=(a===0?"":"/")+c;const l=a===e.length-1;let d;try{d=decodeURIComponent(c)}catch{d=c}const o=d.match(/^(\d+):$/),s=o?window.drive_names&&window.drive_names[+o[1]]||d:d||"Home",r=s.length>20?s.slice(0,16)+"\u2026":s;l?t+=`<li class="gdi-bc-cur" title="${escHtml(s)}">${escHtml(r)}</li>`:t+=`<li><a href="${n?n+"/":"/"}" title="${escHtml(s)}">${escHtml(r)}</a></li><li class="gdi-bc-sep">/</li>`}return t}
 
-const Os={isWindows:navigator.userAgent.toUpperCase().indexOf("WIN")>-1,isMac:navigator.userAgent.toUpperCase().indexOf("MAC")>-1,isMacLike:/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isMobile:/Android|webOS|iPhone|iPad|iPod|iOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)};
+const Os={isWindows:navigator.userAgent.toUpperCase().indexOf("WIN")>-1,isMac:navigator.userAgent.toUpperCase().indexOf("MAC")>-1,isMacLike:/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isMobile:/Android|webOS|iPhone|iPad|iPod|iOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)};
 
 function getDocumentHeight(){const i=document;return Math.max(i.body.scrollHeight,i.documentElement.scrollHeight,i.body.offsetHeight,i.documentElement.offsetHeight,i.body.clientHeight,i.documentElement.clientHeight)}
 
@@ -172,6 +178,12 @@ function gdiAnnounceMedia(type,el,extra){
   Bus.emit('media:ready',Object.assign({type,el},extra||{}));
 }
 
+// ★ v15.1: um endereço só é "navegável" se começar com "/" e não
+//   for um "/fallback" pelado (esse endereço, sem id, derruba no login)
+function gdiOkPath(p){
+  return typeof p==='string'&&p.startsWith('/')&&p!=='/fallback'&&!p.startsWith('/fallback::')&&!p.startsWith('/fallback#');
+}
+
 const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
 
 if(window.UI?.debug_mode){const i=window.fetch.bind(window);window.fetch=async function(t,n){const a=typeof t=="string"?t:t.url||String(t),c=(n?.method||"GET").toUpperCase();let l;try{l=n?.body?JSON.parse(n.body):void 0}catch{l=n?.body}GDIDebug.log("req",`\u2192 ${c} ${a}`,l!==void 0?l:null);const d=Date.now();try{const o=await i(t,n),s=o.clone();let r;try{r=await s.json()}catch{r=null}return GDIDebug.log(o.ok?"api":"error",`\u2190 ${o.status} ${a} (${Date.now()-d}ms)`,r),o}catch(o){throw GDIDebug.log("error",`\u2717 FETCH FAILED: ${a}`,String(o)),o}};const e=console.error.bind(console);console.error=function(...t){GDIDebug.log("error",t.map(n=>n instanceof Error?n.stack||n.message:typeof n=="object"?JSON.stringify(n):String(n)).join(" ")),e(...t)},window.addEventListener("error",t=>{GDIDebug.log("error",`Uncaught: ${t.message}`,`${t.filename}:${t.lineno}:${t.colno}`)}),window.addEventListener("unhandledrejection",t=>{GDIDebug.log("error",`UnhandledPromise: ${String(t.reason)}`)})}
@@ -186,31 +198,41 @@ try{(function(){const e=localStorage.getItem("gdi-theme")||"dark";applyTheme(e)}
 
 function sleep(i){return new Promise(e=>setTimeout(e,i))}
 
+// Cache temporário das listagens (45s; zera a cada navegação)
+const _listCache=new Map();const LIST_TTL=45000;
+Bus.onGlobal('page:change',()=>{_listCache.clear();});
 async function gdiListAllFiles(path,pw,onPage){
   try{
-  const out=[];let token='',idx=0;
-  for(let guard=0;guard<50;guard++){
-    let page=null;
-    try{
-      const ctrl=new AbortController();
-      const to=setTimeout(()=>ctrl.abort(),30000);
-      const r=await fetch(path,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({id:'',type:'folder',password:pw||'',page_token:token,page_index:idx}),
-        signal:ctrl.signal
-      });
-      clearTimeout(to);
-      if(r.ok)page=await r.json();
-    }catch(_){}
-    const files=page&&page.data&&Array.isArray(page.data.files)?page.data.files:null;
-    if(!files)break;
-    out.push(...files);
-    if(onPage)try{onPage(out)}catch(_){}
-    if(!page.nextPageToken)break;
-    token=page.nextPageToken;idx++;
-  }
-  return out;
+    const key=path+'|'+(pw||'');
+    const hit=_listCache.get(key);
+    if(hit&&Date.now()-hit.at<LIST_TTL){
+      if(onPage)try{onPage(hit.files.slice())}catch(_){}
+      return hit.files.slice();
+    }
+    const out=[];let token='',idx=0;
+    for(let guard=0;guard<50;guard++){
+      let page=null;
+      try{
+        const ctrl=new AbortController();
+        const to=setTimeout(()=>ctrl.abort(),30000);
+        const r=await fetch(path,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:'',type:'folder',password:pw||'',page_token:token,page_index:idx}),
+          signal:ctrl.signal
+        });
+        clearTimeout(to);
+        if(r.ok)page=await r.json();
+      }catch(_){}
+      const files=page&&page.data&&Array.isArray(page.data.files)?page.data.files:null;
+      if(!files)break;
+      out.push(...files);
+      if(onPage)try{onPage(out)}catch(_){}
+      if(!page.nextPageToken)break;
+      token=page.nextPageToken;idx++;
+    }
+    _listCache.set(key,{at:Date.now(),files:out.slice()});
+    return out;
   }catch(err){ console.error('[GDI Playlist] gdiListAllFiles erro:',path,err); return []; }
 }
 
@@ -537,6 +559,9 @@ function file_code(i,e,t,n,a,c,l,d){const UI=window.UI||{},o=getFileIcon(c);$("#
       <pre><code id="editor"></code></pre>
     </div>`,renderDownloadButtons(a,e))),UI.second_domain_for_dl||($("#code_spinner").html('<div class="gdi-spinner-wrap"><div class="gdi-spinner"></div></div>'),n<=1024*1024*2?$.get(a,function(r){$("#editor").html($("<div/>").text(r).html()),$("#code_spinner").remove(),$(".gdi-code-outer").show()}):($("#code_spinner").remove(),$(".gdi-code-outer").show(),$("#editor").html('<span style="color:var(--gdi-text-muted);">File too large to preview (max 2 MB)</span>')))}
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: PLAYER + MODO ESTUDO (vídeo)
+// ═══════════════════════════════════════════════════════════════
 function file_video(i,e,t,n,a,c,l,d,o){
 const UI=window.UI||{},player_config=window.player_config||{};
 o=o||[];
@@ -565,11 +590,6 @@ if(!UI.disable_player){
     r='<div id="player"></div>';
     p="https://content.jwplatform.com/libraries/IDzF9Zmk.js";
   }
-}
-
-function gdiAnnounceVideoFromDOM(){
-  const v=document.querySelector('.gdi-player-wrap video');
-  if(v)gdiAnnounceMedia('video',v);
 }
 
 const dlBtns=UI.disable_video_download?"":renderDownloadButtons(a,e,{showMedia:true});
@@ -604,7 +624,7 @@ const f=`
         <div class="gdi-notes-head"><strong>\ud83d\udcdd Minhas anota\u00e7\u00f5es</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
         <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anota\u00e7\u00e3o para esta aula\u2026"></textarea>
         <div class="gdi-notes-actions">
-          <span id="gdi-note-time" title="Clique para ajustar ao tempo atual">00:00</span>
+          <span id="gdi-note-time" title="Clique para ir a este momento do v\u00eddeo">00:00</span>
           <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
         </div>
         <div id="gdi-notes-list"><div class="gdi-notes-empty">Carregando suas anota\u00e7\u00f5es\u2026</div></div>
@@ -628,6 +648,59 @@ const f=`
   </div>
 </div>`;
  $("#content").html(f);
+
+function gdiClearDraftOnSwitch(){
+  const ta=document.getElementById('gdi-note-input');
+  if(ta&&ta.value.trim()){ta.value='';showToast('Rascunho descartado ao trocar de aula');}
+}
+
+// ★ v15.1: endereço COMPLETO (com ?id=...&a=view) para "última aula"
+//   e histórico — antes guardava só "/fallback" nas aulas da busca,
+//   e o link incompleto derrubava na tela de login.
+const LAST_KEY=()=>window.location.pathname+(window.location.search||'');
+
+Bus.on('media:ready',({type,el})=>{
+  if(type!=='video'||!el||el.__gdiStudyBound)return;
+  el.__gdiStudyBound=true;
+  attachResumeTracking(el,()=>{
+    try{const pv=playlistVideos[currentIndex]?.pageUrl;if(pv)return pv;}catch(_){}
+    if(window.location.pathname==='/fallback')return '/fallback::'+(getQueryVariable('id')||'');
+    return window.location.pathname;});
+  el.addEventListener('timeupdate',()=>{
+    const el2=document.getElementById('gdi-note-time');
+    if(el2)el2.textContent=gdiFmtTime(el.currentTime);
+    if(!el.__gdiAutoWatched&&isFinite(el.duration)&&el.duration>60&&el.currentTime/el.duration>=0.9){
+      el.__gdiAutoWatched=true;
+      try{GDIUser.markWatched(NOTE_KEY());GDIUser.setLast(LAST_KEY());
+        updateWatchedUI();renderPlaylistUI();}catch(_){}
+    }
+  });
+  el.addEventListener('ended',()=>{
+    try{GDIUser.markWatched(NOTE_KEY());GDIUser.setLast(LAST_KEY());
+      updateWatchedUI();renderPlaylistUI();}catch(_){}
+    console.log('[GDI User] aula marcada como assistida');
+  });
+  const nt=document.getElementById('gdi-note-time');
+  if(nt&&!nt.__gdiSeekBound){nt.__gdiSeekBound=true;
+    nt.addEventListener('click',()=>{
+      const v=document.querySelector('video');
+      if(v&&nt.textContent.includes(':')){
+        const pp=nt.textContent.split(':');
+        const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
+        try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
+      }
+    });
+  }
+});
+
+function gdiAnnounceVideoFromDOM(){
+  let tries=0;
+  setTimeout(function look(){
+    const v=document.querySelector('.gdi-player-wrap video');
+    if(v){gdiAnnounceMedia('video',v);return;}
+    if(++tries<40)setTimeout(look,250);
+  },60);
+}
 gdiAnnounceVideoFromDOM();
 
 function gdiApplyMatZoom(){
@@ -783,6 +856,8 @@ function switchVideo(h){
   $(".gdi-file-header-meta").text(m.size);
   const v=window.drive_names?window.drive_names[window.current_drive_order||0]:"Drive";
   $("title").html(`${v} - ${m.name}`);
+  Bus.emit('title:change');
+  try{GDIUser.pushHistory((m.pageUrl||LAST_KEY()),m.name);}catch(_){}
   if(!UI.disable_video_download) $(".gdi-viewer-footer").html(renderDownloadButtons(m.streamUrl,encodeURIComponent(m.name),{showMedia:true}));
   if(player_config.player==="plyr"&&window._gdiPlayerInstance)
     window._gdiPlayerInstance.source={type:"video",title:m.name,sources:[{src:m.streamUrl,type:m.streamUrl.includes(".m3u8")||m.mimeType==="application/x-mpegURL"?"application/x-mpegURL":"video/mp4"}]},window._gdiPlayerInstance.play().catch(()=>{});
@@ -793,15 +868,18 @@ function switchVideo(h){
   else if(player_config.player==="jwplayer"&&window._gdiPlayerInstance)
     window._gdiPlayerInstance.load([{file:m.streamUrl,type:m.mimeType,image:m.poster,title:m.name}]),window._gdiPlayerInstance.play();
   else{const w=document.getElementById("player")||document.getElementById("vplayer");if(w){w.src=m.streamUrl;w.play().catch(()=>{});}}
+  gdiClearDraftOnSwitch();
   renderPlaylistUI();
   try{renderNotes();updateWatchedUI();}catch(_){}
-  $(".gdi-study-bc .gdi-bc").html(_viewerBreadcrumb()); // breadcrumb acompanha a aula
-  try{gdiBuildMaterials();}catch(_){}                    // PDFs da nova aula, sem recarregar
+  $(".gdi-study-bc .gdi-bc").html(_viewerBreadcrumb());
+  try{gdiBuildMaterials();}catch(_){}
 }
 
 function playNextInPlaylist(){
   if(currentIndex>=0&&currentIndex<playlistVideos.length-1) switchVideo(currentIndex+1);
 }
+
+try{GDIUser.pushHistory(LAST_KEY(),i);}catch(_){}
 
 const currentPath=window.location.pathname;
 const folderPath=currentPath.split("/").slice(0,-1).join("/")+"/";
@@ -918,7 +996,8 @@ try{
 } catch(err){ console.error('[GDI Playlist] buildPlaylist falhou:',err); }
 })();
 
-  function gdiClassifyPdf(name){
+// ── MATERIAIS (por aula) ──
+function gdiClassifyPdf(name){
   const n2=name.toLowerCase();
   if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
   if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
@@ -954,8 +1033,8 @@ async function gdiFindPdfs(fPath,pPath){
   found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);out.push(x)}});
   return out.slice(0,12);
 }
-const gdiMatFrames=new Map(); // url do PDF → iframe já carregado
-let _gdiMatGen=0;             // anti-mistura entre aulas
+const gdiMatFrames=new Map();
+let _gdiMatGen=0;
 async function gdiBuildMaterials(){
   const gen=++_gdiMatGen;
   const tabsEl=document.getElementById('gdi-mat-tabs');
@@ -1036,7 +1115,7 @@ async function gdiBuildMaterials(){
     bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
   }
 }
-gdiBuildMaterials(); // primeira construção
+gdiBuildMaterials();
 
 // ── Assistido + anotações ──
 const NOTE_KEY=()=>window.location.pathname;
@@ -1092,31 +1171,14 @@ document.getElementById('gdi-watched-btn')?.addEventListener('click',()=>{
   showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
 });
 
-// O vídeo AVISA quando fica pronto; só então conectamos retomada etc.
-Bus.on('media:ready',({type,el})=>{
-  if(type!=='video'||!el||el.__gdiStudyBound)return;
-  el.__gdiStudyBound=true;
-  attachResumeTracking(el,()=>{
-    const pv=playlistVideos[currentIndex]?.pageUrl;
-    if(pv)return pv;
-    if(window.location.pathname==='/fallback')return '/fallback::'+(getQueryVariable('id')||'');
-    return window.location.pathname;});
-  el.addEventListener('timeupdate',()=>{
-    const el2=document.getElementById('gdi-note-time');
-    if(el2)el2.textContent=gdiFmtTime(el.currentTime);
-  });
-  el.addEventListener('ended',()=>{
-    GDIUser.markWatched(NOTE_KEY());
-    GDIUser.setLast(NOTE_KEY());
-    updateWatchedUI();renderPlaylistUI();
-    console.log('[GDI User] aula marcada como assistida');
-  });
-  GDIUser.ready().then(()=>{try{renderPlaylistUI();renderNotes();updateWatchedUI();}catch(_){}}).catch(()=>{});
-});
+GDIUser.ready().then(()=>{try{renderNotes();updateWatchedUI();renderPlaylistUI();}catch(_){}}).catch(()=>{});
 
 initSleepMode('video');
 }
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: áudio
+// ═══════════════════════════════════════════════════════════════
 function file_audio(i,e,t,n,a,c,l){
 const UI=window.UI||{};
 l=l||[{name:i,url:n,cover:UI.audioposter}];
@@ -1159,6 +1221,9 @@ Bus.on('media:ready',({type,el,ap})=>{
 });
 initSleepMode('audio');}
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: utilitários de formato + boot
+// ═══════════════════════════════════════════════════════════════
 function formatDateTime(i){return i?new Date(i).toLocaleString():""}
 const utc2delhi=formatDateTime;
 
@@ -1176,22 +1241,40 @@ function fetchQuota(){const i=window.current_drive_order||0;fetch(`/${i}:quota`)
 
  $(function(){init(),window.UI?.debug_mode&&GDIDebug.attach(),window.UI?.show_quota&&fetchQuota(),new URLSearchParams(window.location.search).get("embed")==="1"&&document.body.classList.add("embed-mode"),render(window.location.pathname),initPomodoroOnce()});
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: ESTADO DO USUÁRIO
+// ★ v15.1: setLast/pushHistory guardam o endereço COMPLETO (com
+//   ?id=...&a=view das aulas da busca). Antes cortavam no "?",
+//   e "/fallback" pelado derrubava na tela de login.
+// ★ Limpeza automática: registros antigos quebrados (last e
+//   histórico "/fallback" pelado) são apagados ao carregar.
+// ═══════════════════════════════════════════════════════════════
 function gdiFmtTime(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 
 const GDIUser=(()=>{
-  const SCHEMA=2;
-  const EMPTY={v:SCHEMA,watched:{},last:null,resume:{},notes:{}};
-  const MAX_RESUME=300,MIN_SAVE=5;
-  let state=null,loaded=false,saveTimer=null,ops=[];
+  const SCHEMA=3;
+  const EMPTY={v:SCHEMA,watched:{},last:null,resume:{},notes:{},history:[]};
+  const MAX_RESUME=300,MAX_HISTORY=12,MIN_SAVE=5;
+  let state=null,loaded=false,saveTimer=null,ops=[],flushWarned=false;
+  const touched=new Set();
   const clone=o=>JSON.parse(JSON.stringify(o||{}));
   const _norm=p=>String(p||'').split('?')[0];
+  const _full=p=>String(p||'').split('#')[0];
   function migrate(s){
     let v=(s&&Number(s.v))||1;
     while(v<SCHEMA){
       v++;
       if(v===2){s.watched=s.watched||{};s.resume=s.resume||{};s.notes=s.notes||{};s.last=s.last||null;}
+      if(v===3){s.history=Array.isArray(s.history)?s.history:[];}
     }
     s.v=v;return s;
+  }
+  // ★ remove registros antigos quebrados (links que levavam ao login)
+  function sanitizePaths(st){
+    try{
+      if(st.last&&st.last.path&&!gdiOkPath(st.last.path))st.last=null;
+      if(Array.isArray(st.history))st.history=st.history.filter(h=>h&&gdiOkPath(h.path));
+    }catch(_){}
   }
   function importLocalResume(st){
     try{
@@ -1219,41 +1302,81 @@ const GDIUser=(()=>{
     keys.sort((a,b)=>(st.resume[a].at||0)-(st.resume[b].at||0));
     keys.slice(0,keys.length-MAX_RESUME).forEach(k=>delete st.resume[k]);
   }
+  function mergeInto(local,remote){
+    const m=clone(local);
+    try{
+      const newer=(a,b)=>(Number(a)||0)>=(Number(b)||0);
+      if(remote.watched)for(const k in remote.watched){
+        const L=m.watched[k],R=remote.watched[k];
+        if(R&&(!L||newer(R.at,L.at)))m.watched[k]=R;
+      }
+      if(remote.resume)for(const k in remote.resume){
+        const L=m.resume[k],R=remote.resume[k];
+        if(R&&(!L||newer(R.at,L.at)))m.resume[k]=R;
+      }
+      if(remote.notes)for(const k in remote.notes){
+        if(touched.has('notes:'+k))continue;
+        const R=remote.notes[k]||[],L=m.notes[k]||[];
+        if(R.length>L.length)m.notes[k]=R;
+      }
+      if(remote.last&&gdiOkPath(remote.last.path)&&(!m.last||newer(remote.last.at,m.last.at)))m.last=remote.last;
+      if(Array.isArray(remote.history)&&remote.history.length>(m.history||[]).length)m.history=remote.history;
+      sanitizePaths(m);
+    }catch(_){}
+    return m;
+  }
   async function _load(){
     let s={};
     try{const r=await fetch('/userstate',{cache:'no-store'});if(r.ok)s=await r.json();}catch(_){}
     if(!s||typeof s!=='object')s={};
     state=Object.assign(clone(EMPTY),s);
     migrate(state);
+    sanitizePaths(state);
     importLocalResume(state);
-    ops.forEach(op=>{try{op(state)}catch(_){}});ops=[];
+    ops.forEach(op=>{try{op.fn(state)}catch(_){}(op.tags||[]).forEach(t=>touched.add(t))});ops=[];
     loaded=true;
     schedule();
     Bus.emit('user:ready');
   }
-  function mut(fn){ if(loaded){try{fn(state);schedule();}catch(_){}} else ops.push(fn); }
+  function mut(fn,tags){ if(loaded){try{fn(state);}catch(_){}(tags||[]).forEach(t=>touched.add(t));schedule();} else ops.push({fn,tags}); }
   function schedule(){clearTimeout(saveTimer);saveTimer=setTimeout(_flush,1500);}
-  async function _flush(){ if(!loaded||!state)return; try{ await fetch('/userstate/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)}); }catch(_){}}
+  async function _flush(){
+    if(!loaded||!state)return;
+    let remote=null;
+    try{const r=await fetch('/userstate',{cache:'no-store'});if(r.ok)remote=await r.json();}catch(_){}
+    if(remote&&typeof remote==='object')state=mergeInto(state,remote);
+    try{
+      await fetch('/userstate/save',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
+      touched.clear();flushWarned=false;
+    }catch(_){
+      if(!flushWarned){flushWarned=true;try{showToast('Aten\u00e7\u00e3o: n\u00e3o foi poss\u00edvel salvar o progresso agora')}catch(_){}}
+    }
+  }
   return{
     ready:_load, SCHEMA, MIN_SAVE,
     loaded:()=>loaded,
-    markWatched:p=>mut(s=>{s.watched[_norm(p)]={at:Date.now()}}),
-    unmarkWatched:p=>mut(s=>{delete s.watched[_norm(p)]}),
+    markWatched:p=>{const k=_norm(p);mut(s=>{s.watched[k]={at:Date.now()}},['watched:'+k])},
+    unmarkWatched:p=>{const k=_norm(p);mut(s=>{delete s.watched[k]},['watched:'+k])},
     isWatched:p=>!!(loaded&&state.watched&&state.watched[_norm(p)]),
-    setLast:p=>mut(s=>{s.last={path:_norm(p),at:Date.now()}}),
+    setLast:p=>mut(s=>{s.last={path:_full(p),at:Date.now()}},['last']),
     getLast:()=>(loaded&&state.last)||null,
-    dump:()=>(!loaded)?null:({watched:state.watched,resume:state.resume,notes:state.notes,last:state.last}),
-    setResume:(p,t,d)=>mut(s=>{const k=_norm(p);if(!k)return;s.resume[k]={t:Math.floor(t),d:Math.floor(d||0),at:Date.now()};prune(s)}),
+    dump:()=>(!loaded)?null:({watched:state.watched,resume:state.resume,notes:state.notes,last:state.last,history:state.history||[]}),
+    pushHistory:(p,name)=>{const k=_full(p);if(!gdiOkPath(k))return;mut(s=>{s.history=(s.history||[]).filter(h=>h.path!==k);s.history.unshift({path:k,name:String(name||'').slice(0,120),at:Date.now()});if(s.history.length>MAX_HISTORY)s.history.length=MAX_HISTORY;},['history'])},
+    setResume:(p,t,d)=>{const k=_norm(p);if(!k)return;mut(s=>{s.resume[k]={t:Math.floor(t),d:Math.floor(d||0),at:Date.now()};prune(s)},['resume:'+k])},
     getResume:p=>{const k=_norm(p);return (loaded&&state.resume&&state.resume[k])||null},
-    delResume:p=>mut(s=>{delete s.resume[_norm(p)]}),
-    addNote:(p,t,text)=>mut(s=>{const k=_norm(p);s.notes[k]=s.notes[k]||[];s.notes[k].push({t:Math.floor(t||0),text:String(text).slice(0,2000),at:Date.now()})}),
-    delNote:(p,i)=>mut(s=>{const k=_norm(p);if(s.notes[k])s.notes[k].splice(i,1)}),
+    delResume:p=>{const k=_norm(p);mut(s=>{delete s.resume[k]},['resume:'+k])},
+    addNote:(p,t,text)=>{const k=_norm(p);mut(s=>{s.notes[k]=s.notes[k]||[];s.notes[k].push({t:Math.floor(t||0),text:String(text).slice(0,2000),at:Date.now()})},['notes:'+k])},
+    delNote:(p,i)=>{const k=_norm(p);mut(s=>{if(s.notes[k])s.notes[k].splice(i,1)},['notes:'+k])},
     getNotes:p=>{const k=_norm(p);return (loaded&&state.notes&&state.notes[k])||[]},
     flush:_flush
   };
 })();
 GDIUser.ready();
+document.addEventListener('visibilitychange',()=>{if(document.hidden)try{GDIUser.flush()}catch(_){}});
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: retomada de vídeo/áudio
+// ═══════════════════════════════════════════════════════════════
 function attachResumeTracking(media,getKey){
   if(!media||media.__gdiResume)return;
   media.__gdiResume=true;
@@ -1263,17 +1386,17 @@ function attachResumeTracking(media,getKey){
   const save=()=>{const k=key();if(!k)return;GDIUser.setResume(k,media.currentTime,dur())};
 
   function applySeek(reason){
-    const k=key();if(!k)return;
-    if(settledKey===k)return;
-    if(!GDIUser.loaded())return;
-    if(appliedKey===k)return;
-    const sv=GDIUser.getResume(k);
-    if(!sv){settledKey=k;return}
-    if(sv.t<GDIUser.MIN_SAVE){settledKey=k;return}
-    if(media.readyState<1)return;
-    const d=dur();
-    if(d&&sv.t>d-15){GDIUser.delResume(k);appliedKey=k;settledKey=k;return}
     try{
+      const k=key();if(!k)return;
+      if(settledKey===k)return;
+      if(!GDIUser.loaded())return;
+      if(appliedKey===k)return;
+      const sv=GDIUser.getResume(k);
+      if(!sv){settledKey=k;return}
+      if(sv.t<GDIUser.MIN_SAVE){settledKey=k;return}
+      if(media.readyState<1)return;
+      const d=dur();
+      if(d&&sv.t>d-15){GDIUser.delResume(k);appliedKey=k;settledKey=k;return}
       media.currentTime=sv.t;
       appliedKey=k;
       console.log('[GDI Resume] retomando em',gdiFmtTime(sv.t),'via',reason);
@@ -1308,7 +1431,9 @@ function showResumeToast(t,onRestart){
   setTimeout(()=>{el.classList.add('gdi-toast-out');setTimeout(()=>el.remove(),250)},7000);
 }
 
-// ── Modo descanso (conectado por avisos) ──
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: modo descanso
+// ═══════════════════════════════════════════════════════════════
 function initSleepMode(type){
   const oldOv=document.getElementById('gdi-sleep-overlay');if(oldOv)oldOv.remove();
   const oldBtn=document.getElementById('gdi-sleep-btn');if(oldBtn)oldBtn.remove();
@@ -1382,7 +1507,9 @@ function initSleepMode(type){
   }
 }
 
-// ── Pomodoro v2.3 ──
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: Pomodoro v2.4
+// ═══════════════════════════════════════════════════════════════
 ;(function(){
   function gdiPomBoot(){
     if(window.__gdiPomodoroBooted) return;
@@ -1436,8 +1563,13 @@ function initSleepMode(type){
         $id('gdi-pom-panel')?.classList.remove('open');
       }
     }
+    function refreshBase(){
+      baseTitle=document.title.replace(/^\d\d:\d\d \S+ \u00b7 /,'');
+      if(st.running)updateUI();
+    }
     Bus.onGlobal('media:ready',()=>setTimeout(gdiPomMediaCheck,50));
-    Bus.onGlobal('page:change',gdiPomMediaCheck);
+    Bus.onGlobal('page:change',()=>{setTimeout(gdiPomMediaCheck,30);setTimeout(refreshBase,60);});
+    Bus.onGlobal('title:change',()=>setTimeout(refreshBase,30));
 
     function persist(){
       try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,
@@ -1604,7 +1736,7 @@ function initSleepMode(type){
     }).observe(document.body,{childList:true});
 
     updateUI();
-    console.log('[GDI Pomodoro] v2.3 pronto');
+    console.log('[GDI Pomodoro] v2.4 pronto');
   }
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',gdiPomBoot);}else{gdiPomBoot();}
 })();
@@ -1613,9 +1745,11 @@ function initPomodoroOnce(){
   // No-op
 }
 
-console.log('[GDI Extras] v14 ativo (n\u00edveis 1\u20134)');
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO: EXTRAS
+// ═══════════════════════════════════════════════════════════════
+console.log('[GDI Extras] v15.1 ativo');
 
-// ── Helpers ──
 function gdiWhenReady(selector,cb,tries){tries=tries==null?40:tries;
   const el=document.querySelector(selector);
   if(el){cb(el);return;}
@@ -1623,7 +1757,7 @@ function gdiWhenReady(selector,cb,tries){tries=tries==null?40:tries;
 }
 function gdiNotesNow(){try{return GDIUser.getNotes(window.location.pathname)||[]}catch(_){return[]}}
 
-// ── NÍVEL 4a: senhas protegidas + migração das antigas ──
+// ── senhas protegidas + migração ──
 const _PWK='gdi-'+(window.location.host||'local');
 function _pwXor(s){let o='';for(let i=0;i<s.length;i++)o+=String.fromCharCode(s.charCodeAt(i)^_PWK.charCodeAt(i%_PWK.length));return o}
 function gdiSetPw(p,v){try{localStorage.setItem('gdi_pw_'+btoa(encodeURIComponent(p)),btoa(encodeURIComponent(_pwXor(String(v)))))}catch(_){}}
@@ -1644,7 +1778,7 @@ function gdiGetPw(p){try{
   }catch(_){}
 })();
 
-// ── NÍVEL 1a: velocidade do vídeo salva ──
+// ── velocidade do vídeo salva ──
 (function(){
   const RKEY='gdi-rate';let applying=false;
   const getR=()=>{const v=parseFloat(localStorage.getItem(RKEY));return(v>=0.25&&v<=4)?v:null};
@@ -1658,7 +1792,7 @@ function gdiGetPw(p){try{
   document.addEventListener('loadedmetadata',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
 })();
 
-// ── NÍVEL 1b: atalhos N/P e ]/[ ──
+// ── atalhos N/P e ]/[ ──
 let gdiMarksVideo=null,gdiReviewOn=false;
 document.addEventListener('keydown',e=>{
   const t=e.target;
@@ -1678,7 +1812,7 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-// ── NÍVEL 1c + 3b: marcas na timeline + modo revisão ──
+// ── marcas na timeline + modo revisão ──
 Bus.onGlobal('media:ready',({type,el})=>{
   if(type!=='video'||!el||el.__gdiExtras)return;
   el.__gdiExtras=true;gdiMarksVideo=el;
@@ -1709,18 +1843,18 @@ function gdiReviewTick(){
   if(!notes.length){gdiReviewOn=false;document.getElementById('gdi-review-btn')?.classList.remove('active');return;}
   const t=v.currentTime;
   let idx=-1;for(let i=0;i<notes.length;i++)if(notes[i].t<=t)idx=i;
+  if(idx<0)return;
   const nxt=notes[idx+1];
-  if(idx>=0&&nxt&&t>=notes[idx].t+GDI_REVIEW_SPAN&&t<nxt.t){
-    try{v.currentTime=nx2(nxt);}catch(_){}
-  }else if(idx===notes.length-1&&t>=notes[idx].t+GDI_REVIEW_SPAN){
+  if(nxt&&t>=notes[idx].t+GDI_REVIEW_SPAN&&t<nxt.t){
+    try{v.currentTime=nxt.t;}catch(_){}
+  }else if(!nxt&&t>=notes[idx].t+GDI_REVIEW_SPAN){
     gdiReviewOn=false;
     document.getElementById('gdi-review-btn')?.classList.remove('active');
     showToast('Revis\u00e3o conclu\u00edda \u2713');
   }
-  function nx2(n){v.currentTime=n.t;return n.t}
 }
 
-// ── Montagem por página ──
+// ── montagem por página ──
 Bus.onGlobal('page:change',()=>{setTimeout(()=>{
   gdiHomeCard();
   gdiWhenReady('#count',gdiWatchCount);
@@ -1731,13 +1865,32 @@ Bus.onGlobal('page:change',()=>{setTimeout(()=>{
 Bus.onGlobal('user:ready',()=>{gdiHomeCard();gdiUpdateProgress();gdiRedrawMarks();});
 
 function gdiSetupVideoExtras(wrap){
-  if(document.getElementById('gdi-note-marks'))return;
-  const bar=document.createElement('div');bar.id='gdi-note-marks';
-  wrap.insertAdjacentElement('afterend',bar);
+  if(!document.getElementById('gdi-note-marks')){
+    const bar=document.createElement('div');bar.id='gdi-note-marks';
+    wrap.insertAdjacentElement('afterend',bar);
+  }
+  if(Os.isMobile&&!wrap.__gdiDblTap){
+    wrap.__gdiDblTap=true;
+    let lt=0,lx=0;
+    wrap.addEventListener('touchend',e=>{
+      const now=Date.now();
+      const x=(e.changedTouches&&e.changedTouches[0]&&e.changedTouches[0].clientX)||0;
+      if(now-lt<320&&Math.abs(x-lx)<90){
+        const rect=wrap.getBoundingClientRect();
+        const v=wrap.querySelector('video');
+        if(v&&isFinite(v.duration)&&v.duration>0){
+          const fwd=(x-rect.left)>rect.width/2;
+          v.currentTime=Math.min(Math.max(0,v.currentTime+(fwd?10:-10)),Math.max(0,v.duration-0.5));
+          showToast((fwd?'\u2192 +10s \u2192 ':'\u2190 -10s \u2190 ')+gdiFmtTime(v.currentTime));
+        }
+        lt=0;
+      }else{lt=now;lx=x;}
+    },{passive:true});
+  }
   gdiRedrawMarks();
 }
 
-// ── NÍVEL 1d: filtro "só o que falta" na playlist ──
+// ── filtro "só o que falta" na playlist ──
 function gdiSetupPlaylistFilter(wrapEl){
   if(wrapEl.dataset.gdiFilter)return;wrapEl.dataset.gdiFilter='1';
   const header=wrapEl.querySelector('div');
@@ -1765,7 +1918,7 @@ function gdiApplyPlaylistFilter(){
   });
 }
 
-// ── NÍVEL 3a: Exportar + Revisão no painel de anotações ──
+// ── Exportar + Revisão ──
 function gdiSetupNotesButtons(head){
   if(head.dataset.gdiNotes)return;head.dataset.gdiNotes='1';
   const wrap=document.createElement('div');wrap.style.cssText='display:flex;gap:6px;';
@@ -1826,7 +1979,7 @@ function gdiExportNotes(fmt){
   showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
 }
 
-// ── NÍVEL 2a + 2c: card home + streak/horas ──
+// ── card home (continuar + streak + recentes) ──
 function gdiHomeCard(){
   const p=window.location.pathname;
   if(!/^\/(\d+:)?\/?$/.test(p))return;
@@ -1834,7 +1987,9 @@ function gdiHomeCard(){
   const wrap=document.querySelector('#content .gdi-wrap');
   if(!wrap)return;
   const old=document.getElementById('gdi-home-card');if(old)old.remove();
-  const last=GDIUser.getLast(),d=GDIUser.dump();
+  const rawLast=GDIUser.getLast(),d=GDIUser.dump();
+  // ★ só mostra "Retomar" se o endereço guardado for navegável
+  const last=(rawLast&&gdiOkPath(rawLast.path))?rawLast:null;
   const days=new Set();
   const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
   if(d){for(const k in d.watched)addDay(d.watched[k].at);
@@ -1848,13 +2003,20 @@ function gdiHomeCard(){
   let hours=0;
   if(d)for(const k in d.resume){const r=d.resume[k];hours+=Math.min(r.t,r.d>0?r.d:r.t)}
   hours/=3600;
-  if(!last&&!streak&&!hours)return;
+  const hist=((d&&d.history)||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path));
+  if(!last&&!streak&&!hours&&!hist.length)return;
   let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
   if(last&&last.path){
     const seg=last.path.split('/').filter(Boolean);
     const name=(()=>{try{return decodeURIComponent(seg.pop()||'')}catch(_){return seg.pop()||''}})();
     const folder=(()=>{try{return seg.length?decodeURIComponent(seg[seg.length-1]):''}catch(_){return ''}})();
-    const r=GDIUser.getResume(last.path);
+    // ★ v15.1: aula da busca tem endereço ?id=...&a=view — o tempo
+    //   salvo fica em "/fallback::id"; mapeamos aqui para exibir
+    let rKey=last.path;
+    if(rKey.startsWith('/fallback?')){
+      try{rKey='/fallback::'+(new URLSearchParams(rKey.split('?')[1]||'').get('id')||'')}catch(_){}
+    }
+    const r=GDIUser.getResume(rKey);
     html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
       <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
       <div style="min-width:0;">
@@ -1867,11 +2029,18 @@ function gdiHomeCard(){
   html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
     ${streak>0?`<span title="Dias seguidos com atividade de estudo"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
     ${hours>0?`<span title="Soma das posi\u00e7\u00f5es salvas (estimativa)"><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
-  </div></div>`;
+  </div>`;
+  if(hist.length){
+    html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+      <span style="font-size:11px;color:#8b949e;"><i class="bi bi-clock-history"></i> Recentes:</span>
+      ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" href="${escHtml(h.path)}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+    </div>`;
+  }
+  html+='</div>';
   wrap.insertAdjacentHTML('afterbegin',html);
 }
 
-// ── NÍVEL 2b: progresso da pasta aberta ──
+// ── progresso da pasta / 1ª não assistida / curso ──
 function gdiWatchCount(countEl){
   if(countEl.__gdiProg)return;countEl.__gdiProg=true;
   new MutationObserver(()=>gdiUpdateProgress()).observe(countEl,{childList:true,characterData:true,subtree:true});
@@ -1881,20 +2050,82 @@ function gdiUpdateProgress(){
   const countEl=document.getElementById('count');
   if(!countEl||!countEl.classList.contains('show')){document.getElementById('gdi-progress-line')?.remove();return;}
   const rows=document.querySelectorAll('#list div.gdi-row');
-  let done=0,total=0;
+  let done=0,total=0,firstTodo='';
   rows.forEach(row=>{
+    if(!row.querySelector('.gdi-row-icon i.bi-camera-video-fill'))return;
     const a=row.querySelector('a.gdi-row-name');if(!a)return;
+    const href=a.getAttribute('href')||'';
+    if(href.startsWith('/fallback'))return;
     total++;
-    try{if(GDIUser.isWatched(a.getAttribute('href').split('?')[0]))done++;}catch(_){}
+    let w=false;try{w=GDIUser.isWatched(href.split('?')[0])}catch(_){}
+    if(w)done++;else if(!firstTodo)firstTodo=href;
   });
+  const hasFolders=!!document.querySelector('#list a.gdi-row .gdi-row-icon i.bi-folder-fill');
   const el0=document.getElementById('gdi-progress-line');
-  if(!total||!GDIUser.loaded()){if(el0)el0.remove();return;}
-  const pct=Math.round(done/total*100);
+  if((!total&&!hasFolders)||!GDIUser.loaded()){if(el0)el0.remove();return;}
   let el=el0;
   if(!el){el=document.createElement('div');el.id='gdi-progress-line';countEl.insertAdjacentElement('afterend',el);}
-  el.innerHTML=`<i class="bi bi-bar-chart-fill" style="color:#7aa2ff;"></i>
-    <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
-    <div style="flex:1;max-width:220px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
-      <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
-    </div>`;
+  let html='';
+  if(total){
+    const pct=Math.round(done/total*100);
+    html+=`<i class="bi bi-bar-chart-fill" style="color:#7aa2ff;"></i>
+      <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
+      <div style="flex:1;max-width:160px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
+        <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
+      </div>`;
+    if(firstTodo)html+=`<button id="gdi-next-lesson" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" data-href="${escHtml(firstTodo)}" title="Abrir a primeira aula ainda n\u00e3o assistida"><i class="bi bi-play-fill"></i> N\u00e3o assistida</button>`;
+  }
+  if(hasFolders)html+=`<button id="gdi-course-btn" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" title="Somar o progresso de TODAS as subpastas"><i class="bi bi-diagram-3"></i> Progresso do curso</button>`;
+  el.innerHTML=html;
+  el.querySelector('#gdi-next-lesson')?.addEventListener('click',function(){location.href=this.dataset.href;});
+  el.querySelector('#gdi-course-btn')?.addEventListener('click',gdiCourseProgress);
 }
+let _gdiCourseBusy=false;
+async function gdiCourseProgress(){
+  if(_gdiCourseBusy)return;_gdiCourseBusy=true;
+  const btn=document.getElementById('gdi-course-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="bi bi-hourglass-split"></i> calculando\u2026';}
+  try{
+    const folders=[...document.querySelectorAll('#list a.gdi-row')]
+      .filter(a=>a.querySelector('.gdi-row-icon i.bi-folder-fill'))
+      .map(a=>a.getAttribute('href')||'')
+      .filter(h=>h&&!h.startsWith('/fallback'));
+    let done=0,total=0;
+    const root=trimChar(window.location.pathname,'/')+'/';
+    const bases=[root,...folders.map(f=>f.endsWith('/')?f:f+'/')];
+    for(const base of bases){
+      const files=await gdiListAllFiles(base,gdiGetPw(base));
+      for(const f of files){
+        if(f.mimeType==='application/vnd.google-apps.folder')continue;
+        if(!FILE_TYPES.video.includes((f.fileExtension||'').toLowerCase()))continue;
+        if(/\.part-/i.test(f.name))continue;
+        const bytes=Number(f.size)||0;if(bytes>0&&bytes<1024*1024)continue;
+        total++;
+        try{if(GDIUser.isWatched(base+encodeURIComponent(f.name)))done++;}catch(_){}
+      }
+    }
+    const line=document.getElementById('gdi-progress-line');
+    if(line){
+      const pct=total?Math.round(done/total*100):0;
+      line.insertAdjacentHTML('beforeend',`<span style="color:#e6edf3;"><i class="bi bi-mortarboard-fill" style="color:#3fb950;"></i> Curso: <b>${done}/${total}</b> aulas (${pct}%)</span>`);
+      if(btn)btn.remove();
+    }
+  }catch(_){showToast('N\u00e3o foi poss\u00edvel calcular o progresso do curso');}
+  finally{_gdiCourseBusy=false;}
+}
+
+// ── PWA best-effort ──
+(function(){
+  try{
+    if(document.querySelector('link[rel="manifest"]'))return;
+    const MAN={name:(document.siteName||'Drive')+' Estudos',short_name:'Estudos',start_url:'/',display:'standalone',background_color:'#0b0e14',theme_color:'#0b0e14',icons:[]};
+    const l=document.createElement('link');l.rel='manifest';
+    l.href=URL.createObjectURL(new Blob([JSON.stringify(MAN)],{type:'application/manifest+json'}));
+    document.head.appendChild(l);
+  }catch(_){}
+  if('serviceWorker' in navigator&&location.protocol==='https:'){
+    navigator.serviceWorker.register('/gdi-sw.js',{scope:'/'})
+      .then(()=>console.log('[GDI PWA] offline ativo (gdi-sw.js encontrado)'))
+      .catch(()=>console.log('[GDI PWA] gdi-sw.js n\u00e3o encontrado no servidor \u2014 offline opcional desativado'));
+  }
+})();
