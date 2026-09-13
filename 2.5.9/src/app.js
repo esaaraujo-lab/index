@@ -2,14 +2,6 @@ const FILE_TYPES={video:["mp4","webm","avi","mpg","mpeg","mkv","rm","rmvb","mov"
 
 console.log('[GDI app] build v14.0-full');
 
-// ═══════════════════════════════════════════════════════════════
-// v14.0 = v13.1 (PDFs por aula, estado unificado, Bus de eventos)
-//       + EXTRAS v14: velocidade salva, atalhos, marcas na
-//         timeline, filtro de playlist, continuar assistindo,
-//         progresso, streak, exportar anotações, modo revisão,
-//         senhas protegidas.
-// ═══════════════════════════════════════════════════════════════
-
 (function(){if(document.getElementById('gdi-style'))return;const s=document.createElement('style');s.id='gdi-style';s.textContent=`
 .gdi-study-left{overflow-x:hidden;}
 .gdi-study-left>*{min-width:0;max-width:100%;}
@@ -163,7 +155,6 @@ function escHtml(i){return String(i).replace(/&/g,"&amp;").replace(/</g,"&lt;").
 
 function escJs(i){return String(i).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/</g,"\\x3c")}
 
-// ── Bus: as partes do site se AVISAM em vez de se espionarem ──
 const Bus=(()=>{
   const m=new Map();
   function add(e,f,scope){if(!m.has(e))m.set(e,[]);m.get(e).push({f,scope})}
@@ -339,7 +330,6 @@ let _sortState={col:null,dir:1};function initColumnSort(){const i=document.query
 
 function sortFileList(i,e){const t=$("#list"),n=t.children(".gdi-row").toArray();n.sort((a,c)=>{if(i==="size")return e*((parseFloat($(a).data("bytes"))||0)-(parseFloat($(c).data("bytes"))||0));if(i==="date")return e*(new Date($(a).data("date"))-new Date($(c).data("date")));const l=($(a).data("name")||"").toLowerCase(),d=($(c).data("name")||"").toLowerCase();return e*l.localeCompare(d)}),n.forEach(a=>t.append(a))}
 
-// ── Uma única função renderiza as 3 listas (pasta/fallback/busca) ──
 function appendUnifiedRows(mode,items,basePath){
   const UI=window.UI||{},t=$("#list");
   const isSearch=mode==='search',isFallback=mode==='fallback';
@@ -441,7 +431,6 @@ function onSearchResultItemClick(i,e,t){const n=`/fallback?id=${encodeURICompone
                       <a class="gdi-btn gdi-btn-primary me-2" href="${s}${e?"?a=view":""}">Open</a>
                       <a class="gdi-btn gdi-btn-ghost" href="${s}${e?"?a=view":""}" target="_blank">Open in new tab</a>`);return}}}catch{}a()}l()}
 
-// Cache de arquivos de texto com limite (não estoura a memória do navegador)
 function gdiCachePut(k,v){
   try{
     const IDX='gdi_file_cache_idx';
@@ -929,14 +918,7 @@ try{
 } catch(err){ console.error('[GDI Playlist] buildPlaylist falhou:',err); }
 })();
 
-// ═══════════════════════════════════════════════════════════════
-// MATERIAIS v14 — vinculados à aula e recarregados a cada troca.
-// • caminhos recalculados da URL atual a cada busca;
-// • "geração": se a aula mudar durante a busca, resultado é descartado;
-// • iframes reaproveitados (voltar à aula anterior é instantâneo);
-// • PDF cujo nome contém o nome da aula sobe para a 1ª aba.
-// ═══════════════════════════════════════════════════════════════
-function gdiClassifyPdf(name){
+  function gdiClassifyPdf(name){
   const n2=name.toLowerCase();
   if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
   if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
@@ -1194,11 +1176,6 @@ function fetchQuota(){const i=window.current_drive_order||0;fetch(`/${i}:quota`)
 
  $(function(){init(),window.UI?.debug_mode&&GDIDebug.attach(),window.UI?.show_quota&&fetchQuota(),new URLSearchParams(window.location.search).get("embed")==="1"&&document.body.classList.add("embed-mode"),render(window.location.pathname),initPomodoroOnce()});
 
-// ═══════════════════════════════════════════════════════════════
-// ESTADO DO USUÁRIO v2 — um único caderno (a conta), com migração
-// automática do navegador e controle de versão. (Consertado: a
-// versão colada tinha um return duplicado que derrubava o script.)
-// ═══════════════════════════════════════════════════════════════
 function gdiFmtTime(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 
 const GDIUser=(()=>{
@@ -1277,7 +1254,6 @@ const GDIUser=(()=>{
 })();
 GDIUser.ready();
 
-// ── Retomada de vídeo/áudio (sem timers de procura) ──
 function attachResumeTracking(media,getKey){
   if(!media||media.__gdiResume)return;
   media.__gdiResume=true;
@@ -1637,9 +1613,6 @@ function initPomodoroOnce(){
   // No-op
 }
 
-// ═══════════════════════════════════════════════════════════════
-// EXTRAS v14 — nível 1 a 4
-// ═══════════════════════════════════════════════════════════════
 console.log('[GDI Extras] v14 ativo (n\u00edveis 1\u20134)');
 
 // ── Helpers ──
