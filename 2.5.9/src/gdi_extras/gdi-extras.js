@@ -654,8 +654,32 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10: MODOS DE FOCO + ASSISTIDO (v2.2 — tamanho forçado via JS) ═══
+// ═══ M10: MODOS DE FOCO + ASSISTIDO (v2.3 — força o PLAYER inteiro a 100%) ═══
 (function(){
+  // CSS de força bruta: cobre plyr, videojs, dplayer, jwplayer e vídeo nativo
+  if(!document.getElementById('gdi-focus-style')){
+    const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
+body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
+body.gdi-fv .gdi-study-right{display:none!important;}
+body.gdi-fm .gdi-study-left{display:none!important;}
+body.gdi-fv .gdi-study-left{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap video,
+body.gdi-fv .gdi-player-wrap .plyr,
+body.gdi-fv .gdi-player-wrap .plyr__video-wrapper,
+body.gdi-fv .gdi-player-wrap .video-js,
+body.gdi-fv .gdi-player-wrap .dplayer,
+body.gdi-fv .gdi-player-wrap .dplayer-video-wrap,
+body.gdi-fv .gdi-player-wrap .dplayer-video,
+body.gdi-fv .gdi-player-wrap .jwplayer,
+body.gdi-fv .gdi-player-wrap #player,
+body.gdi-fv .gdi-player-wrap #vplayer,
+body.gdi-fv .gdi-player-wrap #player-container,
+body.gdi-fv .gdi-player-wrap iframe{
+  width:100%!important;max-width:100%!important;max-height:none!important;
+  margin-left:auto!important;margin-right:auto!important;display:block!important;}`;
+    document.head.appendChild(s);
+  }
   function updBtn(){
     const wb=document.getElementById('gdi-watched-btn');
     if(!wb)return;
@@ -677,7 +701,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const ifr=document.querySelector('#gdi-mat-body iframe');
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
-    // ★ aplica direto no elemento — independe de qualquer CSS
+    // cinto de segurança: aplica direto no DOM, além do CSS
     function applyLayout(m){
       const study=document.getElementById('gdi-study');if(!study)return;
       const grid=study.querySelector('.gdi-study-grid');
