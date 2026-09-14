@@ -654,7 +654,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10: MODOS DE FOCO + BOTÃO ASSISTIDO (sincronizado) ═══
+// ═══ M10: MODOS DE FOCO + ASSISTIDO (v2.2 — tamanho forçado via JS) ═══
 (function(){
   function updBtn(){
     const wb=document.getElementById('gdi-watched-btn');
@@ -669,7 +669,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     slot.dataset.m10='1';
     slot.innerHTML=`
       <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (s\u00f3 v\u00eddeo, em tela cheia de largura)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
       <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
       <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
     function zoom(){
@@ -677,11 +677,31 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const ifr=document.querySelector('#gdi-mat-body iframe');
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
+    // ★ aplica direto no elemento — independe de qualquer CSS
+    function applyLayout(m){
+      const study=document.getElementById('gdi-study');if(!study)return;
+      const grid=study.querySelector('.gdi-study-grid');
+      const right=study.querySelector('.gdi-study-right');
+      const left=study.querySelector('.gdi-study-left');
+      if(grid){
+        if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
+        else grid.style.removeProperty('grid-template-columns');
+      }
+      if(right){
+        if(m==='fv')right.style.setProperty('display','none','important');
+        else right.style.removeProperty('display');
+      }
+      if(left){
+        if(m==='fm')left.style.setProperty('display','none','important');
+        else left.style.removeProperty('display');
+      }
+    }
     function setMode(m){
       document.body.classList.toggle('gdi-fv',m==='fv');
       document.body.classList.toggle('gdi-fm',m==='fm');
       try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
       slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+      applyLayout(m);
       if(m!=='fv')setTimeout(zoom,60);
     }
     slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
@@ -701,7 +721,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       });
     }
     updBtn();
-    // ★ sincroniza quando o fim do vídeo / 90% marca como assistido
     Bus.onGlobal('watched:changed',()=>{updBtn();try{window.renderPlaylistUI&&window.renderPlaylistUI()}catch(_){}});
     Bus.onGlobal('user:ready',updBtn);
   }});
