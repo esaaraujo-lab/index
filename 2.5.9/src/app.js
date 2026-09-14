@@ -1,14 +1,7 @@
 const FILE_TYPES={video:["mp4","webm","avi","mpg","mpeg","mkv","rm","rmvb","mov","wmv","asf","ts","flv","3gp","m4v"],audio:["mp3","flac","wav","ogg","m4a","aac","wma","alac"],image:["bmp","jpg","jpeg","png","gif","svg","tiff","ico"],code:["php","css","go","java","js","json","txt","sh","html","xml","py","rb","c","cpp","h","hpp"],archive:["zip","rar","tar","7z","gz"],document:["pdf","doc","docx","xls","xlsx","ppt","pptx"],markdown:["md"]},GDOC_TYPES={"application/vnd.google-apps.document":{icon:'<i class="bi bi-file-earmark-text gdi-icon-doc"></i>',name:"Google Doc",formats:[{label:"PDF",ext:"pdf"},{label:"DOCX",ext:"docx"},{label:"TXT",ext:"txt"}]},"application/vnd.google-apps.spreadsheet":{icon:'<i class="bi bi-file-earmark-spreadsheet gdi-icon-doc"></i>',name:"Google Sheet",formats:[{label:"PDF",ext:"pdf"},{label:"XLSX",ext:"xlsx"},{label:"CSV",ext:"csv"}]},"application/vnd.google-apps.presentation":{icon:'<i class="bi bi-file-earmark-slides gdi-icon-doc"></i>',name:"Google Slides",formats:[{label:"PDF",ext:"pdf"},{label:"PPTX",ext:"pptx"}]}};
 
-console.log('[GDI app] build v15.1-loginfix');
+console.log('[GDI app] build v16.1-playerfix');
 
-// ═══════════════════════════════════════════════════════════════
-// v15.1 — CORREÇÃO: "Retomar" levava ao login.
-// Causa: aulas abertas pela busca guardavam só "/fallback" como
-// último endereço (meio-torto → servidor devolve login).
-// Agora: endereço completo guardado + registros antigos quebrados
-// são limpos sozinhos + link só aparece se for válido.
-// ═══════════════════════════════════════════════════════════════
 (function(){if(document.getElementById('gdi-style'))return;const s=document.createElement('style');s.id='gdi-style';s.textContent=`
 .gdi-study-left{overflow-x:hidden;}
 .gdi-study-left>*{min-width:0;max-width:100%;}
@@ -151,7 +144,7 @@ function getFileIcon(i){const e=i?.toLowerCase();return isFileType(e,"video")?'<
 
 function generateBreadcrumb(i){const e=i.split("/");let t="",n="";for(let a=0;a<e.length;a++){let c=e[a];n+=(a===0?"":"/")+c;const l=a===e.length-1;let d;try{d=decodeURIComponent(c)}catch{d=c}const o=d.match(/^(\d+):$/),s=o?window.drive_names&&window.drive_names[+o[1]]||d:d||"Home",r=s.length>20?s.slice(0,16)+"\u2026":s;l?t+=`<li class="gdi-bc-cur" title="${escHtml(s)}">${escHtml(r)}</li>`:t+=`<li><a href="${n?n+"/":"/"}" title="${escHtml(s)}">${escHtml(r)}</a></li><li class="gdi-bc-sep">/</li>`}return t}
 
-const Os={isWindows:navigator.userAgent.toUpperCase().indexOf("WIN")>-1,isMac:navigator.userAgent.toUpperCase().indexOf("MAC")>-1,isMacLike:/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isMobile:/Android|webOS|iPhone|iPad|iPod|iOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)};
+const Os={isWindows:navigator.userAgent.toUpperCase().indexOf("WIN")>-1,isMac:navigator.userAgent.toUpperCase().indexOf("MAC")>-1,isMacLike:/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent),isIos:/(iPhone|iPod|iPad)/i.test(navigator.userAgent),isMobile:/Android|webOS|iPhone|iPad|iPod|iOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)};
 
 function getDocumentHeight(){const i=document;return Math.max(i.body.scrollHeight,i.documentElement.scrollHeight,i.body.offsetHeight,i.documentElement.offsetHeight,i.body.clientHeight,i.documentElement.clientHeight)}
 
@@ -178,8 +171,6 @@ function gdiAnnounceMedia(type,el,extra){
   Bus.emit('media:ready',Object.assign({type,el},extra||{}));
 }
 
-// ★ v15.1: um endereço só é "navegável" se começar com "/" e não
-//   for um "/fallback" pelado (esse endereço, sem id, derruba no login)
 function gdiOkPath(p){
   return typeof p==='string'&&p.startsWith('/')&&p!=='/fallback'&&!p.startsWith('/fallback::')&&!p.startsWith('/fallback#');
 }
@@ -198,7 +189,6 @@ try{(function(){const e=localStorage.getItem("gdi-theme")||"dark";applyTheme(e)}
 
 function sleep(i){return new Promise(e=>setTimeout(e,i))}
 
-// Cache temporário das listagens (45s; zera a cada navegação)
 const _listCache=new Map();const LIST_TTL=45000;
 Bus.onGlobal('page:change',()=>{_listCache.clear();});
 async function gdiListAllFiles(path,pw,onPage){
@@ -302,10 +292,10 @@ function nav(i){const e=window.MODEL||{},t=window.current_drive_order||0,n=(wind
       <button id="theme-toggle" class="gdi-nav-btn" onclick="toggleTheme()" title="Toggle theme">
         <i class="bi bi-moon-stars" id="theme-icon"></i>
       </button>
-      ${UI.show_logout_button?'<a class="gdi-nav-btn" href="/logout" title="Logout"><i class="bi bi-box-arrow-right"></i></a>':""}
+      <div id="gdi-auth-slot" style="display:flex;align-items:center;"></div>
     </div>
   </div>
-</nav>`;$("#nav").html(s),applyTheme(localStorage.getItem("gdi-theme")||"dark")}
+</nav>`;$("#nav").html(s),applyTheme(localStorage.getItem("gdi-theme")||"dark"),setTimeout(gdiRenderAuth,0)}
 
 function render(i){Bus.reset();i.indexOf("?")>=0&&(i=i.substr(0,i.indexOf("?"))),title(i),nav(i);const e=/\/\d+:$/g;if(i.includes("/fallback")){window.scroll_status={event_bound:!1,loading_lock:!1};const t=getQueryVariable("a"),n=decodeURIComponent(getQueryVariable("id")||"");return t?fallback(n,!0):list(null,n,!0)}else window.MODEL?.is_search_page?(window.scroll_status={event_bound:!1,loading_lock:!1},render_search_result_list()):i.match(e)||i.slice(-1)=="/"?(window.scroll_status={event_bound:!1,loading_lock:!1},list(i)):file(i);Bus.emit('page:change')}
 
@@ -559,9 +549,6 @@ function file_code(i,e,t,n,a,c,l,d){const UI=window.UI||{},o=getFileIcon(c);$("#
       <pre><code id="editor"></code></pre>
     </div>`,renderDownloadButtons(a,e))),UI.second_domain_for_dl||($("#code_spinner").html('<div class="gdi-spinner-wrap"><div class="gdi-spinner"></div></div>'),n<=1024*1024*2?$.get(a,function(r){$("#editor").html($("<div/>").text(r).html()),$("#code_spinner").remove(),$(".gdi-code-outer").show()}):($("#code_spinner").remove(),$(".gdi-code-outer").show(),$("#editor").html('<span style="color:var(--gdi-text-muted);">File too large to preview (max 2 MB)</span>')))}
 
-// ═══════════════════════════════════════════════════════════════
-// MÓDULO: PLAYER + MODO ESTUDO (vídeo)
-// ═══════════════════════════════════════════════════════════════
 function file_video(i,e,t,n,a,c,l,d,o){
 const UI=window.UI||{},player_config=window.player_config||{};
 o=o||[];
@@ -654,9 +641,6 @@ function gdiClearDraftOnSwitch(){
   if(ta&&ta.value.trim()){ta.value='';showToast('Rascunho descartado ao trocar de aula');}
 }
 
-// ★ v15.1: endereço COMPLETO (com ?id=...&a=view) para "última aula"
-//   e histórico — antes guardava só "/fallback" nas aulas da busca,
-//   e o link incompleto derrubava na tela de login.
 const LAST_KEY=()=>window.location.pathname+(window.location.search||'');
 
 Bus.on('media:ready',({type,el})=>{
@@ -996,7 +980,6 @@ try{
 } catch(err){ console.error('[GDI Playlist] buildPlaylist falhou:',err); }
 })();
 
-// ── MATERIAIS (por aula) ──
 function gdiClassifyPdf(name){
   const n2=name.toLowerCase();
   if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
@@ -1117,7 +1100,6 @@ async function gdiBuildMaterials(){
 }
 gdiBuildMaterials();
 
-// ── Assistido + anotações ──
 const NOTE_KEY=()=>window.location.pathname;
 function updateWatchedUI(){
   const b=document.getElementById('gdi-watched-btn');
@@ -1176,9 +1158,6 @@ GDIUser.ready().then(()=>{try{renderNotes();updateWatchedUI();renderPlaylistUI()
 initSleepMode('video');
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MÓDULO: áudio
-// ═══════════════════════════════════════════════════════════════
 function file_audio(i,e,t,n,a,c,l){
 const UI=window.UI||{};
 l=l||[{name:i,url:n,cover:UI.audioposter}];
@@ -1221,9 +1200,6 @@ Bus.on('media:ready',({type,el,ap})=>{
 });
 initSleepMode('audio');}
 
-// ═══════════════════════════════════════════════════════════════
-// MÓDULO: utilitários de formato + boot
-// ═══════════════════════════════════════════════════════════════
 function formatDateTime(i){return i?new Date(i).toLocaleString():""}
 const utc2delhi=formatDateTime;
 
@@ -1241,14 +1217,6 @@ function fetchQuota(){const i=window.current_drive_order||0;fetch(`/${i}:quota`)
 
  $(function(){init(),window.UI?.debug_mode&&GDIDebug.attach(),window.UI?.show_quota&&fetchQuota(),new URLSearchParams(window.location.search).get("embed")==="1"&&document.body.classList.add("embed-mode"),render(window.location.pathname),initPomodoroOnce()});
 
-// ═══════════════════════════════════════════════════════════════
-// MÓDULO: ESTADO DO USUÁRIO
-// ★ v15.1: setLast/pushHistory guardam o endereço COMPLETO (com
-//   ?id=...&a=view das aulas da busca). Antes cortavam no "?",
-//   e "/fallback" pelado derrubava na tela de login.
-// ★ Limpeza automática: registros antigos quebrados (last e
-//   histórico "/fallback" pelado) são apagados ao carregar.
-// ═══════════════════════════════════════════════════════════════
 function gdiFmtTime(s){s=Math.floor(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 
 const GDIUser=(()=>{
@@ -1256,6 +1224,7 @@ const GDIUser=(()=>{
   const EMPTY={v:SCHEMA,watched:{},last:null,resume:{},notes:{},history:[]};
   const MAX_RESUME=300,MAX_HISTORY=12,MIN_SAVE=5;
   let state=null,loaded=false,saveTimer=null,ops=[],flushWarned=false;
+  let auth='unknown';
   const touched=new Set();
   const clone=o=>JSON.parse(JSON.stringify(o||{}));
   const _norm=p=>String(p||'').split('?')[0];
@@ -1269,7 +1238,6 @@ const GDIUser=(()=>{
     }
     s.v=v;return s;
   }
-  // ★ remove registros antigos quebrados (links que levavam ao login)
   function sanitizePaths(st){
     try{
       if(st.last&&st.last.path&&!gdiOkPath(st.last.path))st.last=null;
@@ -1326,9 +1294,13 @@ const GDIUser=(()=>{
     return m;
   }
   async function _load(){
-    let s={};
-    try{const r=await fetch('/userstate',{cache:'no-store'});if(r.ok)s=await r.json();}catch(_){}
+    let s={},ok=false;
+    try{
+      const r=await fetch('/userstate',{cache:'no-store'});
+      if(r.ok&&!(r.redirected&&/login/i.test(r.url||''))){s=await r.json();ok=true;}
+    }catch(_){}
     if(!s||typeof s!=='object')s={};
+    auth=ok?'in':'out';
     state=Object.assign(clone(EMPTY),s);
     migrate(state);
     sanitizePaths(state);
@@ -1336,6 +1308,7 @@ const GDIUser=(()=>{
     ops.forEach(op=>{try{op.fn(state)}catch(_){}(op.tags||[]).forEach(t=>touched.add(t))});ops=[];
     loaded=true;
     schedule();
+    Bus.emit('auth:change',auth);
     Bus.emit('user:ready');
   }
   function mut(fn,tags){ if(loaded){try{fn(state);}catch(_){}(tags||[]).forEach(t=>touched.add(t));schedule();} else ops.push({fn,tags}); }
@@ -1355,6 +1328,7 @@ const GDIUser=(()=>{
   return{
     ready:_load, SCHEMA, MIN_SAVE,
     loaded:()=>loaded,
+    auth:()=>auth,
     markWatched:p=>{const k=_norm(p);mut(s=>{s.watched[k]={at:Date.now()}},['watched:'+k])},
     unmarkWatched:p=>{const k=_norm(p);mut(s=>{delete s.watched[k]},['watched:'+k])},
     isWatched:p=>!!(loaded&&state.watched&&state.watched[_norm(p)]),
@@ -1375,7 +1349,22 @@ GDIUser.ready();
 document.addEventListener('visibilitychange',()=>{if(document.hidden)try{GDIUser.flush()}catch(_){}});
 
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO: retomada de vídeo/áudio
+// Botões Entrar/Sair (/login e /logout)
+// ═══════════════════════════════════════════════════════════════
+function gdiRenderAuth(){
+  const slot=document.getElementById('gdi-auth-slot');
+  if(!slot)return;
+  const st=GDIUser.auth();
+  if(st==='in'){
+    slot.innerHTML='<a class="gdi-nav-btn" href="/logout" title="Sua conta \u2014 clique para sair (o progresso fica salvo nela)" onclick="try{GDIUser.flush()}catch(_){}"><i class="bi bi-person-check"></i><span class="d-none d-md-inline">Sair</span></a>';
+  }else if(st==='out'){
+    slot.innerHTML='<a class="gdi-nav-btn" href="/login" title="Entrar na sua conta para salvar o progresso"><i class="bi bi-box-arrow-in-right"></i><span class="d-none d-md-inline">Entrar</span></a>';
+  }
+}
+Bus.onGlobal('auth:change',()=>gdiRenderAuth());
+
+// ═══════════════════════════════════════════════════════════════
+// Retomada
 // ═══════════════════════════════════════════════════════════════
 function attachResumeTracking(media,getKey){
   if(!media||media.__gdiResume)return;
@@ -1432,7 +1421,7 @@ function showResumeToast(t,onRestart){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO: modo descanso
+// Modo descanso
 // ═══════════════════════════════════════════════════════════════
 function initSleepMode(type){
   const oldOv=document.getElementById('gdi-sleep-overlay');if(oldOv)oldOv.remove();
@@ -1508,7 +1497,7 @@ function initSleepMode(type){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO: Pomodoro v2.4
+// Pomodoro v2.4
 // ═══════════════════════════════════════════════════════════════
 ;(function(){
   function gdiPomBoot(){
@@ -1746,9 +1735,9 @@ function initPomodoroOnce(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO: EXTRAS
+// EXTRAS v16.1
 // ═══════════════════════════════════════════════════════════════
-console.log('[GDI Extras] v15.1 ativo');
+console.log('[GDI Extras] v16.1 ativo');
 
 function gdiWhenReady(selector,cb,tries){tries=tries==null?40:tries;
   const el=document.querySelector(selector);
@@ -1856,13 +1845,14 @@ function gdiReviewTick(){
 
 // ── montagem por página ──
 Bus.onGlobal('page:change',()=>{setTimeout(()=>{
-  gdiHomeCard();
+  gdiContinueCard();
+  gdiRenderAuth();
   gdiWhenReady('#count',gdiWatchCount);
   gdiWhenReady('.gdi-player-wrap',gdiSetupVideoExtras);
   gdiWhenReady('#gdi-playlist-wrap',gdiSetupPlaylistFilter);
   gdiWhenReady('.gdi-notes-head',gdiSetupNotesButtons);
 },60);});
-Bus.onGlobal('user:ready',()=>{gdiHomeCard();gdiUpdateProgress();gdiRedrawMarks();});
+Bus.onGlobal('user:ready',()=>{gdiContinueCard();gdiUpdateProgress();gdiRedrawMarks();});
 
 function gdiSetupVideoExtras(wrap){
   if(!document.getElementById('gdi-note-marks')){
@@ -1979,17 +1969,74 @@ function gdiExportNotes(fmt){
   showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
 }
 
-// ── card home (continuar + streak + recentes) ──
-function gdiHomeCard(){
+// ═══════════════════════════════════════════════════════════════
+// CARD "CONTINUAR" — v16.1 com correção do login
+// ═══════════════════════════════════════════════════════════════
+function gdiResumeKeyFor(path){
+  const p=String(path||'');
+  if(p.indexOf('/fallback?')===0){
+    try{return '/fallback::'+(new URLSearchParams(p.split('?')[1]||'').get('id')||'')}catch(_){return ''}
+  }
+  return p.split('?')[0];
+}
+function gdiPickContinueTarget(){
+  const last=GDIUser.getLast();
+  if(last&&last.path&&gdiOkPath(last.path))return last.path;
+  const d=GDIUser.dump();if(!d)return null;
+  let best=null,bestAt=-1;
+  const consider=(key,at)=>{if(!key||!gdiOkPath(key))return;const a=Number(at)||0;if(a>bestAt){bestAt=a;best=key;}};
+  if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
+  if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
+  return best;
+}
+// ★ v16.1: link do card SEMPRE aponta para a página do player (?a=view).
+// Caminho cru do arquivo (sem ?a=view) = download/stream direto,
+// que é o pedido que cai na tela de login no servidor.
+function gdiPlayerHref(p){
+  const s=String(p||'');
+  if(!s||!gdiOkPath(s))return '';
+  return s.includes('?')?s+'&a=view':s+'?a=view';
+}
+// ★ v16.1: antes de navegar, testa a sessão (HEAD não baixa nada).
+async function gdiSafeGo(ev){
+  const a=ev.currentTarget;
+  const href=a.getAttribute('href')||'';
+  if(!href||!href.startsWith('/'))return;
+  ev.preventDefault();
+  try{
+    const r=await fetch(href,{method:'HEAD',redirect:'manual',credentials:'same-origin'});
+    if(r.status>=300&&r.status<400){
+      const loc=(r.headers.get('location')||'')+' '+(r.url||'');
+      if(/login/i.test(loc)){
+        showToast('Sess\u00e3o expirada \u2014 entre para retomar');
+        location.href='/login';
+        return;
+      }
+    }
+  }catch(_){}
+  location.href=href;
+}
+function gdiTargetLabels(target){
+  const pOnly=String(target||'').split('?')[0];
+  const seg=pOnly.split('/').filter(Boolean);
+  const name=(()=>{try{return decodeURIComponent(seg.pop()||'')}catch(_){return seg.pop()||''}})();
+  const folder=(()=>{try{return seg.length?decodeURIComponent(seg[seg.length-1]):''}catch(_){return ''}})();
+  return{name:name.replace(/\.[a-z0-9]+$/i,''),folder};
+}
+function gdiContinueCard(){
   const p=window.location.pathname;
-  if(!/^\/(\d+:)?\/?$/.test(p))return;
   if(!GDIUser.loaded())return;
   const wrap=document.querySelector('#content .gdi-wrap');
   if(!wrap)return;
   const old=document.getElementById('gdi-home-card');if(old)old.remove();
-  const rawLast=GDIUser.getLast(),d=GDIUser.dump();
-  // ★ só mostra "Retomar" se o endereço guardado for navegável
-  const last=(rawLast&&gdiOkPath(rawLast.path))?rawLast:null;
+  const isHome=/^\/(\d+:)?\/?$/.test(p);
+  const target=gdiPickContinueTarget();
+  if(!isHome){
+    if(!target)return;
+    if(target.split('?')[0].indexOf(p)!==0)return;
+  }
+  const logged=GDIUser.auth()!=='out';
+  const d=GDIUser.dump();
   const days=new Set();
   const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
   if(d){for(const k in d.watched)addDay(d.watched[k].at);
@@ -2003,41 +2050,43 @@ function gdiHomeCard(){
   let hours=0;
   if(d)for(const k in d.resume){const r=d.resume[k];hours+=Math.min(r.t,r.d>0?r.d:r.t)}
   hours/=3600;
-  const hist=((d&&d.history)||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path));
-  if(!last&&!streak&&!hours&&!hist.length)return;
+  const hist=isHome?((d&&d.history)||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path)):[];
+  if(!target&&!streak&&!hours&&!hist.length)return;
+  const lbl=target?gdiTargetLabels(target):null;
+  const rKey=target?gdiResumeKeyFor(target):'';
+  const r=target?GDIUser.getResume(rKey):null;
+  // ★ v16.1: deslogado = botão "Entrar para retomar" (link que falha nunca aparece)
+  const resumeBtn=target?(logged
+    ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(gdiPlayerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
+    :`<a class="gdi-btn gdi-btn-primary" href="/login" title="Entre para retomar de onde parou"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
   let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
-  if(last&&last.path){
-    const seg=last.path.split('/').filter(Boolean);
-    const name=(()=>{try{return decodeURIComponent(seg.pop()||'')}catch(_){return seg.pop()||''}})();
-    const folder=(()=>{try{return seg.length?decodeURIComponent(seg[seg.length-1]):''}catch(_){return ''}})();
-    // ★ v15.1: aula da busca tem endereço ?id=...&a=view — o tempo
-    //   salvo fica em "/fallback::id"; mapeamos aqui para exibir
-    let rKey=last.path;
-    if(rKey.startsWith('/fallback?')){
-      try{rKey='/fallback::'+(new URLSearchParams(rKey.split('?')[1]||'').get('id')||'')}catch(_){}
-    }
-    const r=GDIUser.getResume(rKey);
+  if(target){
     html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
       <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
       <div style="min-width:0;">
         <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar de onde parou</div>
-        <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</div>
-        <div style="font-size:12px;color:#8b949e;">${escHtml(folder)}${r?' \u00b7 parou em '+gdiFmtTime(r.t):''}</div>
+        <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
+        <div style="font-size:12px;color:#8b949e;">${escHtml(lbl.folder)}${r?' \u00b7 parou em '+gdiFmtTime(r.t):''}</div>
       </div></div>
-      <a class="gdi-btn gdi-btn-primary" href="${escHtml(last.path)}"><i class="bi bi-play-fill"></i> Retomar</a>`;
+      ${resumeBtn}`;
   }
-  html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
-    ${streak>0?`<span title="Dias seguidos com atividade de estudo"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
-    ${hours>0?`<span title="Soma das posi\u00e7\u00f5es salvas (estimativa)"><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
-  </div>`;
-  if(hist.length){
-    html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-      <span style="font-size:11px;color:#8b949e;"><i class="bi bi-clock-history"></i> Recentes:</span>
-      ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" href="${escHtml(h.path)}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+  if(isHome){
+    html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
+      ${streak>0?`<span title="Dias seguidos com atividade de estudo"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
+      ${hours>0?`<span title="Soma das posi\u00e7\u00f5es salvas (estimativa)"><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
     </div>`;
+    if(hist.length){
+      html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+        <span style="font-size:11px;color:#8b949e;"><i class="bi bi-clock-history"></i> Recentes:</span>
+        ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(gdiPlayerHref(h.path))}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+      </div>`;
+    }
+  }else if(streak>0){
+    html+=`<span style="font-size:12px;color:#8b949e;" title="Dias seguidos com atividade"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
   }
   html+='</div>';
   wrap.insertAdjacentHTML('afterbegin',html);
+  wrap.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',gdiSafeGo));
 }
 
 // ── progresso da pasta / 1ª não assistida / curso ──
