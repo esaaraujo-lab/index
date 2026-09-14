@@ -232,18 +232,26 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M5: CRONÔMETRO + AUTO-ASSISTIDO 90% + clique-no-tempo ═══
+// ═══ M5 v2: CRONÔMETRO + AUTO-ASSISTIDO 90% (marca com a CHAVE DA PLAYLIST) ═══
 (function(){
+  // ★ chave canônica da aula atual: a MESMA que a playlist usa para o ✓
+  window.gdiVideoKey=function(){
+    try{
+      const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
+    }catch(_){}
+    return window.location.pathname;
+  };
   Bus.onGlobal('media:ready',({type,el})=>{
-    if(type!=='video'||!el||el.__m5)return;
-    el.__m5=true;
+    if(type!=='video'||!el||el.__m5v2)return;
+    el.__m5v2=true;
     const LAST_KEY=()=>window.location.pathname+(window.location.search||'');
     el.addEventListener('timeupdate',()=>{
       const el2=document.getElementById('gdi-note-time');
       if(el2)el2.textContent=gdiFmtTime(el.currentTime);
       if(!el.__autoW&&isFinite(el.duration)&&el.duration>60&&el.currentTime/el.duration>=0.9){
         el.__autoW=true;
-        try{GDIUser.markWatched(window.location.pathname);GDIUser.setLast(LAST_KEY());}catch(_){}
+        try{GDIUser.markWatched(window.gdiVideoKey());GDIUser.setLast(LAST_KEY());}catch(_){}
         Bus.emit('watched:changed');
       }
     });
@@ -251,17 +259,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const el3=document.getElementById('gdi-note-time');
       if(el3)el3.textContent='00:00';
     });
-    const nt=document.getElementById('gdi-note-time');
-    if(nt&&!nt.__seekB){nt.__seekB=true;
-      nt.addEventListener('click',()=>{
-        const v=document.querySelector('video');
-        if(v&&nt.textContent.includes(':')){
-          const pp=nt.textContent.split(':');
-          const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
-          try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
-        }
-      });
-    }
+    // clique-no-tempo fica a cargo do M6 (evita binding duplicado)
   });
 })();
 
@@ -737,7 +735,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(wb&&!wb.dataset.b){
       wb.dataset.b='1';
       wb.addEventListener('click',()=>{
-        const key=window.location.pathname;
+        const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
         const done=GDIUser.isWatched(key);
         if(done)GDIUser.unmarkWatched(key);else GDIUser.markWatched(key);
         Bus.emit('watched:changed');
@@ -1277,36 +1275,77 @@ body.gdi-fv .gdi-player-wrap iframe{
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
 
-// ═══ M15: FILTRO "SÓ O QUE FALTA" NA PLAYLIST ═══
+// ═══ M19: SYNC DO ✓ NA PLAYLIST + FILTRO "SÓ O QUE FALTA" ═══
+// Corrige os ✓ direto no DOM (não depende do render do core) e re-executa
+// sempre que a playlist for redesenhada (MutationObserver).
 (function(){
-  window.GDI_MODULES.push({name:'playlist-filter',init:function(){
-    const wrapEl=document.getElementById('gdi-playlist-wrap');
-    if(!wrapEl||wrapEl.dataset.gdiFilter)return;
-    wrapEl.dataset.gdiFilter='1';
-    const header=wrapEl.querySelector('div');
-    if(!header)return;
-    const btn=document.createElement('button');
-    btn.className='gdi-mode-btn';btn.style.cssText='padding:3px 10px;font-size:11px;';
-    const refresh=()=>{const on=localStorage.getItem('gdi-hide-watched')==='1';
-      btn.classList.toggle('active',on);
-      btn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i> S\u00f3 o que falta';};
-    btn.addEventListener('click',()=>{
-      const on=localStorage.getItem('gdi-hide-watched')==='1';
-      localStorage.setItem('gdi-hide-watched',on?'0':'1');
-      refresh();apply();});
-    header.appendChild(btn);refresh();
+  function refresh(){
     const list=document.getElementById('gdi-playlist-list');
-    if(list&&!list.__fObs){list.__fObs=true;
-      new MutationObserver(apply).observe(list,{childList:true});}
-    apply();
-  }});
-  function apply(){
+    if(!list||!window.playlistVideos)return;
     const hide=localStorage.getItem('gdi-hide-watched')==='1';
-    document.querySelectorAll('.gdi-playlist-item').forEach(el=>{
-      const watched=!!el.querySelector('i.bi-check-circle-fill');
-      el.style.display=(hide&&watched)?'none':'flex';
+    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
+      const idx=parseInt(el.dataset.idx,10);
+      const m=window.playlistVideos[idx];
+      if(!m)return;
+      let w=false;try{w=GDIUser.isWatched((m.pageUrl||'').split('?')[0]);}catch(_){}
+      const cur=(idx===window.currentIndex);
+      const ic=el.querySelector('i');
+      if(ic){
+        ic.className='bi '+(cur?'bi-play-fill':(w?'bi-check-circle-fill':'bi-film'))+' me-2';
+        ic.style.color=(w&&!cur)?'#3fb950':'';
+      }
+      // ✓ textual do lado direito (aparece inclusive no item atual)
+      const right=el.querySelector('span:last-child');
+      if(right){
+        const wanted=(w?'\u2713 ':'')+(m.size||'');
+        if(right.textContent!==wanted)right.textContent=wanted;
+      }
+      const nameSpan=el.querySelector('div > span');
+      if(nameSpan){
+        nameSpan.style.fontWeight=cur?'600':'400';
+        nameSpan.style.opacity=(w&&!cur)?'.75':'';
+      }
+      // filtro — o item atual nunca é escondido (você está nele)
+      el.style.display=(hide&&w&&!cur)?'none':'flex';
     });
+    // botão "Assistida ✓" do topo acompanha a mesma chave
+    const wb=document.getElementById('gdi-watched-btn');
+    if(wb){
+      const done=GDIUser.isWatched(window.gdiVideoKey?window.gdiVideoKey():window.location.pathname);
+      wb.classList.toggle('done',done);
+      wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+    }
   }
+  window.gdiRefreshPlaylistChecks=refresh;
+  Bus.onGlobal('watched:changed',()=>setTimeout(refresh,30));
+  Bus.onGlobal('video:switched',()=>setTimeout(refresh,120));
+  Bus.onGlobal('user:ready',()=>setTimeout(refresh,60));
+  window.GDI_MODULES.push({name:'playlist-checks',init:function(){
+    const wrapEl=document.getElementById('gdi-playlist-wrap');
+    // botão do filtro (antes era o M15)
+    if(wrapEl&&!wrapEl.dataset.gdiFilter){
+      wrapEl.dataset.gdiFilter='1';
+      const header=wrapEl.querySelector('div');
+      if(header){
+        const btn=document.createElement('button');
+        btn.className='gdi-mode-btn';btn.style.cssText='padding:3px 10px;font-size:11px;';
+        const refreshBtn=()=>{const on=localStorage.getItem('gdi-hide-watched')==='1';
+          btn.classList.toggle('active',on);
+          btn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i> S\u00f3 o que falta';};
+        btn.addEventListener('click',()=>{
+          const on=localStorage.getItem('gdi-hide-watched')==='1';
+          localStorage.setItem('gdi-hide-watched',on?'0':'1');
+          refreshBtn();refresh();});
+        header.appendChild(btn);refreshBtn();
+      }
+    }
+    const list=document.getElementById('gdi-playlist-list');
+    if(list&&!list.__chkObs){
+      list.__chkObs=true;
+      new MutationObserver(()=>setTimeout(refresh,20)).observe(list,{childList:true});
+    }
+    refresh();
+  }});
 })();
 
 // ═══ M16: PWA best-effort ═══
