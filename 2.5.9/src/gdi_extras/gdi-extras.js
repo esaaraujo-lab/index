@@ -1,12 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.0 — TODAS as features, modularizadas
-   Depende apenas do núcleo: Bus, GDIUser, gdiListAllFiles, gdiFmtTime,
-   escHtml, showToast, gdiOkPath, gdiGetPw/gdiSetPw (stub no core),
-   playlistVideos/currentIndex (getters), eventos:
-   page:change · rows:appended · media:ready · video:switched · user:ready
-   Cada módulo: comente o GDI_MODULES.push(...) para desligá-lo.
+   gdi-extras.js v2.1 — corrigido
+   ✅ Loader observa #content (páginas de vídeo montam o DOM async)
+   ✅ Modo descanso completo (áudio + despertar por mouse/tecla)
+   ✅ Painel de debug (GDIDebug) restaurado
+   ✅ Exportar anotações: Markdown + Anki
+   ✅ Duplo-toque ±10s no mobile restaurado
+   ✅ Botão "Assistido" sincroniza via 'watched:changed'
+   ✅ Pular intro re-anexa se o layout for recriado
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.0 carregado');
+console.log('[GDI Extras Modular] v2.1 carregado');
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -14,9 +16,20 @@ window.GDI_MODULES = window.GDI_MODULES || [];
 (function(){if(document.getElementById('gdi-extras-style'))return;const s=document.createElement('style');s.id='gdi-extras-style';s.textContent=`
 .gdi-debug-wrap{width:100%;background:#0d1117;border-top:2px solid #f0883e;font-family:monospace;font-size:12px;}
 .gdi-debug-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#161b22;cursor:pointer;user-select:none;color:#8b949e;}
+.gdi-debug-head:hover{background:#1c2128;}
+.gdi-debug-head strong{color:#f0f6fc;display:flex;align-items:center;gap:6px;}
 .gdi-dbg-count{background:#1f6feb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
-#gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:#e6edf3;display:none;}
-.gdi-dbg-entry{padding:3px 0;border-bottom:1px solid #21262d;line-height:1.6;font-size:11px;}
+.gdi-debug-actions{display:flex;gap:8px;}
+.gdi-debug-actions button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:2px 9px;cursor:pointer;font-size:11px;}
+.gdi-debug-actions button:hover{background:#1c2128;color:#f0f6fc;}
+#gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:#e6edf3;}
+#gdi-debug-log.collapsed{display:none;}
+.gdi-dbg-entry{padding:3px 0;border-bottom:1px solid #21262d;line-height:1.6;}
+.gdi-dbg-ts{color:#484f58;margin-right:6px;}
+.gdi-dbg-badge{font-weight:bold;margin-right:6px;}
+.gdi-dbg-msg{color:#e6edf3;}
+.gdi-dbg-pre{margin:2px 0 2px 20px;padding:4px 8px;background:#161b22;border-left:2px solid #30363d;white-space:pre-wrap;word-break:break-all;color:#8b949e;font-size:11px;}
+.gdi-dbg-empty{color:#484f58;}
 body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
 body.gdi-fv .gdi-study-right{display:none!important;}
 body.gdi-fm .gdi-study-left{display:none!important;}
@@ -29,6 +42,7 @@ body.gdi-fm .gdi-study-left{display:none!important;}
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#c9d1d9;transition:all .15s;}
 .gdi-mat-tab i{font-size:20px;}
 .gdi-mat-tab span{font-size:10px;font-weight:600;letter-spacing:.02em;}
+.gdi-mat-tab:hover{background:rgba(255,255,255,.13);color:#fff;}
 .gdi-mat-tab.active{background:var(--bs-primary,#1f6feb);border-color:var(--bs-primary,#1f6feb);color:#fff;}
 .gdi-mat-body{height:calc(100dvh - 250px);min-height:420px;border:1px solid rgba(255,255,255,.12);
   border-radius:12px;overflow:hidden;background:#161b22;position:relative;}
@@ -50,8 +64,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-notes-empty{color:#8b949e;font-size:12px;text-align:center;padding:6px;}
 #gdi-pom-root,#gdi-sleep-btn{opacity:.30;transition:opacity .25s ease;}
 #gdi-pom-root:hover,#gdi-sleep-btn:hover{opacity:.95;}
-.gdi-playlist-item{transition:background .15s,transform .15s!important;}
-.gdi-playlist-item:hover{background:rgba(255,255,255,.12)!important;}
 #gdi-note-marks{position:relative;height:16px;margin-top:4px;cursor:pointer;display:none;}
 .gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
   border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
@@ -67,6 +79,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-modprog{margin-left:8px;font-size:11px;color:#8b949e;background:rgba(255,255,255,.06);
   border-radius:6px;padding:2px 8px;white-space:nowrap;}
 .gdi-modprog b{color:#8ab4ff;font-weight:600;}
+.gdi-pdf-controls{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);flex-wrap:wrap;}
 #gdi-pom-root{position:fixed;bottom:76px;right:16px;z-index:10000;font-family:inherit;}
 #gdi-pom-fab{position:relative;width:50px;height:50px;border-radius:50%;cursor:pointer;
   background:conic-gradient(var(--pom-c,#1f6feb) calc(var(--pom-p,0)*1%),rgba(255,255,255,.09) 0);
@@ -108,23 +121,30 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
 `;document.head.appendChild(s);})();
 
-// ── Loader dos módulos ──
+// ── Loader dos módulos — v2.1 ★ CORRIGIDO ──
+// Causa do bug v2.0: em página de ARQUIVO o layout é montado DEPOIS do
+// page:change (fetch assíncrono). O loader antigo rodava 1× por URL e
+// desistia → módulos nunca iniciavam (foco, notas, dormir, filtro…).
+// Agora: MutationObserver no #content re-executa os inits (idempotentes)
+// assim que o layout aparece.
 (function(){
-  let lastPage=null;
+  let timer=null;
   function runAll(){
-    const page=window.location.pathname+window.location.search;
-    if(page===lastPage)return;
-    lastPage=page;
-    setTimeout(()=>{
-      (window.GDI_MODULES||[]).forEach(m=>{
-        try{ if(m&&typeof m.init==='function') m.init(); }
-        catch(e){ console.error('[GDI módulo]',m&&m.name,e); }
-      });
-    },60);
+    (window.GDI_MODULES||[]).forEach(m=>{
+      try{ if(m&&typeof m.init==='function') m.init(); }
+      catch(e){ console.error('[GDI módulo]',m&&m.name,e); }
+    });
   }
-  Bus.onGlobal('page:change',runAll);
-  document.addEventListener('DOMContentLoaded',runAll);
-  window.addEventListener('load',runAll);
+  function schedule(){clearTimeout(timer);timer=setTimeout(runAll,80);}
+  function bindContent(){
+    const c=document.getElementById('content');
+    if(c&&!c.__gdiModObs){c.__gdiModObs=true;
+      new MutationObserver(schedule).observe(c,{childList:true});}
+  }
+  Bus.onGlobal('page:change',schedule);
+  document.addEventListener('DOMContentLoaded',()=>{bindContent();schedule();});
+  window.addEventListener('load',()=>{bindContent();schedule();});
+  bindContent();
 })();
 
 // ═══ M1: SENHAS PROTEGIDAS (substitui os stubs do core) ═══
@@ -150,9 +170,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
 // ═══ M2: AUTENTICAÇÃO (Entrar/Sair) ═══
 (function(){
-  window.GDI_MODULES.push({name:'auth',init:function(){
-    if(typeof window.gdiRenderAuth==='function')window.gdiRenderAuth();
-  }});
   window.gdiRenderAuth=function(){
     const slot=document.getElementById('gdi-auth-slot');
     if(!slot)return;
@@ -163,7 +180,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       slot.innerHTML='<a class="gdi-nav-btn" href="/login" title="Entrar na sua conta para salvar o progresso"><i class="bi bi-box-arrow-in-right"></i><span class="d-none d-md-inline">Entrar</span></a>';
     }
   };
-  Bus.onGlobal('auth:change',()=>gdiRenderAuth());
+  window.GDI_MODULES.push({name:'auth',init:function(){window.gdiRenderAuth();}});
+  Bus.onGlobal('auth:change',()=>window.gdiRenderAuth());
 })();
 
 // ═══ M3: VELOCIDADE DO VÍDEO SALVA ═══
@@ -180,12 +198,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   document.addEventListener('loadedmetadata',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
 })();
 
-// ═══ M4: ATALHOS (N/P próxima-anterior, ]/[ trechos, J próxima não assistida) ═══
+// ═══ M4: ATALHOS (N/P, J = próxima não assistida, ]/[ trechos) ═══
 (function(){
   let marksVideo=null;
-  Bus.onGlobal('media:ready',({type,el})=>{
-    if(type!=='video')return;marksVideo=el;
-  });
+  Bus.onGlobal('media:ready',({type,el})=>{if(type==='video')marksVideo=el;});
   function notesNow(){try{return GDIUser.getNotes(window.location.pathname)||[]}catch(_){return[]}}
   document.addEventListener('keydown',e=>{
     const t=e.target;
@@ -197,9 +213,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     else if(k==='j'){
       const pv=window.playlistVideos;if(!pv||!pv.length)return;
       const start=(typeof window.currentIndex==='number'&&window.currentIndex>=0)?window.currentIndex+1:0;
-      for(let i=start;i<pv.length;i++){
-        if(!GDIUser.isWatched((pv[i].pageUrl||'').split('?')[0])){
-          e.preventDefault();window.switchVideo(i);return;
+      for(let i2=start;i2<pv.length;i2++){
+        if(!GDIUser.isWatched((pv[i2].pageUrl||'').split('?')[0])){
+          e.preventDefault();window.switchVideo(i2);return;
         }
       }
       showToast('Todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
@@ -249,7 +265,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M6: MARCAS NA TIMELINE + MODO REVISÃO (20s por trecho) ═══
+// ═══ M6: MARCAS NA TIMELINE + NOTAS + REVISÃO + EXPORT (md/anki) + DUPLO-TOQUE ═══
 (function(){
   let mv=null,reviewOn=false;
   const SPAN=20;
@@ -291,6 +307,41 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       showToast('Revis\u00e3o conclu\u00edda \u2713');
     }
   }
+  function exportMenu(){
+    const old=document.getElementById('gdi-exp-menu');
+    if(old){old.remove();return;}
+    const btn=document.getElementById('gdi-notes-export');
+    const m=document.createElement('div');m.id='gdi-exp-menu';
+    const r=btn.getBoundingClientRect();
+    m.style.cssText='position:fixed;z-index:10001;background:rgba(15,16,24,.97);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);left:'+Math.max(8,r.left-60)+'px;top:'+(r.bottom+6)+'px;';
+    m.innerHTML=`<button class="gdi-mode-btn" id="gdi-exp-md" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-markdown"></i> Markdown (.md)</button>
+    <button class="gdi-mode-btn" id="gdi-exp-anki" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-collection"></i> Anki / texto (.txt)</button>`;
+    document.body.appendChild(m);
+    document.getElementById('gdi-exp-md').onclick=()=>{m.remove();doExport('md');};
+    document.getElementById('gdi-exp-anki').onclick=()=>{m.remove();doExport('anki');};
+    setTimeout(()=>document.addEventListener('click',function h(e2){
+      if(!m.contains(e2.target)){m.remove();document.removeEventListener('click',h);}
+    }),0);
+  }
+  function doExport(fmt){
+    const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
+    if(!notes.length){showToast('Nenhuma anota\u00e7\u00e3o para exportar');return;}
+    let name='aula';try{name=decodeURIComponent(window.location.pathname.split('/').pop()||'aula')}catch(_){}
+    const base=(name.replace(/\.[a-z0-9]+$/i,'')||'aula')+' \u2014 anota\u00e7\u00f5es';
+    let content,type,ext;
+    if(fmt==='anki'){
+      content=notes.map(nt=>nt.text.replace(/\t/g,' ')+'\t'+name+' \u2014 '+gdiFmtTime(nt.t)).join('\n');
+      type='text/plain;charset=utf-8';ext='anki.txt';
+    }else{
+      content='# Anota\u00e7\u00f5es \u2014 '+name+'\n\n'+notes.map(nt=>'- **['+gdiFmtTime(nt.t)+']** '+nt.text).join('\n')+'\n';
+      type='text/markdown;charset=utf-8';ext='md';
+    }
+    const blob=new Blob([content],{type});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=base+'.'+ext;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
+  }
   window.GDI_REVIEW_SPAN=SPAN;
   window.GDI_MODULES.push({name:'marks-ui',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
@@ -298,13 +349,33 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const bar=document.createElement('div');bar.id='gdi-note-marks';
       wrap.insertAdjacentElement('afterend',bar);
     }
+    // ★ restaurado do v18.2: duplo-toque ±10s no mobile
+    if(wrap&&Os.isMobile&&!wrap.__gdiDblTap){
+      wrap.__gdiDblTap=true;
+      let lt=0,lx=0;
+      wrap.addEventListener('touchend',e=>{
+        const now=Date.now();
+        const x=(e.changedTouches&&e.changedTouches[0]&&e.changedTouches[0].clientX)||0;
+        if(now-lt<320&&Math.abs(x-lx)<90){
+          const rect=wrap.getBoundingClientRect();
+          const v=wrap.querySelector('video');
+          if(v&&isFinite(v.duration)&&v.duration>0){
+            const fwd=(x-rect.left)>rect.width/2;
+            v.currentTime=Math.min(Math.max(0,v.currentTime+(fwd?10:-10)),Math.max(0,v.duration-0.5));
+            showToast((fwd?'\u2192 +10s \u2192 ':'\u2190 -10s \u2190 ')+gdiFmtTime(v.currentTime));
+          }
+          lt=0;
+        }else{lt=now;lx=x;}
+      },{passive:true});
+    }
     const head=document.querySelector('.gdi-notes-head');
     if(head&&!head.dataset.gdiNotes){
       head.dataset.gdiNotes='1';
       const w=document.createElement('div');w.style.cssText='display:flex;gap:6px;';
-      w.innerHTML=`<button id="gdi-notes-export" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;"><i class="bi bi-download"></i> Exportar</button>
-      <button id="gdi-review-btn" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;"><i class="bi bi-fast-forward-fill"></i> Revis\u00e3o</button>`;
+      w.innerHTML=`<button id="gdi-notes-export" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;" title="Baixar anota\u00e7\u00f5es"><i class="bi bi-download"></i> Exportar</button>
+      <button id="gdi-review-btn" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;" title="Tocar s\u00f3 os trechos anotados (${SPAN}s cada)"><i class="bi bi-fast-forward-fill"></i> Revis\u00e3o</button>`;
       head.appendChild(w);
+      document.getElementById('gdi-notes-export').addEventListener('click',exportMenu);
       document.getElementById('gdi-review-btn').addEventListener('click',()=>{
         reviewOn=!reviewOn;
         document.getElementById('gdi-review-btn').classList.toggle('active',reviewOn);
@@ -314,21 +385,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             const nx=notes.find(n=>n.t>mv.currentTime-0.5)||notes[0];
             try{mv.currentTime=nx.t;mv.play().catch(()=>{});}catch(_){}
           }
-          showToast('Modo revis\u00e3o LIGADO \u2014 '+SPAN+'s por trecho');
+          showToast('Modo revis\u00e3o LIGADO \u2014 '+SPAN+'s por trecho ( ] e [ pulam entre eles)');
         }else showToast('Modo revis\u00e3o desligado');
       });
-      document.getElementById('gdi-notes-export').addEventListener('click',()=>{
-        const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
-        if(!notes.length){showToast('Nenhuma anota\u00e7\u00e3o para exportar');return;}
-        let name='aula';try{name=decodeURIComponent(window.location.pathname.split('/').pop()||'aula')}catch(_){}
-        const content='# Anota\u00e7\u00f5es \u2014 '+name+'\n\n'+notes.map(nt=>'- **['+gdiFmtTime(nt.t)+']** '+nt.text).join('\n')+'\n';
-        const blob=new Blob([content],{type:'text/markdown;charset=utf-8'});
-        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(name.replace(/\.[a-z0-9]+$/i,'')||'aula')+' \u2014 anota\u00e7\u00f5es.md';
-        document.body.appendChild(a);a.click();a.remove();
-        showToast(notes.length+' anota\u00e7\u00f5es exportadas');
-      });
     }
-    // painel de anotações em si
     const slot=document.getElementById('gdi-slot-left');
     if(slot&&!document.getElementById('gdi-notes')){
       slot.insertAdjacentHTML('beforeend',`
@@ -336,10 +396,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-notes-head"><strong>\ud83d\udcdd Minhas anota\u00e7\u00f5es</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
         <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anota\u00e7\u00e3o para esta aula\u2026"></textarea>
         <div class="gdi-notes-actions">
-          <span id="gdi-note-time" title="Clique para ajustar ao tempo atual">00:00</span>
+          <span id="gdi-note-time" title="Clique para ir a este momento do v\u00eddeo">00:00</span>
           <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
         </div>
-        <div id="gdi-notes-list"><div class="gdi-notes-empty">Carregando\u2026</div></div>
+        <div id="gdi-notes-list"><div class="gdi-notes-empty">Carregando suas anota\u00e7\u00f5es\u2026</div></div>
       </div>`);
       document.getElementById('gdi-note-save').addEventListener('click',()=>{
         const ta=document.getElementById('gdi-note-input');
@@ -352,13 +412,26 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         render();
         showToast('Anota\u00e7\u00e3o salva na sua conta');
       });
+      // ★ binding do clique-no-tempo aqui também (o M5 pode ter rodado
+      // antes do painel existir e perdido o elemento)
+      const nt=document.getElementById('gdi-note-time');
+      if(nt&&!nt.__seekB){nt.__seekB=true;
+        nt.addEventListener('click',()=>{
+          const v=document.querySelector('video');
+          if(v&&nt.textContent.includes(':')){
+            const pp=nt.textContent.split(':');
+            const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
+            try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
+          }
+        });
+      }
       Bus.on('video:switched',()=>{
         const ta=document.getElementById('gdi-note-input');
         if(ta&&ta.value.trim()){ta.value='';showToast('Rascunho descartado ao trocar de aula');}
         render();
       });
       GDIUser.ready().then(render).catch(()=>{});
-      Bus.on('user:ready',render);
+      Bus.onGlobal('user:ready',render);
     }
     function render(){
       const listEl=document.getElementById('gdi-notes-list');
@@ -366,7 +439,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(!listEl)return;
       const notes=GDIUser.getNotes(window.location.pathname);
       if(cntEl)cntEl.textContent=notes.length?notes.length+' nota'+(notes.length>1?'s':''):'';
-      if(!notes.length){listEl.innerHTML='<div class="gdi-notes-empty">Nenhuma anota\u00e7\u00e3o ainda. Digite acima e salve.</div>';return;}
+      if(!notes.length){listEl.innerHTML='<div class="gdi-notes-empty">Nenhuma anota\u00e7\u00e3o ainda. Digite acima e salve.</div>';draw();return;}
       const sorted=[...notes].map((nt,idx)=>({...nt,idx})).sort((x,y)=>x.t-y.t);
       listEl.innerHTML=sorted.map(nt=>`
         <div class="gdi-note">
@@ -384,24 +457,26 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       listEl.querySelectorAll('[data-del]').forEach(el=>{
         el.addEventListener('click',()=>{GDIUser.delNote(window.location.pathname,+el.dataset.del);render();});
       });
+      draw();
     }
     draw();
   }});
   Bus.onGlobal('user:ready',()=>{try{draw()}catch(_){}});
-  window.gdiRedrawMarks=draw;
 })();
 
 // ═══ M7: PULAR INTRO POR CURSO ═══
 (function(){
   let skipBtn=null;
+  function courseKey(){
+    try{const fl=window.playlistVideos[window.currentIndex]?.folder;if(fl)return fl;}catch(_){}
+    return window.location.pathname.split('/').slice(0,-1).join('/')+'/';
+  }
   Bus.onGlobal('media:ready',({type,el})=>{
     if(type!=='video'||!el||el.__m7)return;
     el.__m7=true;
     const upd=()=>{
-      if(!skipBtn)return;
-      const ck=(window.playlistVideos&&window.playlistVideos[window.currentIndex]?.folder)
-        ||window.location.pathname.split('/').slice(0,-1).join('/')+'/';
-      const S=GDIUser.getIntro(ck);
+      if(!skipBtn||!document.body.contains(skipBtn))return;
+      const S=GDIUser.getIntro(courseKey());
       const tm=el.currentTime;
       let show=false;
       if(S&&S>0)show=tm>0.4&&tm<S-0.3&&tm<180;
@@ -418,14 +493,15 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'skip-intro',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
     if(!wrap)return;
-    if(!skipBtn){
+    // ★ correção: re-anexa se o layout foi recriado (novo render da página)
+    if(!skipBtn||!document.body.contains(skipBtn)){
       skipBtn=document.createElement('button');
       skipBtn.id='gdi-skip-intro';
-      document.querySelector('.gdi-player-wrap')?.appendChild(skipBtn);
+      skipBtn.innerHTML='<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
+      wrap.appendChild(skipBtn);
       skipBtn.addEventListener('click',()=>{
         const v=document.querySelector('.gdi-player-wrap video');if(!v)return;
-        const ck=(window.playlistVideos&&window.playlistVideos[window.currentIndex]?.folder)
-          ||window.location.pathname.split('/').slice(0,-1).join('/')+'/';
+        const ck=courseKey();
         if(!GDIUser.getIntro(ck)){
           GDIUser.setIntro(ck,Math.max(1,Math.round(v.currentTime)));
           showToast('Intro de '+gdiFmtTime(v.currentTime|0)+' memorizada para este curso \u2713');
@@ -437,10 +513,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }});
 })();
 
-// ═══ M9 v2.1: MATERIAIS (PDFs por aula) — espera o layout existir ═══
-// Causa do bug v2.0: o módulo rodava antes do file_video montar o DOM
-// (o layout é assíncrono) e desistia sem tentar de novo.
-// Agora: polling de espera pelo slot + escuta de troca de aula.
+// ═══ M9: MATERIAIS (PDFs por aula) — espera o layout existir ═══
 (function(){
   const frames=new Map();let gen=0;
   function classify(name){
@@ -475,14 +548,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   async function build(){
     const myGen=++gen;
     const p=window.location.pathname;
-    // só faz sentido em página de arquivo (vídeo); pastas terminam com "/"
     if(p.endsWith('/')||p.includes('/fallback'))return;
-    // ★ espera o layout do file_video existir (até ~8s)
     let panel=null;
     for(let i=0;i<40;i++){
       panel=ensurePanel();
       if(panel&&panel.tabsEl&&panel.bodyEl)break;
-      if(myGen!==gen)return;                 // outra busca começou: aborta
+      if(myGen!==gen)return;
       await sleep(200);
     }
     if(!panel||!panel.tabsEl||!panel.bodyEl)return;
@@ -511,10 +582,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const seen=new Set();const uniq=[];
       found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
       const pdfs=uniq.slice(0,12);
-      if(myGen!==gen)return;                   // aula trocou durante a busca
+      if(myGen!==gen)return;
       if(!pdfs.length){
         if(tabsEl.isConnected){
-          if(tabsEl)tabsEl.innerHTML='';
+          tabsEl.innerHTML='';
           if(statusEl)statusEl.textContent='sem PDF';
           if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
         }
@@ -535,13 +606,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         it.tabLabel=used[it.label]>1?it.label+' '+used[it.label]:it.label;
         it.idx=idx;
       });
-      if(!tabsEl.isConnected)return;           // página trocou no meio
+      if(!tabsEl.isConnected)return;
       tabsEl.innerHTML=items.map(it=>`
         <div class="gdi-mat-tab" data-mat="${it.idx}" title="${escHtml(it.name)}">
           <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
         </div>`).join('');
       if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
-      const isMobile=window.Os&&window.Os.isMobile;
+      // ★ correção: window.Os é undefined (const não vai p/ window) — use Os direto
+      const isMobile=(typeof Os!=='undefined')&&Os.isMobile;
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
@@ -578,22 +650,27 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
   }
-  // troca de aula pela playlist → refaz
   Bus.onGlobal('video:switched',()=>{setTimeout(build,80);});
-  // primeira carga → o loader chama init(); build espera o layout sozinha
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10: MODOS DE FOCO (Dividido / Foco na aula / Foco no material) ═══
+// ═══ M10: MODOS DE FOCO + BOTÃO ASSISTIDO (sincronizado) ═══
 (function(){
+  function updBtn(){
+    const wb=document.getElementById('gdi-watched-btn');
+    if(!wb)return;
+    const done=GDIUser.isWatched(window.location.pathname);
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
     const slot=document.getElementById('gdi-slot-modes');
     if(!slot||slot.dataset.m10)return;
     slot.dataset.m10='1';
     slot.innerHTML=`
-      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (s\u00f3 v\u00eddeo, em tela cheia de largura)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
       <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
     function zoom(){
       const z=document.body.classList.contains('gdi-fm')?'150':'100';
@@ -619,23 +696,25 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         const key=window.location.pathname;
         const done=GDIUser.isWatched(key);
         if(done)GDIUser.unmarkWatched(key);else GDIUser.markWatched(key);
-        wb.classList.toggle('done',!done);
-        wb.innerHTML=!done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+        Bus.emit('watched:changed');
         showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
       });
     }
-    const wb2=document.getElementById('gdi-watched-btn');
-    if(wb2){const done=GDIUser.isWatched(window.location.pathname);
-      wb2.classList.toggle('done',done);
-      wb2.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';}
+    updBtn();
+    // ★ sincroniza quando o fim do vídeo / 90% marca como assistido
+    Bus.onGlobal('watched:changed',()=>{updBtn();try{window.renderPlaylistUI&&window.renderPlaylistUI()}catch(_){}});
+    Bus.onGlobal('user:ready',updBtn);
   }});
 })();
 
-// ═══ M11: MODO DESCANSO ═══
+// ═══ M11: MODO DESCANSO — v2.1 completo (áudio + despertar) ═══
 (function(){
+  let wakeBound=false;
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
-    const oldOv=document.getElementById('gdi-sleep-overlay');if(oldOv)oldOv.remove();
-    const oldBtn=document.getElementById('gdi-sleep-btn');if(oldBtn)oldBtn.remove();
+    // só existe em páginas de mídia (como no v18.2)
+    if(!document.querySelector('.gdi-player-wrap')&&!document.getElementById('aplayer-container'))return;
+    if(document.getElementById('gdi-sleep-btn'))return;
+    const isVideoPage=!!document.querySelector('.gdi-player-wrap');
     const overlay=document.createElement('div');
     overlay.id='gdi-sleep-overlay';
     overlay.style.cssText='position:fixed;inset:0;z-index:8000;background:#000;opacity:0;pointer-events:none;transition:opacity 3s ease;cursor:pointer;';
@@ -644,21 +723,56 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const btn=document.createElement('button');
     btn.id='gdi-sleep-btn';
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
-    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+    btn.title=isVideoPage?'Modo descanso (apenas \u00e1udio) \u2014 clique para ligar':'Modo descanso';
     btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:8001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.15);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
     document.body.appendChild(btn);
     let sleeping=false,fadeTimer=null;
     const FADE_DELAY=8000,FADE_TARGET=0.97;
-    function enter(){if(sleeping)return;sleeping=true;overlay.style.pointerEvents='all';overlay.style.opacity=String(FADE_TARGET);btn.innerHTML='<i class="bi bi-sun-fill"></i>';btn.style.color='#ffd43b';}
-    function exit(){sleeping=false;overlay.style.opacity='0';overlay.style.pointerEvents='none';btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';btn.style.color='#74c0fc';clearTimeout(fadeTimer);}
+    function enter(){
+      if(sleeping)return;
+      try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();}catch(e){}
+      sleeping=true;
+      overlay.style.pointerEvents='all';
+      overlay.style.opacity=String(FADE_TARGET);
+      btn.innerHTML='<i class="bi bi-sun-fill"></i>';
+      btn.style.color='#ffd43b';
+    }
+    function exit(){
+      sleeping=false;
+      overlay.style.opacity='0';
+      overlay.style.pointerEvents='none';
+      btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+      btn.style.color='#74c0fc';
+      clearTimeout(fadeTimer);
+    }
     function sched(){clearTimeout(fadeTimer);fadeTimer=setTimeout(enter,FADE_DELAY);}
+    function cancel(){clearTimeout(fadeTimer);if(sleeping)exit();}
     overlay.addEventListener('click',exit);
     btn.addEventListener('click',()=>{sleeping?exit():enter();});
-    Bus.on('media:ready',({type,el})=>{
-      if(type!=='video'||!el||el.__m11)return;
-      el.__m11=true;
-      try{el.addEventListener('ended',exit);}catch(_){}
+    Bus.onGlobal('media:ready',({type,el,ap})=>{
+      if(ap){ // ★ restaurado: agendar/despertar com APlayer (áudio)
+        if(ap.__gdiSleep)return;ap.__gdiSleep=true;
+        try{ap.on('play',sched);ap.on('pause',cancel);ap.on('ended',cancel);}catch(_){}
+        return;
+      }
+      if(type==='video'&&el&&!el.__gdiSleepEnd){
+        el.__gdiSleepEnd=true;
+        try{el.addEventListener('ended',exit);}catch(_){}
+      }
     });
+    // ★ restaurado: qualquer movimento desperta (e rearma no áudio)
+    if(!wakeBound){
+      wakeBound=true;
+      ['mousemove','keydown','touchstart'].forEach(ev=>{
+        document.addEventListener(ev,()=>{
+          if(sleeping){
+            exit();
+            const a=window._gdiAPlayer;
+            if(a&&a.audio&&!a.audio.paused)sched();
+          }
+        },{passive:true});
+      });
+    }
   }});
 })();
 
@@ -804,10 +918,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     new MutationObserver(()=>{if(!document.body.contains(root))document.body.appendChild(root);
       if(!document.body.contains(flashEl))document.body.appendChild(flashEl);}).observe(document.body,{childList:true});
     updateUI();
+    console.log('[GDI Pomodoro] v2.4 pronto');
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" POR DRIVE + REVISÃO ESPAÇADA + DIAS/HORAS ═══
+// ═══ M13: CARD "CONTINUAR" + REVISÃO ESPAÇADA ═══
 (function(){
   function resumeKeyFor(path){
     const p=String(path||'');
@@ -907,19 +1022,19 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(old){old.remove();return;}
     const due=srsDue();
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
-    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
     document.body.appendChild(ov);
     let idx=0;
     function render(){
       if(idx>=due.length){
-        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
+        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">Voc\u00ea revisou todas as anota\u00e7\u00f5es de hoje. Elas voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
         document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
         return;
       }
       const n=due[idx];
       ov.innerHTML=`<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:22px;max-width:540px;width:100%;color:#e6edf3;font-family:system-ui;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
+          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
         <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(srsLabel(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
@@ -968,7 +1083,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const r=target?GDIUser.getResume(rKey):null;
     const btn=target?(logged
       ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
-      :`<a class="gdi-btn gdi-btn-primary" href="/login"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
+      :`<a class="gdi-btn gdi-btn-primary" href="/login" title="Entre para retomar de onde parou"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
     let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
     if(target){
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
@@ -981,16 +1096,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }
     if(isHome){
       html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
-        ${streak>0?`<span><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
-        ${hours>0?`<span><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
+        ${streak>0?`<span title="Dias seguidos com atividade de estudo"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
+        ${hours>0?`<span title="Soma das posi\u00e7\u00f5es salvas (estimativa)"><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
       </div>`;
-      if(due>0)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
+      if(due>0)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;" title="Revis\u00e3o espa\u00e7ada das suas anota\u00e7\u00f5es (1, 7 e 30 dias)"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
       if(hist.length){
         html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-          <span style="font-size:11px;color:#8b949e;">Recentes:</span>
-          ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+          <span style="font-size:11px;color:#8b949e;"><i class="bi bi-clock-history"></i> Recentes:</span>
+          ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
         </div>`;
       }
+    }else if(streak>0){
+      html+=`<span style="font-size:12px;color:#8b949e;" title="Dias seguidos com atividade"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
     }
     html+='</div>';
     wrap.insertAdjacentHTML('afterbegin',html);
@@ -1028,6 +1145,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           const el=document.createElement('span');
           el.className='gdi-modprog';
           el.innerHTML=`<b>${done}/${total}</b> \u00b7 ${pct}%`;
+          el.title='Progresso de v\u00eddeos nesta pasta';
           row.querySelector('.gdi-row-acts')?.appendChild(el);
         }
         await sleep(40);
@@ -1061,9 +1179,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div style="flex:1;max-width:160px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
           <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
         </div>`;
-      if(firstTodo)html+=`<button id="gdi-next-lesson" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" data-href="${escHtml(firstTodo)}"><i class="bi bi-play-fill"></i> N\u00e3o assistida</button>`;
+      if(firstTodo)html+=`<button id="gdi-next-lesson" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" data-href="${escHtml(firstTodo)}" title="Abrir a primeira aula ainda n\u00e3o assistida"><i class="bi bi-play-fill"></i> N\u00e3o assistida</button>`;
     }
-    if(hasFolders)html+=`<button id="gdi-course-btn" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;"><i class="bi bi-diagram-3"></i> Progresso do curso</button>`;
+    if(hasFolders)html+=`<button id="gdi-course-btn" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" title="Somar o progresso de TODAS as subpastas"><i class="bi bi-diagram-3"></i> Progresso do curso</button>`;
     el.innerHTML=html;
     el.querySelector('#gdi-next-lesson')?.addEventListener('click',function(){location.href=this.dataset.href;});
     el.querySelector('#gdi-course-btn')?.addEventListener('click',course);
@@ -1159,11 +1277,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }
 })();
 
-// ═══ M17: VISUALIZADOR DE PDF (pdf.js — página, zoom, download) ═══
+// ═══ M17: VISUALIZADOR DE PDF (pdf.js — sobrepõe o fallback do core) ═══
 (function(){
-  // O core chama file_pdf(...) por nome; definimos globalmente para
-  // "assumir" a função. Carregado com defer, roda antes do primeiro
-  // dispatchFileView (que só acontece após fetch do arquivo).
   window.file_pdf = function(i,e,t,n,a,c){
     const l=`<div class="gdi-wrap">
   <div class="gdi-viewer">
@@ -1227,3 +1342,25 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }
   };
 })();
+
+// ═══ M18: PAINEL DE DEBUG (GDIDebug) — ★ restaurado do v18.2 ═══
+const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
+window.GDIDebug=GDIDebug;
+
+if(window.UI?.debug_mode){const i=window.fetch.bind(window);window.fetch=async function(t,n){const a=typeof t=="string"?t:t.url||String(t),c=(n?.method||"GET").toUpperCase();let l;try{l=n?.body?JSON.parse(n.body):void 0}catch{l=n?.body}GDIDebug.log("req",`\u2192 ${c} ${a}`,l!==void 0?l:null);const d=Date.now();try{const o=await i(t,n),s=o.clone();let r;try{r=await s.json()}catch{r=null}return GDIDebug.log(o.ok?"api":"error",`\u2190 ${o.status} ${a} (${Date.now()-d}ms)`,r),o}catch(o){throw GDIDebug.log("error",`\u2717 FETCH FAILED: ${a}`,String(o)),o}};const e=console.error.bind(console);console.error=function(...t){GDIDebug.log("error",t.map(n=>n instanceof Error?n.stack||n.message:typeof n=="object"?JSON.stringify(n):String(n)).join(" ")),e(...t)},window.addEventListener("error",t=>{GDIDebug.log("error",`Uncaught: ${t.message}`,`${t.filename}:${t.lineno}:${t.colno}`)}),window.addEventListener("unhandledrejection",t=>{GDIDebug.log("error",`UnhandledPromise: ${String(t.reason)}`)})}
+
+window.GDI_MODULES.push({name:'debug',init:function(){
+  if(!(window.UI&&window.UI.debug_mode))return;
+  if(document.getElementById('gdi-debug-wrap'))return;
+  const wrap=document.createElement('div');
+  wrap.className='gdi-debug-wrap';wrap.id='gdi-debug-wrap';
+  wrap.innerHTML=`<div class="gdi-debug-head" onclick="document.getElementById('gdi-debug-log').classList.toggle('collapsed')">
+    <strong><i class="bi bi-bug-fill" style="color:#f0883e;"></i> GDI Debug <span id="gdi-dbg-count" class="gdi-dbg-count">0</span></strong>
+    <div class="gdi-debug-actions">
+      <button onclick="event.stopPropagation();GDIDebug.clear()">Clear</button>
+      <button onclick="event.stopPropagation();document.getElementById('gdi-debug-log').classList.toggle('collapsed')">Toggle</button>
+    </div></div>
+  <div id="gdi-debug-log" class="collapsed"></div>`;
+  document.body.appendChild(wrap);
+  try{GDIDebug.attach()}catch(_){}
+}});
