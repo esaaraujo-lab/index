@@ -1140,3 +1140,72 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       .catch(()=>console.log('[GDI PWA] offline opcional desativado'));
   }
 })();
+
+// ═══ M17: VISUALIZADOR DE PDF (pdf.js — página, zoom, download) ═══
+(function(){
+  // O core chama file_pdf(...) por nome; definimos globalmente para
+  // "assumir" a função. Carregado com defer, roda antes do primeiro
+  // dispatchFileView (que só acontece após fetch do arquivo).
+  window.file_pdf = function(i,e,t,n,a,c){
+    const l=`<div class="gdi-wrap">
+  <div class="gdi-viewer">
+    <div class="gdi-breadcrumb-wrap"><ol class="gdi-bc">${_viewerBreadcrumb()}</ol></div>
+    <div class="gdi-viewer-card">
+      <div class="gdi-file-header">
+        <span class="gdi-file-header-icon"><i class="bi bi-file-earmark-pdf-fill gdi-icon-pdf"></i></span>
+        <div class="gdi-file-header-info">
+          <div class="gdi-file-header-name">${escHtml(i)}</div>
+          <div class="gdi-file-header-meta">${escHtml(t)}</div>
+        </div>
+      </div>
+      <div class="gdi-viewer-body no-pad">
+        <div class="gdi-pdf-controls">
+          <button id="pdf-prev" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-left"></i></button>
+          <span style="font-size:13px;color:var(--gdi-text-muted);">Page <span id="pdf-page-num">1</span> / <span id="pdf-page-count">?</span></span>
+          <button id="pdf-next" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-right"></i></button>
+          <input id="pdf-zoom" type="range" min="50" max="200" value="100" style="width:100px;" title="Zoom">
+          <span id="pdf-zoom-val">100%</span>
+        </div>
+        <div style="padding:16px;">
+          <div id="pdf-spinner" class="gdi-spinner-wrap"><div class="gdi-spinner"></div></div>
+          <canvas id="pdf-canvas" style="max-width:100%;display:block;margin:auto;"></canvas>
+        </div>
+      </div>
+      <div class="gdi-viewer-footer">${renderDownloadButtons(n,e)}</div>
+    </div>
+  </div>
+</div>`;
+    $("#content").html(l);
+    let d=null,o=1,s=1;
+    function r(){
+      const p=document.getElementById("pdf-canvas"),g=p.getContext("2d");
+      pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+      function f(u){
+        d.getPage(u).then(function(h){
+          const m=h.getViewport({scale:s});
+          p.height=m.height,p.width=m.width,
+          h.render({canvasContext:g,viewport:m}).promise.then(function(){
+            $("#pdf-spinner").hide();
+          }),
+          document.getElementById("pdf-page-num").textContent=u;
+        });
+      }
+      pdfjsLib.getDocument(n).promise.then(function(u){
+        d=u,document.getElementById("pdf-page-count").textContent=u.numPages,f(o);
+      }).catch(function(u){
+        $("#pdf-spinner").html(`<div class="gdi-alert gdi-alert-error">Could not load PDF: ${u.message}</div>`);
+      }),
+      document.getElementById("pdf-prev").addEventListener("click",function(){o>1&&(o--,f(o))}),
+      document.getElementById("pdf-next").addEventListener("click",function(){d&&o<d.numPages&&(o++,f(o))}),
+      document.getElementById("pdf-zoom").addEventListener("input",function(){s=parseInt(this.value)/100,document.getElementById("pdf-zoom-val").textContent=this.value+"%",f(o)});
+    }
+    if(typeof pdfjsLib<"u")r();
+    else{
+      const p=document.createElement("script");
+      p.src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      p.onload=r,
+      p.onerror=function(){$("#pdf-spinner").html('<div class="gdi-alert gdi-alert-error">Failed to load PDF viewer.</div>')},
+      document.head.appendChild(p);
+    }
+  };
+})();
