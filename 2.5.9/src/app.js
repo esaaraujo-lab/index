@@ -1,6 +1,6 @@
 const FILE_TYPES={video:["mp4","webm","avi","mpg","mpeg","mkv","rm","rmvb","mov","wmv","asf","ts","flv","3gp","m4v"],audio:["mp3","flac","wav","ogg","m4a","aac","wma","alac"],image:["bmp","jpg","jpeg","png","gif","svg","tiff","ico"],code:["php","css","go","java","js","json","txt","sh","html","xml","py","rb","c","cpp","h","hpp"],archive:["zip","rar","tar","7z","gz"],document:["pdf","doc","docx","xls","xlsx","ppt","pptx"],markdown:["md"]},GDOC_TYPES={"application/vnd.google-apps.document":{icon:'<i class="bi bi-file-earmark-text gdi-icon-doc"></i>',name:"Google Doc",formats:[{label:"PDF",ext:"pdf"},{label:"DOCX",ext:"docx"},{label:"TXT",ext:"txt"}]},"application/vnd.google-apps.spreadsheet":{icon:'<i class="bi bi-file-earmark-spreadsheet gdi-icon-doc"></i>',name:"Google Sheet",formats:[{label:"PDF",ext:"pdf"},{label:"XLSX",ext:"xlsx"},{label:"CSV",ext:"csv"}]},"application/vnd.google-apps.presentation":{icon:'<i class="bi bi-file-earmark-slides gdi-icon-doc"></i>',name:"Google Slides",formats:[{label:"PDF",ext:"pdf"},{label:"PPTX",ext:"pptx"}]}};
 
-console.log('[GDI app] build v16.1-playerfix');
+console.log('[GDI app] build v17.1-drivefix');
 
 (function(){if(document.getElementById('gdi-style'))return;const s=document.createElement('style');s.id='gdi-style';s.textContent=`
 .gdi-study-left{overflow-x:hidden;}
@@ -1037,7 +1037,7 @@ async function gdiBuildMaterials(){
       tabsEl.innerHTML='';
       statusEl.textContent='sem PDF';
       bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i>
-        <div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+        <div>Nenhum material PDF encontrado para este material.</div></div>`;
       return;
     }
     const base=gdiLessonBase();
@@ -1349,7 +1349,7 @@ GDIUser.ready();
 document.addEventListener('visibilitychange',()=>{if(document.hidden)try{GDIUser.flush()}catch(_){}});
 
 // ═══════════════════════════════════════════════════════════════
-// Botões Entrar/Sair (/login e /logout)
+// Botões Entrar/Sair
 // ═══════════════════════════════════════════════════════════════
 function gdiRenderAuth(){
   const slot=document.getElementById('gdi-auth-slot');
@@ -1735,9 +1735,9 @@ function initPomodoroOnce(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// EXTRAS v16.1
+// EXTRAS v17.1
 // ═══════════════════════════════════════════════════════════════
-console.log('[GDI Extras] v16.1 ativo');
+console.log('[GDI Extras] v17.1 ativo');
 
 function gdiWhenReady(selector,cb,tries){tries=tries==null?40:tries;
   const el=document.querySelector(selector);
@@ -1970,7 +1970,13 @@ function gdiExportNotes(fmt){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CARD "CONTINUAR" — v16.1 com correção do login
+// CARD "CONTINUAR" v17.1 — POR DRIVE (à prova de chaves antigas)
+// ★ Causa do bug v17.0: chaves salvas ANTES do fix do player não
+//   têm o prefixo "/6:/" — o filtro por prefixo rejeitava todas e
+//   o fallback caía sempre no mesmo registro.
+// ★ Correção: caminhos SEM prefixo de drive pertencem ao "drive 0"
+//   (comportamento do roteador), e caminhos COM prefixo só batem no
+//   drive correspondente. O label mostra o nome do drive correto.
 // ═══════════════════════════════════════════════════════════════
 function gdiResumeKeyFor(path){
   const p=String(path||'');
@@ -1979,25 +1985,47 @@ function gdiResumeKeyFor(path){
   }
   return p.split('?')[0];
 }
+// de qual drive é este caminho? (null = home/todos)
+function gdiPathDrive(path){
+  const m=/^\/(\d+):\//.exec(String(path||'').split('?')[0]);
+  if(m)return parseInt(m[1],10);
+  return 0; // sem prefixo = drive 0 (roteador antigo)
+}
+function gdiCurrentDrive(){
+  const o=window.current_drive_order;
+  return (typeof o==='number'&&o>=0)?o:null;
+}
 function gdiPickContinueTarget(){
+  const cur=gdiCurrentDrive();
+  if(cur===null)return gdiLatestAnyDrive();
+  const inDrive=p=>gdiPathDrive(p)===cur;
   const last=GDIUser.getLast();
-  if(last&&last.path&&gdiOkPath(last.path))return last.path;
+  if(last&&last.path&&inDrive(last.path))return last.path;
+  const d=GDIUser.dump();if(!d)return null;
+  let best=null,bestAt=-1;
+  const consider=(key,at)=>{if(!key||!inDrive(key))return;const a=Number(at)||0;if(a>bestAt){bestAt=a;best=key;}};
+  if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
+  if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
+  return best;
+}
+function gdiLatestAnyDrive(){
   const d=GDIUser.dump();if(!d)return null;
   let best=null,bestAt=-1;
   const consider=(key,at)=>{if(!key||!gdiOkPath(key))return;const a=Number(at)||0;if(a>bestAt){bestAt=a;best=key;}};
   if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
   if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
+  const last=GDIUser.getLast();
+  if(last&&last.path&&gdiOkPath(last.path)){
+    const a=Number(last.at)||0;
+    if(a>bestAt)best=last.path;
+  }
   return best;
 }
-// ★ v16.1: link do card SEMPRE aponta para a página do player (?a=view).
-// Caminho cru do arquivo (sem ?a=view) = download/stream direto,
-// que é o pedido que cai na tela de login no servidor.
 function gdiPlayerHref(p){
   const s=String(p||'');
   if(!s||!gdiOkPath(s))return '';
   return s.includes('?')?s+'&a=view':s+'?a=view';
 }
-// ★ v16.1: antes de navegar, testa a sessão (HEAD não baixa nada).
 async function gdiSafeGo(ev){
   const a=ev.currentTarget;
   const href=a.getAttribute('href')||'';
@@ -2019,9 +2047,24 @@ async function gdiSafeGo(ev){
 function gdiTargetLabels(target){
   const pOnly=String(target||'').split('?')[0];
   const seg=pOnly.split('/').filter(Boolean);
+  // primeiro segmento pode ser "6:" → troca pelo nome do drive
+  if(seg.length&&/^\d+:$/.test(seg[0])){
+    const idx=parseInt(seg[0],10);
+    seg[0]=window.drive_names&&window.drive_names[idx]||seg[0];
+  }else if(seg.length){
+    // sem prefixo de drive: primeiro segmento é pasta; usa o nome do drive 0 como contexto
+    const dn=window.drive_names&&window.drive_names[gdiPathDrive(pOnly)];
+    if(dn)seg.unshift(dn);
+  }
   const name=(()=>{try{return decodeURIComponent(seg.pop()||'')}catch(_){return seg.pop()||''}})();
   const folder=(()=>{try{return seg.length?decodeURIComponent(seg[seg.length-1]):''}catch(_){return ''}})();
   return{name:name.replace(/\.[a-z0-9]+$/i,''),folder};
+}
+function gdiDriveLabel(){
+  const cur=gdiCurrentDrive();
+  const dn=window.drive_names;
+  if(cur===null||!dn||!dn[cur])return 'seus cursos';
+  return dn[cur];
 }
 function gdiContinueCard(){
   const p=window.location.pathname;
@@ -2030,11 +2073,8 @@ function gdiContinueCard(){
   if(!wrap)return;
   const old=document.getElementById('gdi-home-card');if(old)old.remove();
   const isHome=/^\/(\d+:)?\/?$/.test(p);
-  const target=gdiPickContinueTarget();
-  if(!isHome){
-    if(!target)return;
-    if(target.split('?')[0].indexOf(p)!==0)return;
-  }
+  const target=isHome?gdiLatestAnyDrive():gdiPickContinueTarget();
+  if(!isHome&&!target)return;
   const logged=GDIUser.auth()!=='out';
   const d=GDIUser.dump();
   const days=new Set();
@@ -2055,7 +2095,6 @@ function gdiContinueCard(){
   const lbl=target?gdiTargetLabels(target):null;
   const rKey=target?gdiResumeKeyFor(target):'';
   const r=target?GDIUser.getResume(rKey):null;
-  // ★ v16.1: deslogado = botão "Entrar para retomar" (link que falha nunca aparece)
   const resumeBtn=target?(logged
     ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(gdiPlayerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
     :`<a class="gdi-btn gdi-btn-primary" href="/login" title="Entre para retomar de onde parou"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
@@ -2064,7 +2103,7 @@ function gdiContinueCard(){
     html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
       <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
       <div style="min-width:0;">
-        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar de onde parou</div>
+        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar em ${escHtml(gdiDriveLabel())}</div>
         <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
         <div style="font-size:12px;color:#8b949e;">${escHtml(lbl.folder)}${r?' \u00b7 parou em '+gdiFmtTime(r.t):''}</div>
       </div></div>
@@ -2163,11 +2202,12 @@ async function gdiCourseProgress(){
   finally{_gdiCourseBusy=false;}
 }
 
-// ── PWA best-effort ──
+// ── PWA (manifest com URL absoluta — corrige "start_url ignored") ──
 (function(){
   try{
     if(document.querySelector('link[rel="manifest"]'))return;
-    const MAN={name:(document.siteName||'Drive')+' Estudos',short_name:'Estudos',start_url:'/',display:'standalone',background_color:'#0b0e14',theme_color:'#0b0e14',icons:[]};
+    const origin=window.location.origin;
+    const MAN={name:(document.siteName||'Drive')+' Estudos',short_name:'Estudos',start_url:origin+'/',scope:origin+'/',display:'standalone',background_color:'#0b0e14',theme_color:'#0b0e14',icons:[]};
     const l=document.createElement('link');l.rel='manifest';
     l.href=URL.createObjectURL(new Blob([JSON.stringify(MAN)],{type:'application/manifest+json'}));
     document.head.appendChild(l);
