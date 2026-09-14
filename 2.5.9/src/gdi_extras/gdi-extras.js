@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.1 — corrigido
-   ✅ Loader observa #content (páginas de vídeo montam o DOM async)
-   ✅ Modo descanso completo (áudio + despertar por mouse/tecla)
-   ✅ Painel de debug (GDIDebug) restaurado
-   ✅ Exportar anotações: Markdown + Anki
-   ✅ Duplo-toque ±10s no mobile restaurado
-   ✅ Botão "Assistido" sincroniza via 'watched:changed'
-   ✅ Pular intro re-anexa se o layout for recriado
+   gdi-extras.js v2.2 — COMPLETO
+   • M20: playlist no extras — recolhível (Alfacon), ✓ confiável
+     (chave dupla + auto-cura), filtro, 🔄 cache, 💾 playlist.json
+   • Correção do bug "nome vira tamanho": seletor do span do tamanho
+     agora pega só filho DIRETO do item (el.lastElementChild)
+   • M13 v2: card Continuar com retry no user:ready
+   • M10 v3: foco força player a 100% (CSS + inline)
+   • M5 v3: auto-assistido grava nas duas chaves
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.1 carregado');
+console.log('[GDI Extras Modular] v2.2 carregado');
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -30,9 +30,6 @@ window.GDI_MODULES = window.GDI_MODULES || [];
 .gdi-dbg-msg{color:#e6edf3;}
 .gdi-dbg-pre{margin:2px 0 2px 20px;padding:4px 8px;background:#161b22;border-left:2px solid #30363d;white-space:pre-wrap;word-break:break-all;color:#8b949e;font-size:11px;}
 .gdi-dbg-empty{color:#484f58;}
-body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
-body.gdi-fv .gdi-study-right{display:none!important;}
-body.gdi-fm .gdi-study-left{display:none!important;}
 .gdi-mat-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#e6edf3;}
 .gdi-mat-head strong{display:flex;align-items:center;gap:6px;}
 #gdi-mat-status{font-size:11px;color:#8b949e;}
@@ -121,12 +118,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
 `;document.head.appendChild(s);})();
 
-// ── Loader dos módulos — v2.1 ★ CORRIGIDO ──
-// Causa do bug v2.0: em página de ARQUIVO o layout é montado DEPOIS do
-// page:change (fetch assíncrono). O loader antigo rodava 1× por URL e
-// desistia → módulos nunca iniciavam (foco, notas, dormir, filtro…).
-// Agora: MutationObserver no #content re-executa os inits (idempotentes)
-// assim que o layout aparece.
+// ── Loader dos módulos — observa #content (páginas de vídeo montam o DOM async) ──
 (function(){
   let timer=null;
   function runAll(){
@@ -147,7 +139,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   bindContent();
 })();
 
-// ═══ M1: SENHAS PROTEGIDAS (substitui os stubs do core) ═══
+// ═══ M1: SENHAS PROTEGIDAS ═══
 (function(){
   const _PWK='gdi-'+(window.location.host||'local');
   function _pwXor(s){let o='';for(let i=0;i<s.length;i++)o+=String.fromCharCode(s.charCodeAt(i)^_PWK.charCodeAt(i%_PWK.length));return o}
@@ -214,9 +206,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const pv=window.playlistVideos;if(!pv||!pv.length)return;
       const start=(typeof window.currentIndex==='number'&&window.currentIndex>=0)?window.currentIndex+1:0;
       for(let i2=start;i2<pv.length;i2++){
-        if(!GDIUser.isWatched((pv[i2].pageUrl||'').split('?')[0])){
-          e.preventDefault();window.switchVideo(i2);return;
-        }
+        let w=false;try{const raw=(pv[i2].pageUrl||'').split('?')[0];
+          w=GDIUser.isWatched(raw)||(window.gdiNormKey&&GDIUser.isWatched(gdiNormKey(raw)));}catch(_){}
+        if(!w){e.preventDefault();window.switchVideo(i2);return;}
       }
       showToast('Todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
     }
@@ -232,26 +224,22 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M5 v2: CRONÔMETRO + AUTO-ASSISTIDO 90% (marca com a CHAVE DA PLAYLIST) ═══
+// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% (chave dupla via M20) ═══
 (function(){
-  // ★ chave canônica da aula atual: a MESMA que a playlist usa para o ✓
-  window.gdiVideoKey=function(){
-    try{
-      const pv=window.playlistVideos,ci=window.currentIndex;
-      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
-    }catch(_){}
-    return window.location.pathname;
-  };
   Bus.onGlobal('media:ready',({type,el})=>{
-    if(type!=='video'||!el||el.__m5v2)return;
-    el.__m5v2=true;
+    if(type!=='video'||!el||el.__m5v3)return;
+    el.__m5v3=true;
     const LAST_KEY=()=>window.location.pathname+(window.location.search||'');
     el.addEventListener('timeupdate',()=>{
       const el2=document.getElementById('gdi-note-time');
       if(el2)el2.textContent=gdiFmtTime(el.currentTime);
       if(!el.__autoW&&isFinite(el.duration)&&el.duration>60&&el.currentTime/el.duration>=0.9){
         el.__autoW=true;
-        try{GDIUser.markWatched(window.gdiVideoKey());GDIUser.setLast(LAST_KEY());}catch(_){}
+        try{
+          if(window.gdiMarkVideo)gdiMarkVideo();
+          else GDIUser.markWatched(window.location.pathname);
+          GDIUser.setLast(LAST_KEY());
+        }catch(_){}
         Bus.emit('watched:changed');
       }
     });
@@ -259,7 +247,17 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const el3=document.getElementById('gdi-note-time');
       if(el3)el3.textContent='00:00';
     });
-    // clique-no-tempo fica a cargo do M6 (evita binding duplicado)
+    const nt=document.getElementById('gdi-note-time');
+    if(nt&&!nt.__seekB){nt.__seekB=true;
+      nt.addEventListener('click',()=>{
+        const v=document.querySelector('video');
+        if(v&&nt.textContent.includes(':')){
+          const pp=nt.textContent.split(':');
+          const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
+          try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
+        }
+      });
+    }
   });
 })();
 
@@ -347,7 +345,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const bar=document.createElement('div');bar.id='gdi-note-marks';
       wrap.insertAdjacentElement('afterend',bar);
     }
-    // ★ restaurado do v18.2: duplo-toque ±10s no mobile
     if(wrap&&Os.isMobile&&!wrap.__gdiDblTap){
       wrap.__gdiDblTap=true;
       let lt=0,lx=0;
@@ -410,8 +407,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         render();
         showToast('Anota\u00e7\u00e3o salva na sua conta');
       });
-      // ★ binding do clique-no-tempo aqui também (o M5 pode ter rodado
-      // antes do painel existir e perdido o elemento)
       const nt=document.getElementById('gdi-note-time');
       if(nt&&!nt.__seekB){nt.__seekB=true;
         nt.addEventListener('click',()=>{
@@ -491,7 +486,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'skip-intro',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
     if(!wrap)return;
-    // ★ correção: re-anexa se o layout foi recriado (novo render da página)
     if(!skipBtn||!document.body.contains(skipBtn)){
       skipBtn=document.createElement('button');
       skipBtn.id='gdi-skip-intro';
@@ -511,7 +505,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }});
 })();
 
-// ═══ M9: MATERIAIS (PDFs por aula) — espera o layout existir ═══
+// ═══ M9: MATERIAIS (PDFs por aula) ═══
 (function(){
   const frames=new Map();let gen=0;
   function classify(name){
@@ -610,8 +604,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
         </div>`).join('');
       if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
-      // ★ correção: window.Os é undefined (const não vai p/ window) — use Os direto
-      const isMobile=(typeof Os!=='undefined')&&Os.isMobile;
+      const isMobile=Os.isMobile;
       function show(idx){
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
@@ -652,9 +645,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10: MODOS DE FOCO + ASSISTIDO (v2.3 — força o PLAYER inteiro a 100%) ═══
+// ═══ M10 v3: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
 (function(){
-  // CSS de força bruta: cobre plyr, videojs, dplayer, jwplayer e vídeo nativo
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
 body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
@@ -678,10 +670,20 @@ body.gdi-fv .gdi-player-wrap iframe{
   margin-left:auto!important;margin-right:auto!important;display:block!important;}`;
     document.head.appendChild(s);
   }
+  function isDone(){
+    const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
+    let done=false;
+    try{
+      done=GDIUser.isWatched(key);
+      if(!done&&window.gdiNormKey)done=GDIUser.isWatched(gdiNormKey(key));
+      if(!done)done=GDIUser.isWatched(window.location.pathname);
+    }catch(_){}
+    return done;
+  }
   function updBtn(){
     const wb=document.getElementById('gdi-watched-btn');
     if(!wb)return;
-    const done=GDIUser.isWatched(window.location.pathname);
+    const done=isDone();
     wb.classList.toggle('done',done);
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
@@ -699,7 +701,6 @@ body.gdi-fv .gdi-player-wrap iframe{
       const ifr=document.querySelector('#gdi-mat-body iframe');
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
-    // cinto de segurança: aplica direto no DOM, além do CSS
     function applyLayout(m){
       const study=document.getElementById('gdi-study');if(!study)return;
       const grid=study.querySelector('.gdi-study-grid');
@@ -735,24 +736,23 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(wb&&!wb.dataset.b){
       wb.dataset.b='1';
       wb.addEventListener('click',()=>{
-        const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
-        const done=GDIUser.isWatched(key);
-        if(done)GDIUser.unmarkWatched(key);else GDIUser.markWatched(key);
-        Bus.emit('watched:changed');
+        const done=isDone();
+        if(done){window.gdiUnmarkVideo?gdiUnmarkVideo():GDIUser.unmarkWatched(window.location.pathname);}
+        else{window.gdiMarkVideo?gdiMarkVideo():GDIUser.markWatched(window.location.pathname);}
         showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
       });
     }
     updBtn();
-    Bus.onGlobal('watched:changed',()=>{updBtn();try{window.renderPlaylistUI&&window.renderPlaylistUI()}catch(_){}});
+    Bus.onGlobal('watched:changed',updBtn);
     Bus.onGlobal('user:ready',updBtn);
+    Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
   }});
 })();
 
-// ═══ M11: MODO DESCANSO — v2.1 completo (áudio + despertar) ═══
+// ═══ M11: MODO DESCANSO (áudio + despertar) ═══
 (function(){
   let wakeBound=false;
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
-    // só existe em páginas de mídia (como no v18.2)
     if(!document.querySelector('.gdi-player-wrap')&&!document.getElementById('aplayer-container'))return;
     if(document.getElementById('gdi-sleep-btn'))return;
     const isVideoPage=!!document.querySelector('.gdi-player-wrap');
@@ -791,7 +791,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     overlay.addEventListener('click',exit);
     btn.addEventListener('click',()=>{sleeping?exit():enter();});
     Bus.onGlobal('media:ready',({type,el,ap})=>{
-      if(ap){ // ★ restaurado: agendar/despertar com APlayer (áudio)
+      if(ap){
         if(ap.__gdiSleep)return;ap.__gdiSleep=true;
         try{ap.on('play',sched);ap.on('pause',cancel);ap.on('ended',cancel);}catch(_){}
         return;
@@ -801,7 +801,6 @@ body.gdi-fv .gdi-player-wrap iframe{
         try{el.addEventListener('ended',exit);}catch(_){}
       }
     });
-    // ★ restaurado: qualquer movimento desperta (e rearma no áudio)
     if(!wakeBound){
       wakeBound=true;
       ['mousemove','keydown','touchstart'].forEach(ev=>{
@@ -963,10 +962,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" + REVISÃO ESPAÇADA (v2 — com retry no user:ready) ═══
-// Correção: antes, se o GDIUser ainda não tivesse carregado no momento do init,
-// o módulo desistia silenciosamente e o card nunca aparecia. Agora o init é
-// re-executado quando a conta do usuário termina de carregar (user:ready).
+// ═══ M13 v2: CARD "CONTINUAR" + REVISÃO ESPAÇADA (retry no user:ready) ═══
 (function(){
   function resumeKeyFor(path){
     const p=String(path||'');
@@ -1095,7 +1091,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-  // ★ v2: init extraído para função nomeada (pode ser chamada de novo)
   function continueCardInit(){
     const p=window.location.pathname;
     if(!GDIUser.loaded())return;
@@ -1160,7 +1155,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
   }
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
-  // ★ o gatilho que faltava: quando a conta carrega DEPOIS do init, roda de novo
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
 })();
 
@@ -1275,77 +1269,164 @@ body.gdi-fv .gdi-player-wrap iframe{
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
 
-// ═══ M19: SYNC DO ✓ NA PLAYLIST + FILTRO "SÓ O QUE FALTA" ═══
-// Corrige os ✓ direto no DOM (não depende do render do core) e re-executa
-// sempre que a playlist for redesenhada (MutationObserver).
+// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
+// ★ Correção do bug "nome vira tamanho": o span do tamanho é pego por
+//   el.lastElementChild (filho DIRETO), nunca por span:last-child que
+//   casava com o span do nome dentro do div interno.
 (function(){
-  function refresh(){
-    const list=document.getElementById('gdi-playlist-list');
-    if(!list||!window.playlistVideos)return;
-    const hide=localStorage.getItem('gdi-hide-watched')==='1';
-    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
-      const idx=parseInt(el.dataset.idx,10);
-      const m=window.playlistVideos[idx];
-      if(!m)return;
-      let w=false;try{w=GDIUser.isWatched((m.pageUrl||'').split('?')[0]);}catch(_){}
-      const cur=(idx===window.currentIndex);
-      const ic=el.querySelector('i');
-      if(ic){
-        ic.className='bi '+(cur?'bi-play-fill':(w?'bi-check-circle-fill':'bi-film'))+' me-2';
-        ic.style.color=(w&&!cur)?'#3fb950':'';
-      }
-      // ✓ textual do lado direito (aparece inclusive no item atual)
-      const right=el.querySelector('span:last-child');
-      if(right){
-        const wanted=(w?'\u2713 ':'')+(m.size||'');
-        if(right.textContent!==wanted)right.textContent=wanted;
-      }
-      const nameSpan=el.querySelector('div > span');
-      if(nameSpan){
-        nameSpan.style.fontWeight=cur?'600':'400';
-        nameSpan.style.opacity=(w&&!cur)?'.75':'';
-      }
-      // filtro — o item atual nunca é escondido (você está nele)
-      el.style.display=(hide&&w&&!cur)?'none':'flex';
+  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
+  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
+  window.gdiNormKey=norm;
+  window.gdiVideoKey=function(){
+    try{const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
+    }catch(_){}
+    return window.location.pathname;
+  };
+  window.gdiMarkVideo=function(){
+    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
+    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
+    Bus.emit('watched:changed');
+  };
+  window.gdiUnmarkVideo=function(){
+    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
+      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
     });
-    // botão "Assistida ✓" do topo acompanha a mesma chave
-    const wb=document.getElementById('gdi-watched-btn');
-    if(wb){
-      const done=GDIUser.isWatched(window.gdiVideoKey?window.gdiVideoKey():window.location.pathname);
-      wb.classList.toggle('done',done);
-      wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
-    }
+    Bus.emit('watched:changed');
+  };
+  function isW(m){
+    const raw=(m.pageUrl||'').split('?')[0];
+    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
   }
-  window.gdiRefreshPlaylistChecks=refresh;
-  Bus.onGlobal('watched:changed',()=>setTimeout(refresh,30));
-  Bus.onGlobal('video:switched',()=>setTimeout(refresh,120));
-  Bus.onGlobal('user:ready',()=>setTimeout(refresh,60));
-  window.GDI_MODULES.push({name:'playlist-checks',init:function(){
-    const wrapEl=document.getElementById('gdi-playlist-wrap');
-    // botão do filtro (antes era o M15)
-    if(wrapEl&&!wrapEl.dataset.gdiFilter){
-      wrapEl.dataset.gdiFilter='1';
-      const header=wrapEl.querySelector('div');
-      if(header){
-        const btn=document.createElement('button');
-        btn.className='gdi-mode-btn';btn.style.cssText='padding:3px 10px;font-size:11px;';
-        const refreshBtn=()=>{const on=localStorage.getItem('gdi-hide-watched')==='1';
-          btn.classList.toggle('active',on);
-          btn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i> S\u00f3 o que falta';};
-        btn.addEventListener('click',()=>{
-          const on=localStorage.getItem('gdi-hide-watched')==='1';
-          localStorage.setItem('gdi-hide-watched',on?'0':'1');
-          refreshBtn();refresh();});
-        header.appendChild(btn);refreshBtn();
-      }
-    }
+  function items(){return window.playlistVideos||[]}
+  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
+  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
+  function healKeys(){
+    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
+    const raw=(m.pageUrl||'').split('?')[0];
+    let a=false,b=false,c=false;
+    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
+    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
+        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
+  }
+  let writing=false; // evita loop do MutationObserver
+  function renderItems(){
     const list=document.getElementById('gdi-playlist-list');
-    if(list&&!list.__chkObs){
-      list.__chkObs=true;
-      new MutationObserver(()=>setTimeout(refresh,20)).observe(list,{childList:true});
+    if(!list)return;
+    const pv=items(),ci=cur();
+    if(!pv.length){writing=true;list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';writing=false;return;}
+    const hide=localStorage.getItem(LS_HIDE)==='1';
+    let h='';
+    pv.forEach((m,idx)=>{
+      const w=isW(m),c=idx===ci;
+      if(hide&&w&&!c)return;
+      const nm=m.name||m.origName||'(sem nome)';
+      h+=`<div class="gdi-playlist-item" data-idx="${idx}" style="padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;${c?'background:var(--bs-primary,#1f6feb);color:#fff;':'background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);'}">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;">
+          <i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2" ${w&&!c?'style="color:#3fb950;"':''}></i>
+          <span style="font-weight:${c?'600':'400'};${w&&!c?'opacity:.75;':''}">${escHtml(nm)}</span>
+        </div>
+        <span style="font-size:11px;opacity:0.8;white-space:nowrap;">${w?'\u2713 ':''}${m.size||''}</span>
+      </div>`;
+    });
+    writing=true;
+    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
+    writing=false;
+    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const k=parseInt(el.dataset.idx,10);
+        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
+      });
+    });
+    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
+      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
+  }
+  function renderMeta(){
+    const pv=items(),ci=cur();
+    const cnt=document.getElementById('gdi-pl-count');
+    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
+  }
+  function syncWatchedBtn(){
+    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
+    let done=false;
+    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
+  function downloadJSON(){
+    const pv=items();
+    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
+    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
+      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
+  }
+  function ensureUI(){
+    const wrap=document.getElementById('gdi-playlist-wrap');
+    if(!wrap||wrap.dataset.m20)return;
+    wrap.dataset.m20='1';
+    wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
+        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
+        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+      </button>
+      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
+      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
+      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
+    </div>
+    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
+      <div id="gdi-playlist-list"></div>
+    </div>`;
+    const body=wrap.querySelector('#gdi-playlist-body');
+    const chev=wrap.querySelector('#gdi-pl-chev');
+    const setOpen=v=>{
+      body.style.display=v?'block':'none';
+      chev.className='bi bi-chevron-'+(v?'up':'down');
+      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
+    };
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
+    setOpen(open); // padrão: RECOLHIDA, como no Alfacon
+    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
+    const fBtn=wrap.querySelector('#gdi-pl-filter');
+    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
+      fBtn.classList.toggle('active',on);
+      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
+    fBtn.addEventListener('click',()=>{
+      const on=localStorage.getItem(LS_HIDE)==='1';
+      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
+    fSync();
+    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
+      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
+      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
+      showToast('Cache apagado \u2014 reescaneando\u2026');
+      setTimeout(()=>location.reload(),600);
+    });
+    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
+  }
+  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
+    if(!document.getElementById('gdi-playlist-wrap'))return;
+    ensureUI();
+    const list=document.getElementById('gdi-playlist-list');
+    if(list&&!list.__m20obs){
+      list.__m20obs=true;
+      let lastWrite=0;
+      new MutationObserver(()=>{
+        if(writing||Date.now()-lastWrite<150)return; // ignora as próprias reescritas
+        lastWrite=Date.now();
+        setTimeout(()=>{healKeys();renderItems();renderMeta();},30);
+      }).observe(list,{childList:true});
     }
-    refresh();
+    refreshAll();
   }});
+  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
+  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
+  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
 })();
 
 // ═══ M16: PWA best-effort ═══
@@ -1366,7 +1447,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   }
 })();
 
-// ═══ M17: VISUALIZADOR DE PDF (pdf.js — sobrepõe o fallback do core) ═══
+// ═══ M17: VISUALIZADOR DE PDF (pdf.js) ═══
 (function(){
   window.file_pdf = function(i,e,t,n,a,c){
     const l=`<div class="gdi-wrap">
@@ -1432,7 +1513,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   };
 })();
 
-// ═══ M18: PAINEL DE DEBUG (GDIDebug) — ★ restaurado do v18.2 ═══
+// ═══ M18: PAINEL DE DEBUG (GDIDebug) ═══
 const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
 window.GDIDebug=GDIDebug;
 
