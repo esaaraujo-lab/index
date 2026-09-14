@@ -17,20 +17,6 @@ window.GDI_MODULES = window.GDI_MODULES || [];
 .gdi-dbg-count{background:#1f6feb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
 #gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:#e6edf3;display:none;}
 .gdi-dbg-entry{padding:3px 0;border-bottom:1px solid #21262d;line-height:1.6;font-size:11px;}
-/* TRAVA DE SCROLL - Quando em modo tela cheia */
-html.gdi-lock,body.gdi-lock{overflow:hidden!important;height:100%;}
-body.gdi-fv .gdi-study,body.gdi-fm .gdi-study{
-  position:fixed;top:0;left:0;right:0;bottom:0;margin:0;max-width:none;width:100%;
-  z-index:8500;background:#0b0e14;overflow-y:auto;overflow-x:hidden;
-  display:flex;flex-direction:column;align-items:center;padding:10px 14px 24px;box-sizing:border-box;
-}
-body.gdi-fv .gdi-study-bar,body.gdi-fv .gdi-study-grid,
-body.gdi-fm .gdi-study-bar,body.gdi-fm .gdi-study-grid{
-  width:100%;max-width:1600px;flex-shrink:0;
-}
-/* LAYOUT SEM MATERIAL - Centralizado */
-body.gdi-nomat .gdi-study-grid{display:block;}
-body.gdi-nomat .gdi-study-left{max-width:980px;width:100%;margin:0 auto;}
 body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
 body.gdi-fv .gdi-study-right{display:none!important;}
 body.gdi-fm .gdi-study-left{display:none!important;}
@@ -451,21 +437,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }});
 })();
 
-// ═══ M8: AVANÇO AUTOMÁTICO DIRETO (sem popup, sem recarregar) ═══
-(function(){
-  let last=0;
-  Bus.onGlobal('media:ready',({type,el})=>{
-    if(type!=='video'||!el||el.__m8)return;
-    el.__m8=true;
-    el.addEventListener('ended',()=>{
-      const now=Date.now();
-      if(now-last<3000)return;
-      last=now;
-      Bus.emit('video:advance');
-    });
-  });
-})();
-
 // ═══ M9 v2.1: MATERIAIS (PDFs por aula) — espera o layout existir ═══
 // Causa do bug v2.0: o módulo rodava antes do file_video montar o DOM
 // (o layout é assíncrono) e desistia sem tentar de novo.
@@ -630,15 +601,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
     function setMode(m){
-      const shouldLock=m==='fv'||m==='fm';
-      document.documentElement.classList.toggle('gdi-lock',shouldLock);
-      document.body.classList.toggle('gdi-lock',shouldLock);
       document.body.classList.toggle('gdi-fv',m==='fv');
       document.body.classList.toggle('gdi-fm',m==='fm');
-      // Sem material (PDF): centraliza layout
-      if(!document.querySelector('.gdi-study-right')||document.querySelector('.gdi-study-right').style.display==='none'){
-        document.body.classList.add('gdi-nomat');
-      }
       try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
       slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
       if(m!=='fv')setTimeout(zoom,60);
