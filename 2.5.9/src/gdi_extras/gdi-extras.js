@@ -965,7 +965,10 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" + REVISÃO ESPAÇADA ═══
+// ═══ M13: CARD "CONTINUAR" + REVISÃO ESPAÇADA (v2 — com retry no user:ready) ═══
+// Correção: antes, se o GDIUser ainda não tivesse carregado no momento do init,
+// o módulo desistia silenciosamente e o card nunca aparecia. Agora o init é
+// re-executado quando a conta do usuário termina de carregar (user:ready).
 (function(){
   function resumeKeyFor(path){
     const p=String(path||'');
@@ -1094,7 +1097,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-  window.GDI_MODULES.push({name:'continue-card',init:function(){
+  // ★ v2: init extraído para função nomeada (pode ser chamada de novo)
+  function continueCardInit(){
     const p=window.location.pathname;
     if(!GDIUser.loaded())return;
     const wrap=document.querySelector('#content .gdi-wrap');
@@ -1156,7 +1160,10 @@ body.gdi-fv .gdi-player-wrap iframe{
     wrap.insertAdjacentHTML('afterbegin',html);
     wrap.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-  }});
+  }
+  window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
+  // ★ o gatilho que faltava: quando a conta carrega DEPOIS do init, roda de novo
+  Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
 })();
 
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
