@@ -1025,7 +1025,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(!document.body.contains(flashEl))document.body.appendChild(flashEl);}).observe(document.body,{childList:true});
     updateUI();
     console.log('[GDI Pomodoro] v2.4 pronto');
-  }});
+  }}); 
 })();
 
 // ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
