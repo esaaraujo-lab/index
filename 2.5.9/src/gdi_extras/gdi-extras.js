@@ -1812,3 +1812,468 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
   Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
 })();
+// ═══ M22 v2: CENTRAL DE ESTUDOS — painel + botão vivem FORA do body ═══
+// (não são apagados pelo core: sem auto-cura, sem guerra, sem travar)
+(function(){
+  const LS_CARDS='gdi-cards-v1',LS_GOAL='gdi-goal-min',LS_WATCH='gdi-watch-v1',LS_MAR='gdi-marathon',LS_MARINTRO='gdi-marathon-intro';
+  const log=(...a)=>{try{console.log('[GDI M22]',...a)}catch(_){}};
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
+  const low=p=>norm(p).toLowerCase();
+  const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
+  const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+  const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
+  let rescue=null,rescueAt=0;
+  function ensureState(){
+    if(rescue&&Date.now()-rescueAt<60000)return Promise.resolve(rescue);
+    return fetch('/userstate',{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(j=>{
+      if(j&&typeof j==='object'){rescue=j;rescueAt=Date.now();}
+      return rescue;
+    }).catch(()=>rescue);
+  }
+  function stateD(){
+    try{if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}}catch(_){}
+    return rescue;
+  }
+  function watchedLow(d){
+    const s=new Set();const w=(d&&d.watched)||{};
+    for(const k in w)s.add(low(k));
+    return s;
+  }
+  function courseKeyOf(p){
+    const seg=norm(p).split('/').filter(Boolean);
+    if(!seg.length||!/^\d+:$/.test(seg[0]))return null;
+    if(seg.length<=2)return seg[0];
+    return [seg[0],...seg.slice(1,-1).slice(0,2)].join('/');
+  }
+  const courseName=ck=>ck.split('/').filter(Boolean).slice(1).join(' / ')||ck;
+  function driveNameOf(ck){
+    const m=/^\/(\d+):/.exec(ck||'');
+    return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
+  }
+  function collectCourses(){
+    const d=stateD()||{};
+    const map=new Map();
+    const add=(p,at,wd)=>{
+      const ck=courseKeyOf(p);if(!ck)return;
+      let c=map.get(ck);
+      if(!c){c={key:ck,lastAt:0,lessons:new Set(),watched:0};map.set(ck,c);}
+      c.lessons.add(low(p));
+      if(wd)c.watched++;
+      const a=Number(at)||0;if(a>c.lastAt)c.lastAt=a;
+    };
+    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
+    for(const k in w)add(k,w[k]&&w[k].at,true);
+    for(const k in r)add(k,r[k]&&r[k].at,false);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at,false)});
+    return [...map.values()].filter(c=>c.lessons.size).sort((a,b)=>b.lastAt-a.lastAt);
+  }
+  const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
+  function isGeneric(n){
+    n=stripExt(n).toLowerCase();if(!n)return true;
+    return n.replace(/[\s\-_.:,;|()/\\]+/g,' ').split(' ')
+      .filter(w2=>w2&&!/^\d+$/.test(w2)&&!GW.test(w2)&&!GW.test(w2.replace(/\d+$/,''))).join('')==='';
+  }
+  function realName(p){
+    const seg=norm(p).split('/').filter(Boolean);
+    let nm=stripExt(seg[seg.length-1]||'');
+    if(isGeneric(nm))for(let j=seg.length-2;j>=0;j--){
+      if(/^\d+:$/.test(seg[j]))break;
+      if(!isGeneric(seg[j])){nm=stripExt(seg[j]);break;}
+    }
+    return nm||'Aula';
+  }
+  const vCache=new Map();
+  function exists(p){
+    if(vCache.has(p))return Promise.resolve(vCache.get(p));
+    const pr=fetch(String(p).split('?')[0],{method:'POST',credentials:'same-origin'})
+      .then(r2=>{vCache.set(p,r2.ok);return r2.ok})
+      .catch(()=>{vCache.set(p,true);return true});
+    vCache.set(p,pr);return pr;
+  }
+  const ghost=p=>{const s=norm(p).split('/').filter(Boolean);return s.length>=2&&s[s.length-1].indexOf(s[s.length-2]+' - ')===0;};
+  function bestIn(courseKey){
+    const d=stateD();
+    if(!d)return Promise.resolve(null);
+    const pre=low(courseKey);
+    const inC=p=>{const l=low(p);return l===pre||l.indexOf(pre+'/')===0;};
+    const cands=[],seen=new Set();
+    const add=(k,at)=>{
+      if(!k)return;const key=low(k);
+      if(seen.has(key)||!inC(k))return;seen.add(key);
+      cands.push({path:String(k).split('?')[0],at:Number(at)||0});
+    };
+    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
+    for(const k in w)add(k,w[k]&&w[k].at);
+    for(const k in r)add(k,r[k]&&r[k].at);
+    if(d.last&&d.last.path)add(d.last.path,d.last.at);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at)});
+    cands.sort((a,b)=>(ghost(a.path)-ghost(b.path))||(b.at-a.at));
+    return (async()=>{
+      for(const c of cands.slice(0,3)){if(await exists(c.path))return c.path;}
+      return null;
+    })();
+  }
+  let playing=false,mark=0;
+  document.addEventListener('play',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=true;mark=Date.now();}},true);
+  document.addEventListener('pause',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=false;flushWatch();}},true);
+  document.addEventListener('ended',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=false;flushWatch();}},true);
+  function flushWatch(){
+    if(!mark)return;
+    const sec=(Date.now()-mark)/1000;
+    mark=playing?Date.now():0;
+    if(sec>0&&sec<300){const w=lsGet(LS_WATCH,{});const k=dayKey();w[k]=(w[k]||0)+sec;lsSet(LS_WATCH,w);}
+  }
+  setInterval(flushWatch,30000);
+  const todayMin=()=>Math.round((lsGet(LS_WATCH,{})[dayKey()]||0)/60);
+  const goalMin=()=>Math.max(10,Math.min(480,parseInt(lsGet(LS_GOAL,60),10)||60));
+  setInterval(()=>{
+    const card=document.getElementById('gdi-home-card');
+    if(!card)return;
+    let chip=document.getElementById('gdi-goal-chip');
+    if(!chip){
+      chip=document.createElement('div');chip.id='gdi-goal-chip';
+      chip.style.cssText='flex-basis:100%;margin-top:2px;font-size:12px;color:#8b949e;display:flex;align-items:center;gap:8px;';
+      card.appendChild(chip);
+    }
+    const t=todayMin(),g=goalMin();
+    chip.innerHTML=`<span>\ud83c\udfaf Meta hoje: ${fmtMin(t)} / ${fmtMin(g)}</span>
+      <div style="flex:1;max-width:220px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
+        <div style="height:5px;width:${Math.min(100,Math.round(t/g*100))}%;background:${t>=g?'#2f9e44':'#1f6feb'};transition:width .4s;"></div>
+      </div>${t>=g?'<span style="color:#2f9e44;">\u2713 meta batida!</span>':''}`;
+  },20000);
+  const marOn=()=>lsGet(LS_MAR,false)===true;
+  const marIntro=()=>lsGet(LS_MARINTRO,true)!==false;
+  function marCourseKey(){
+    try{
+      const m=window.playlistVideos&&window.playlistVideos[window.currentIndex];
+      if(m&&m.folder){const f=norm(m.folder);return f.endsWith('/')?f:f+'/';}
+    }catch(_){}
+    return window.location.pathname.split('/').slice(0,-1).join('/')+'/';
+  }
+  Bus.onGlobal('media:ready',({type,el})=>{
+    if(type!=='video'||!el||el.__m22mar)return;
+    el.__m22mar=true;
+    el.addEventListener('ended',()=>{
+      if(!marOn())return;
+      const pv=window.playlistVideos;
+      if(!pv||!pv.length)return;
+      const wl=watchedLow(stateD());
+      const isW=i=>{
+        const raw=String(pv[i].pageUrl||'').split('?')[0];
+        if(wl.has(low(raw)))return true;
+        try{return !!(window.GDIUser&&GDIUser.isWatched&&GDIUser.isWatched(raw));}catch(_){return false;}
+      };
+      const ci=typeof window.currentIndex==='number'?window.currentIndex:-1;
+      for(let i=ci+1;i<pv.length;i++){
+        if(!isW(i)){
+          showToast('\u25b6 Maratona: '+stripExt(pv[i].name||pv[i].origName||''));
+          setTimeout(()=>{try{window.switchVideo(i);}catch(_){}},1800);
+          return;
+        }
+      }
+      showToast('Maratona: todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
+    });
+    const tryIntro=()=>{
+      if(!marOn()||!marIntro())return;
+      try{
+        const S=window.GDIUser&&GDIUser.getIntro&&GDIUser.getIntro(marCourseKey());
+        if(S&&S>0&&el.currentTime<S-1&&el.currentTime<300)el.currentTime=S;
+      }catch(_){}
+    };
+    el.addEventListener('loadedmetadata',()=>setTimeout(tryIntro,300));
+    el.addEventListener('play',tryIntro);
+  });
+  const cards=()=>lsGet(LS_CARDS,[]);
+  const saveCards=c=>lsSet(LS_CARDS,c);
+  const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
+  let FC={active:false,flip:null,grade:null};
+  let panel=null,tab='cursos';
+  function openPanel(t){
+    if(t)tab=t;
+    if(!panel){
+      panel=document.createElement('div');panel.id='gdi-central';
+      panel.addEventListener('click',e=>{if(e.target===panel)closePanel();});
+      GDI_ROOT().appendChild(panel);
+    }
+    panel.style.display='flex';
+    renderPanel();
+    ensureState().then(()=>{if(panel&&panel.style.display!=='none')renderPanel();});
+  }
+  function closePanel(){FC.active=false;if(panel)panel.style.display='none';}
+  function renderPanel(){
+    if(!panel)return;
+    const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
+    panel.innerHTML=`<div class="gdi-central-box">
+      <div class="gdi-central-head">
+        <b style="color:#f0f6fc;font-size:16px;">\ud83d\udcda Central de Estudos</b>
+        <span style="color:#8b949e;font-size:12px;">Meta hoje: ${fmtMin(t)}/${fmtMin(g)}</span>
+        <div style="flex:1;max-width:160px;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${pct}%;background:${t>=g?'#2f9e44':'#1f6feb'};"></div></div>
+        <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta di\u00e1ria (minutos)" style="width:56px;background:rgba(255,255,255,.07);border:1px solid #30363d;border-radius:6px;color:#f0f6fc;text-align:center;padding:3px 5px;font-size:12px;">
+        <button class="gdi-mode-btn" id="gdi-central-x" style="padding:4px 10px;">\u2715</button>
+      </div>
+      <div class="gdi-central-tabs">
+        <button class="gdi-central-tab ${tab==='cursos'?'active':''}" data-t="cursos">\ud83d\udccd Meus Cursos</button>
+        <button class="gdi-central-tab ${tab==='stats'?'active':''}" data-t="stats">\ud83d\udcca Estat\u00edsticas</button>
+        <button class="gdi-central-tab ${tab==='fc'?'active':''}" data-t="fc">\ud83e\uddf0 Flashcards</button>
+        <button class="gdi-central-tab ${tab==='mar'?'active':''}" data-t="mar">\ud83d\ude80 Maratona</button>
+      </div>
+      <div class="gdi-central-body" id="gdi-central-body"></div>
+    </div>`;
+    panel.querySelector('#gdi-central-x').onclick=closePanel;
+    panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
+      const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
+      lsSet(LS_GOAL,v);renderPanel();
+    });
+    panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t;FC.active=false;renderPanel();});
+    const body=panel.querySelector('#gdi-central-body');
+    if(tab==='cursos')renderCursos(body);
+    else if(tab==='stats')renderStats(body);
+    else if(tab==='fc')renderFlash(body);
+    else renderMarathon(body);
+  }
+  async function renderCursos(box){
+    const cs=collectCourses();
+    if(!cs.length){box.innerHTML='<div class="gdi-notes-empty">Nenhum estudo registrado ainda.</div>';return;}
+    box.innerHTML='<div class="gdi-courses"></div>';
+    const grid=box.firstChild;
+    cs.slice(0,24).forEach(c=>{
+      const el=document.createElement('div');el.className='gdi-course';
+      el.innerHTML=`<b title="${escHtml(courseName(c.key))}">${escHtml(courseName(c.key))}</b>
+        <small>${escHtml(driveNameOf(c.key))||'\u2014'} \u00b7 ${c.lessons.size} aula${c.lessons.size>1?'s':''}${c.watched?` \u00b7 ${c.watched} conclu\u00edda${c.watched>1?'s':''}`:''} \u00b7 \u00faltima: ${c.lastAt?dateBr(c.lastAt):'\u2014'}</small>
+        <button class="gdi-mode-btn" style="font-size:12px;" disabled><i class="bi bi-hourglass-split"></i> Verificando\u2026</button>`;
+      grid.appendChild(el);
+      const btn=el.querySelector('button');
+      bestIn(c.key).then(target=>{
+        if(target){
+          btn.disabled=false;
+          btn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,28))}`;
+          btn.onclick=()=>{location.href=target+(target.includes('?')?'&':'?')+'a=view';};
+        }else{
+          btn.disabled=true;
+          btn.innerHTML='<i class="bi bi-check2"></i> Nada pendente encontrado';
+        }
+      });
+    });
+  }
+  function renderStats(box){
+    const d=stateD()||{};
+    const chip=(ic,tx)=>`<span style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:6px 10px;font-size:12px;color:#e6edf3;">${ic} ${tx}</span>`;
+    const acts={};
+    const addA=t=>{if(!t)return;const k=dayKey(t);acts[k]=(acts[k]||0)+1;};
+    const w=(d.watched)||{},r=(d.resume)||{};
+    for(const k in w)addA(w[k]&&w[k].at);
+    for(const k in r)addA(r[k]&&r[k].at);
+    if(d.last&&d.last.at)addA(d.last.at);
+    for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(n=>addA(n.at));
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>addA(h&&h.at));
+    const days=new Set(Object.keys(acts));
+    let streak=0;const dd=new Date();
+    const hasD=t=>days.has(dayKey(t));
+    if(!hasD(dd))dd.setDate(dd.getDate()-1);
+    while(hasD(dd)){streak++;dd.setDate(dd.getDate()-1);}
+    const today=new Date();today.setHours(12,0,0,0);
+    const begin=new Date(today);begin.setDate(begin.getDate()-91);begin.setDate(begin.getDate()-begin.getDay());
+    const n=Math.round((today-begin)/86400000)+1;
+    let heat='';
+    for(let i=0;i<n;i++){
+      const t=new Date(begin.getTime()+i*86400000);
+      const a=acts[dayKey(t)]||0;
+      const lvl=a===0?0:a===1?1:a<=3?2:a<=6?3:4;
+      heat+=`<i class="${lvl?'l'+lvl:''}" title="${dateBr(t)} \u00b7 ${a} atividade${a===1?'':'s'}"></i>`;
+    }
+    const ws=new Date();ws.setHours(0,0,0,0);ws.setDate(ws.getDate()-ws.getDay());
+    let wkMin=0;
+    const watch=lsGet(LS_WATCH,{});
+    for(const k in watch){const p=k.split('-').map(Number);const t=new Date(p[0],p[1]-1,p[2],12);if(t>=ws)wkMin+=watch[k];}
+    wkMin=Math.round(wkMin/60);
+    const per={};
+    for(const k in r){const ck=courseKeyOf(k);if(!ck)continue;const x=r[k]||{};per[ck]=(per[ck]||0)+Math.min(x.t||0,(x.d>0?x.d:x.t)||0);}
+    const top=Object.entries(per).map(([ck,s])=>({ck,h:s/3600})).sort((a,b)=>b.h-a.h).slice(0,8);
+    const maxH=top.length?Math.max(top[0].h,.1):1;
+    let notesN=0;for(const k in(d.notes||{}))notesN+=(d.notes[k]||[]).length;
+    let srsDue=0;const now=Date.now();
+    for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(x=>{const e=d.srs&&d.srs[k+'|'+x.at];if((e?e.due:(x.at+86400000))<=now)srsDue++;});
+    const totalH=Object.values(per).reduce((a,b)=>a+b,0)/3600;
+    box.innerHTML=`
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        ${chip('\ud83d\udd25',streak+' dia'+(streak===1?'':'s')+' seguidos')}
+        ${chip('\u23f1\ufe0f',fmtMin(todayMin())+' hoje')}
+        ${chip('\ud83d\udcca',fmtMin(wkMin)+' na semana')}
+        ${chip('\u2753','\u2248'+totalH.toFixed(1).replace('.',',')+'h no total')}
+        ${chip('\u2705',Object.keys(w).length+' conclu\u00eddas')}
+        ${chip('\u25b6',Object.keys(r).length+' em andamento')}
+        ${chip('\ud83d\udcdd',notesN+' anota\u00e7\u00f5es')}
+        ${srsDue?chip('\ud83c\udf93',srsDue+' revis\u00f5es vencidas'):''}
+      </div>
+      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
+      <div class="heat" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">${heat}</div>
+      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
+      ${top.map(t2=>`<div style="margin-bottom:8px;min-width:260px;max-width:640px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#e6edf3;margin-bottom:3px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78%;">${escHtml(courseName(t2.ck))}</span>
+          <span style="color:#8b949e;">${t2.h.toFixed(1).replace('.',',')}h</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:#1f6feb;"></div></div>
+      </div>`).join('')||'<div class="gdi-notes-empty">Sem dados ainda.</div>'}`;
+  }
+  function renderFlash(box){
+    const cs=cards(),due=dueCards();
+    const currentAula=(document.querySelector('.gdi-player-wrap')&&window.gdiVideoKey)?norm(window.gdiVideoKey()):'';
+    const inp='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e6edf3;padding:8px;font-size:13px;';
+    box.innerHTML=`
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+        <b style="color:#f0f6fc;">${cs.length} cart\u00e3o${cs.length===1?'':'\u00f5es'}</b>
+        <span style="color:#8b949e;font-size:12px;">${due.length} vencido${due.length===1?'':'s'}</span>
+        <button id="gdi-fc-study" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${due.length?'':'disabled'}><i class="bi bi-play-fill"></i> Estudar (${due.length})</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-width:640px;">
+        <input id="gdi-fc-f" placeholder="Frente (pergunta)" style="${inp}">
+        <input id="gdi-fc-b" placeholder="Verso (resposta)" style="${inp}">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button id="gdi-fc-add" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
+          ${currentAula?`<span style="font-size:11px;color:#8b949e;">aula atual: ${escHtml(realName(currentAula).slice(0,30))}</span>`:''}
+        </div>
+      </div>
+      <div id="gdi-fc-list" style="display:flex;flex-direction:column;gap:6px;max-width:640px;"></div>`;
+    const list=box.querySelector('#gdi-fc-list');
+    function drawList(){
+      const all=cards();
+      list.innerHTML=all.length?'':'<div class="gdi-notes-empty">Nenhum cart\u00e3o ainda \u2014 crie o primeiro acima.</div>';
+      all.slice().reverse().forEach(c=>{
+        const row=document.createElement('div');row.className='gdi-note';
+        row.innerHTML=`<span style="flex:1;word-break:break-word;"><b style="color:#f0f6fc;">${escHtml(String(c.f).slice(0,70))}</b><br><span style="color:#8b949e;">${escHtml(String(c.b).slice(0,90))}</span></span>
+          <span style="font-size:10px;color:#8b949e;white-space:nowrap;">${(c.due||0)<=Date.now()?'<b style="color:#ffd43b;">hoje</b>':dateBr(c.due)}</span>
+          <button class="gdi-note-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
+        row.querySelector('button').onclick=()=>{saveCards(cards().filter(x=>x.id!==c.id));drawList();};
+        list.appendChild(row);
+      });
+    }
+    drawList();
+    box.querySelector('#gdi-fc-add').onclick=()=>{
+      const f=box.querySelector('#gdi-fc-f').value.trim();
+      const b=box.querySelector('#gdi-fc-b').value.trim();
+      if(!f||!b){showToast('Preencha frente e verso');return;}
+      const all=cards();
+      all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',at:Date.now(),box:0,due:Date.now()+86400000});
+      saveCards(all);
+      box.querySelector('#gdi-fc-f').value='';box.querySelector('#gdi-fc-b').value='';
+      drawList();showToast('Cart\u00e3o adicionado');
+    };
+    box.querySelector('#gdi-fc-study').onclick=()=>studyFlash(box);
+  }
+  function studyFlash(box){
+    const queue=dueCards();
+    if(!queue.length){renderFlash(box);return;}
+    let i=0,ok=0;
+    function draw(){
+      if(i>=queue.length){
+        FC.active=false;
+        box.innerHTML=`<div style="text-align:center;padding:30px;">
+          <div style="font-size:40px;">\ud83c\udf89</div>
+          <h3 style="color:#f0f6fc;">Revis\u00e3o conclu\u00edda!</h3>
+          <p style="color:#8b949e;font-size:13px;">${ok}/${queue.length} lembradas de primeira.</p>
+          <button class="gdi-mode-btn" id="gdi-fc-back" style="margin-top:8px;">Voltar aos cart\u00f5es</button>
+        </div>`;
+        box.querySelector('#gdi-fc-back').onclick=()=>renderFlash(box);
+        return;
+      }
+      const c=queue[i];
+      box.innerHTML=`
+        <div style="text-align:center;color:#8b949e;font-size:12px;margin-bottom:10px;">Cart\u00e3o ${i+1}/${queue.length} \u00b7 [espa\u00e7o] vira \u00b7 [1] esqueci \u00b7 [2] quase \u00b7 [3] lembrei</div>
+        <div class="gdi-fc" id="gdi-fc-card" title="Clique para virar">
+          <div style="font-size:18px;color:#f0f6fc;text-align:center;">${escHtml(c.f)}</div>
+          <div id="gdi-fc-back2" style="display:none;font-size:15px;color:#7aa2ff;border-top:1px solid #21262d;padding-top:12px;text-align:center;">${escHtml(c.b)}</div>
+        </div>
+        <div id="gdi-fc-btns" style="display:none;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+          <button class="gdi-mode-btn" data-g="1">1 \u00b7 Esqueci</button>
+          <button class="gdi-mode-btn" data-g="2">2 \u00b7 Quase</button>
+          <button class="gdi-btn gdi-btn-primary" data-g="3">3 \u00b7 Lembrei</button>
+        </div>`;
+      const card=box.querySelector('#gdi-fc-card'),bk=box.querySelector('#gdi-fc-back2'),btns=box.querySelector('#gdi-fc-btns');
+      const flip=()=>{bk.style.display='';btns.style.display='flex';};
+      card.onclick=flip;
+      box.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>grade(+b.dataset.g));
+      FC.flip=flip;
+      FC.grade=grade;
+      FC.active=true;
+    }
+    function grade(g){
+      const c=queue[i];
+      const all=cards();
+      const ix=all.findIndex(x=>x.id===c.id);
+      if(ix>=0){
+        const day=86400000,steps=[1,7,30,90];
+        if(g===1){all[ix].box=0;all[ix].due=Date.now()+day;}
+        else if(g===2){all[ix].due=Date.now()+3*day;}
+        else{all[ix].box=Math.min((all[ix].box||0)+1,3);all[ix].due=Date.now()+steps[all[ix].box]*day;}
+        saveCards(all);
+      }
+      if(g===3)ok++;
+      i++;draw();
+    }
+    draw();
+  }
+  function renderMarathon(box){
+    const on=marOn(),intro=marIntro();
+    const sw=(id,chk,tit,sub)=>`<label style="display:flex;justify-content:space-between;align-items:center;gap:14px;background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px;cursor:pointer;">
+      <span><b style="color:#f0f6fc;">${tit}</b><br><small style="color:#8b949e;">${sub}</small></span>
+      <input type="checkbox" id="${id}" ${chk?'checked':''} style="accent-color:#1f6feb;width:20px;height:20px;cursor:pointer;flex-shrink:0;"></label>`;
+    box.innerHTML=`<div style="max-width:560px;display:flex;flex-direction:column;gap:12px;">
+      ${sw('gdi-mar-on',on,'\ud83d\ude80 Modo Maratona','Ao terminar uma aula, abre sozinho a pr\u00f3xima n\u00e3o assistida da playlist')}
+      ${sw('gdi-mar-intro',intro,'\u23e9 Pular introdu\u00e7\u00e3o autom\u00e1tico','Usa o tempo memorizado pelo bot\u00e3o "Pular introdu\u00e7\u00e3o" (M7)')}
+      <p style="color:#8b949e;font-size:12px;">Vale nas p\u00e1ginas de aula com playlist. O check \u2713 da aula continua sendo dado pelo auto-assistido (90%).</p>
+    </div>`;
+    box.querySelector('#gdi-mar-on').addEventListener('change',e=>{
+      lsSet(LS_MAR,e.target.checked);
+      showToast('Modo Maratona '+(e.target.checked?'LIGADO \ud83d\ude80':'desligado'));
+    });
+    box.querySelector('#gdi-mar-intro').addEventListener('change',e=>lsSet(LS_MARINTRO,e.target.checked));
+  }
+  if(!document.getElementById('gdi-central-style')){
+    const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
+#gdi-central-fab{position:fixed;bottom:76px;right:76px;z-index:9999;width:44px;height:44px;border-radius:50%;cursor:pointer;background:rgba(18,18,28,.92);border:1.5px solid rgba(255,255,255,.15);color:#7aa2ff;font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);opacity:.45;transition:opacity .25s;}
+#gdi-central-fab:hover{opacity:1;}
+#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(5,7,10,.85);display:none;align-items:center;justify-content:center;padding:16px;}
+.gdi-central-box{background:#0f1218;border:1px solid #21262d;border-radius:16px;max-width:980px;width:100%;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;overflow:hidden;}
+.gdi-central-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #21262d;flex-wrap:wrap;}
+.gdi-central-tabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid #21262d;flex-wrap:wrap;}
+.gdi-central-tab{background:none;border:0;color:#8b949e;padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;}
+.gdi-central-tab.active{color:#f0f6fc;border-bottom-color:#1f6feb;}
+.gdi-central-body{overflow-y:auto;padding:16px 18px;}
+.gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+.gdi-course{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:12px;}
+.gdi-course b{color:#f0f6fc;font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gdi-course small{color:#8b949e;font-size:11px;display:block;margin:4px 0 10px;}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,10px);gap:3px;width:max-content;}
+.heat i{width:10px;height:10px;border-radius:2px;background:#161b22;display:block;}
+.heat i.l1{background:#0e4429}.heat i.l2{background:#006d32}.heat i.l3{background:#26a641}.heat i.l4{background:#39d353}
+.gdi-fc{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:26px 20px;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;max-width:560px;margin:0 auto;}
+`;document.head.appendChild(s);
+  }
+  if(!document.getElementById('gdi-central-fab')){
+    const b=document.createElement('button');
+    b.id='gdi-central-fab';b.title='Central de Estudos (tecla C)';b.textContent='\ud83d\udcda';
+    b.onclick=()=>openPanel('cursos');
+    GDI_ROOT().appendChild(b);
+  }
+  document.addEventListener('keydown',e=>{
+    const t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    if(e.key==='Escape'){closePanel();return;}
+    const k=e.key.toLowerCase();
+    if(k==='c'){
+      if(panel&&panel.style.display!=='none')closePanel();
+      else openPanel();
+      return;
+    }
+    if(!FC.active||!panel||panel.style.display==='none')return;
+    if(e.code==='Space'){e.preventDefault();FC.flip&&FC.flip();}
+    else if(e.key==='1'||e.key==='2'||e.key==='3'){FC.grade&&FC.grade(+e.key);}
+  });
+  log('central de estudos ativa (v2 \u2014 sem auto-cura, UI fora do body)');
+})();
