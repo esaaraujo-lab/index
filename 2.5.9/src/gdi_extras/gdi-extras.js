@@ -1,12 +1,16 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.4 — COMPLETO E REORDENADO (M1 → M22b)
-   • Ordem numérica: M1-M7, M9-M14, M16-M20, M22, M22b
-   • M11 v3.1: descanso consertado (tela cheia do player) + sem
-     acúmulo de overlays + auto-cura com atraso
-   • Anti-travamento: auto-curas (M12/M22b/M11) com debounce de
-     250ms + loader com trava anti-tempestade de render
+   gdi-extras.js v2.5 — COMPLETO (uma mensagem só)
+   • FIX TRAVAMENTO: UI flutuante (Pomodoro, Descanso, Central, SRS,
+     menus) agora vive em document.documentElement — o core nunca
+     apaga — e TODOS os observadores de auto-cura do body foram
+     removidos (fim da guerra core×extras que congelava a aba).
+   • Central de Estudos: painel não fecha mais sozinho; tecla C fixa.
+   • M13 v19.6 completo: tile com tudo (alvo verificado, nomes reais,
+     streak, horas, revisão, recentes).
+   • Ordem: M1-M7, M9-M14, M16-M20, M22.
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.4 carregado');
+console.log('[GDI Extras Modular] v2.5 carregado');
+const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do body)
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -118,7 +122,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
 `;document.head.appendChild(s);})();
 
-// ── Loader dos módulos — observa #content (com trava anti-tempestade) ──
+// ── Loader dos módulos (anti-tempestade) ──
 (function(){
   let timer=null,lastRun=0;
   function runAll(){
@@ -192,7 +196,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   document.addEventListener('loadedmetadata',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
 })();
 
-// ═══ M4: ATALHOS (N/P, J = próxima não assistida, ]/[ trechos) ═══
+// ═══ M4: ATALHOS (N/P, J, ]/[ trechos) ═══
 (function(){
   let marksVideo=null;
   Bus.onGlobal('media:ready',({type,el})=>{if(type==='video')marksVideo=el;});
@@ -226,7 +230,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% (chave dupla via M20) ═══
+// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% ═══
 (function(){
   Bus.onGlobal('media:ready',({type,el})=>{
     if(type!=='video'||!el||el.__m5v3)return;
@@ -263,7 +267,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M6: MARCAS NA TIMELINE + NOTAS + REVISÃO + EXPORT (md/anki) + DUPLO-TOQUE ═══
+// ═══ M6: MARCAS + NOTAS + REVISÃO + EXPORT + DUPLO-TOQUE ═══
 (function(){
   let mv=null,reviewOn=false;
   const SPAN=20;
@@ -314,7 +318,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     m.style.cssText='position:fixed;z-index:10001;background:rgba(15,16,24,.97);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);left:'+Math.max(8,r.left-60)+'px;top:'+(r.bottom+6)+'px;';
     m.innerHTML=`<button class="gdi-mode-btn" id="gdi-exp-md" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-markdown"></i> Markdown (.md)</button>
     <button class="gdi-mode-btn" id="gdi-exp-anki" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-collection"></i> Anki / texto (.txt)</button>`;
-    document.body.appendChild(m);
+    GDI_ROOT().appendChild(m);
     document.getElementById('gdi-exp-md').onclick=()=>{m.remove();doExport('md');};
     document.getElementById('gdi-exp-anki').onclick=()=>{m.remove();doExport('anki');};
     setTimeout(()=>document.addEventListener('click',function h(e2){
@@ -336,7 +340,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }
     const blob=new Blob([content],{type});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=base+'.'+ext;
-    document.body.appendChild(a);a.click();a.remove();
+    GDI_ROOT().appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
   }
@@ -647,7 +651,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
+// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO ═══
 (function(){
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
@@ -784,12 +788,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M11 v3.1: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
-//     tela cheia (janela grande) na página do player; ativado só por clique ═══
-// v3.1: sem acúmulo de overlays (recria só o que falta) + auto-cura com
-//       atraso de 250ms (não briga com o re-render do core).
-// v3: o player entra em tela cheia no PRÓPRIO container, que fica DENTRO do
-//     .gdi-player-wrap — aceita fullscreen igual/contendo/contido no wrap.
+// ═══ M11 v3.2: MODO DESCANSO — UI fora do body (não é apagada pelo core) ═══
 (function(){
   let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
   const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
@@ -814,8 +813,8 @@ body.gdi-fv .gdi-player-wrap iframe{
       btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
       btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
     }
-    if(!overlay.parentElement)document.body.appendChild(overlay);
-    if(!btn.parentElement)document.body.appendChild(btn);
+    if(!overlay.parentElement)GDI_ROOT().appendChild(overlay);
+    if(!btn.parentElement)GDI_ROOT().appendChild(btn);
   }
   function enterSleep(){
     if(sleeping)return;
@@ -849,7 +848,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(!video)fsOk=true;
       else fsOk=fs===document.documentElement||fs===document.body||fs===wrap||fs.contains(wrap)||wrap.contains(fs);
     }
-    const host=fsOk?fs:document.body;
+    const host=fsOk?fs:GDI_ROOT();
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
     btn.style.display=(video&&!fsOk)?'none':'flex';
@@ -872,22 +871,14 @@ body.gdi-fv .gdi-player-wrap iframe{
         try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
-    // auto-cura COM ATRASO (não reage em microtask — evita guerra de observers)
-    let healT=null;
-    new MutationObserver(()=>{
-      if(healT)return;
-      healT=setTimeout(()=>{healT=null;if(!btn||!btn.isConnected)syncFs();},250);
-    }).observe(document.body,{childList:true});
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
-    ensureEls();
-    bindOnce();
-    syncFs();
+    ensureEls();bindOnce();syncFs();
   }});
-  console.log('[GDI M11] v3.1 descanso registrado');
+  console.log('[GDI M11] v3.2 descanso registrado');
 })();
 
-// ═══ M12: POMODORO v2.4 ═══
+// ═══ M12: POMODORO v2.5 (UI fora do body) ═══
 (function(){
   window.GDI_MODULES.push({name:'pomodoro',init:function(){
     if(window.__gdiPomodoroBooted)return;
@@ -896,7 +887,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
     const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
     const safeParse=s=>{try{return JSON.parse(s)}catch(e){return null}};
-    const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';document.body.appendChild(flashEl);
+    const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';
     const root=document.createElement('div');root.id='gdi-pom-root';
     root.innerHTML=`
     <div id="gdi-pom-fab" title="Pomodoro"><span>🍅</span></div>
@@ -919,7 +910,8 @@ body.gdi-fv .gdi-player-wrap iframe{
         <label class="gdi-pom-switch"><span>▶ Auto-iniciar próxima fase</span><input id="gdi-pom-c-auto" type="checkbox" checked></label>
       </div>
     </div>`;
-    document.body.appendChild(root);
+    GDI_ROOT().appendChild(flashEl);
+    GDI_ROOT().appendChild(root);
     if(!document.querySelector('video,audio')&&!window._gdiAPlayer)root.style.display='none';
     const CKEY='gdi-pom-cfg-v2',SKEY='gdi-pom-state-v2';
     let cfg=Object.assign({work:25,short:5,long:15,sessions:4,autoStart:true},safeParse(localStorage.getItem(CKEY))||{});
@@ -1026,31 +1018,15 @@ body.gdi-fv .gdi-player-wrap iframe{
         loadCfg();
         if(!st.running){st.phase='work';st.dots=0;dotsCache='';st.total=cfg.work*60;st.remain=st.total;persist();updateUI();}});});
     $id('gdi-pom-c-auto').addEventListener('change',e=>{cfg.autoStart=e.target.checked;localStorage.setItem(CKEY,JSON.stringify(cfg));});
-    // auto-cura COM ATRASO (evita guerra de observers com o core)
-    let pomHealT=null;
-    new MutationObserver(()=>{
-      if(pomHealT)return;
-      pomHealT=setTimeout(()=>{pomHealT=null;
-        if(!document.body.contains(root))document.body.appendChild(root);
-        if(!document.body.contains(flashEl))document.body.appendChild(flashEl);
-      },250);
-    }).observe(document.body,{childList:true});
     updateUI();
-    console.log('[GDI Pomodoro] v2.4 pronto');
+    console.log('[GDI Pomodoro] v2.5 pronto');
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
-// v19.6: nomes genéricos ("video.mp4", "aula", "001 - aula", "Parte 1"…)
-//        são trocados pelo nome da PASTA da aula (tile e Recentes);
-//        cabeçalho "Continuar em {contexto}" (sem "Continuar em Continuar").
-// v19.5: alvo VERIFICADO no servidor (fantasmas ignorados, cai pro próximo).
-// v19.4: fonte de dados própria (/userstate) quando o GDIUser não carrega.
+// ═══ M13 v19.6: CARD "CONTINUAR" EM CASCATA ═══
 (function(){
   const DBG=true;
   const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
-
-  // ── nomes reais ──
   function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()}
   const GENERIC_WORDS=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|lesson|lessons|class|classes|modulo|m\u00f3dulo|module|modulos|m\u00f3dulos|modules|parte|partes|pt|cap|caps|capitulo|cap\u00edtulo|ext|ep|eps|episodio|epis\u00f3dio|live|revisao|revis\u00e3o|arquivo|file)$/i;
   function isGenericName(raw){
@@ -1072,8 +1048,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return name||'Aula';
   }
-
-  // ── camada de dados: GDIUser → fallback /userstate direto ──
   let rescue=null,rescueAt=0;
   function ensureRescue(force){
     if(!force&&rescue&&Date.now()-rescueAt<60000)return;
@@ -1214,7 +1188,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     due.sort((a,b)=>a.due-b.due);
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
-    document.body.appendChild(ov);
+    GDI_ROOT().appendChild(ov);
     let idx=0;
     function render(){
       if(idx>=due.length){
@@ -1401,7 +1375,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   log('v19.6 registrado (alvo verificado + nomes reais)');
 })();
 
-// ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
+// ═══ M14: PROGRESSOS ═══
 (function(){
   let busy=false;
   function modProgress(){
@@ -1596,7 +1570,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   };
 })();
 
-// ═══ M18: PAINEL DE DEBUG (GDIDebug) ═══
+// ═══ M18: PAINEL DE DEBUG ═══
 const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
 window.GDIDebug=GDIDebug;
 
@@ -1614,7 +1588,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       <button onclick="event.stopPropagation();document.getElementById('gdi-debug-log').classList.toggle('collapsed')">Toggle</button>
     </div></div>
   <div id="gdi-debug-log" class="collapsed"></div>`;
-  document.body.appendChild(wrap);
+  GDI_ROOT().appendChild(wrap);
   try{GDIDebug.attach()}catch(_){}
 }});
 
@@ -1682,7 +1656,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   console.log('[GDI M19] t\u00edtulo limpo ativo');
 })();
 
-// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
+// ═══ M20: PLAYLIST ═══
 (function(){
   const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
   const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
@@ -1771,7 +1745,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
     const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
-    document.body.appendChild(a);a.click();a.remove();
+    GDI_ROOT().appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
   }
@@ -1788,7 +1762,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       </button>
       <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
       <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
-      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
+      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json"><i class="bi bi-filetype-json"></i></button>
     </div>
     <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
       <div id="gdi-playlist-list"></div>
