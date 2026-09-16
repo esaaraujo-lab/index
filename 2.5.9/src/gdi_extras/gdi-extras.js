@@ -791,15 +791,16 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M11 v2: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
+// ═══ M11 v3: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
 //     tela cheia (janela grande) na página do player; ativado só por clique ═══
-// Por que não funcionava antes: o botão ficava em document.body, e elementos
-// FORA do elemento em tela cheia não são exibidos — ao entrar na janela grande
-// ele sumia. Agora botão e overlay são movidos PARA DENTRO do fullscreen.
+// v3: o player (plyr/video.js) entra em tela cheia no PRÓPRIO container
+//     (.video-js/.plyr), que fica DENTRO do .gdi-player-wrap — o teste da
+//     v2 exigia o contrário e o botão nunca aparecia. Agora qualquer tela
+//     cheia ligada ao player vale (igual, dentro ou contendo o wrap).
 (function(){
   let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
   const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
-  const onVideoPage=()=>!!document.querySelector('.gdi-player-wrap');
+  const wrapEl=()=>document.querySelector('.gdi-player-wrap');
   const onAudioPage=()=>!!document.getElementById('aplayer-container');
   function ensureEls(){
     if(btn&&btn.isConnected)return;
@@ -841,26 +842,26 @@ body.gdi-fv .gdi-player-wrap iframe{
   function syncFs(){
     ensureEls();
     const fs=fsEl();
-    const video=onVideoPage(),audio=onAudioPage();
+    const wrap=wrapEl();
+    const video=!!wrap,audio=onAudioPage();
     if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
     let fsOk=false;
     if(fs&&fs.tagName!=='VIDEO'){
       if(!video)fsOk=true; // página de áudio: qualquer tela cheia serve
-      else fsOk=fs.contains(document.querySelector('.gdi-player-wrap'))||fs===document.documentElement||fs===document.body;
+      // tela cheia ligada ao player: o elemento É o wrap, CONTÉM o wrap
+      // (documento/body) ou está DENTRO do wrap (container do player)
+      else fsOk=fs===document.documentElement||fs===document.body||fs===wrap||fs.contains(wrap)||wrap.contains(fs);
     }
     const host=fsOk?fs:document.body;
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
-    // Página de vídeo: botão visível APENAS em tela cheia (janela grande).
-    btn.style.display=(video&&!fsOk)?'none':'flex';
+    btn.style.display=(video&&!fsOk)?'none':'flex'; // vídeo: só em tela cheia
     if(sleeping&&video&&!fsOk)exitSleep(); // saiu da tela cheia → sai do descanso
   }
   function bindOnce(){
     if(bound)return;bound=true;
     document.addEventListener('fullscreenchange',syncFs);
     document.addEventListener('webkitfullscreenchange',syncFs);
-    // Despertar: clique, tecla, toque ou movimento (após a carência). O clique
-    // no próprio botão é ignorado aqui para não cancelar o toggle do clique.
     ['mousemove','mousedown','keydown','touchstart'].forEach(ev=>{
       document.addEventListener(ev,e=>{
         if(!sleeping||Date.now()<wakeGuard)return;
@@ -874,12 +875,16 @@ body.gdi-fv .gdi-player-wrap iframe{
         try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
+    // auto-cura: se o player reconstruir o próprio DOM e órfãar o botão,
+    // re-sincroniza (mesma técnica do Pomodoro/Central)
+    new MutationObserver(()=>{if(!btn||!btn.isConnected)syncFs();}).observe(document.body,{childList:true});
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
     ensureEls();
     bindOnce();
     syncFs();
   }});
+  console.log('[GDI M11] v3 descanso registrado');
 })();
 
 // ═══ M12: POMODORO v2.4 ═══
