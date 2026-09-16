@@ -1005,17 +1005,55 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.3 — BLINDADO) ═══
-// • Home (/)                → aula mais recente global
-// • Drive /6:/              → aula mais recente DENTRO do drive 6
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.4 — fonte de dados própria) ═══
+// • Home (/)  → aula mais recente global
+// • Drive /6:/ → aula mais recente DENTRO do drive 6
 // • Pasta em qualquer nível → aula mais recente DENTRO daquela pasta
-// v19.3: gdiOkPath virou opcional/blindado (nunca lança, nunca esconde o
-// tile), sem chamada gdiOkPath no pathname atual, playerHref sempre gera
-// href, host com fallback para #content, retry extra além do user:ready,
-// diagnóstico via gdiM13Debug() no console.
+// v19.4: o /userstate do worker está OK, mas o GDIUser do core não conclui
+// o carregamento (loaded() nunca vira true — o SAVE funciona, o LOAD não).
+// Este módulo usa o GDIUser quando disponível e, senão, busca o /userstate
+// diretamente e monta o card do jeito que for.
 (function(){
   const DBG=true;
   const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
+
+  // ── camada de dados: GDIUser → fallback /userstate direto ──
+  let rescue=null,rescueAt=0;
+  function ensureRescue(force){
+    if(!force&&rescue&&Date.now()-rescueAt<60000)return;
+    fetch('/userstate',{credentials:'same-origin'})
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{
+        if(j&&typeof j==='object'){
+          rescue=j;rescueAt=Date.now();
+          log('estado obtido do /userstate \u2014 watched:',Object.keys(j.watched||{}).length,'| history:',(j.history||[]).length);
+          setTimeout(continueCardInit,30);
+        }
+      })
+      .catch(e=>log('falha no /userstate:',e));
+  }
+  function stateD(){
+    try{
+      if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}
+    }catch(_){}
+    if(rescue)return rescue;
+    try{
+      if(window.GDIUser){const d=GDIUser.dump();if(d&&Object.keys(d).length)return d;}
+    }catch(_){}
+    return null;
+  }
+  function authIn(){
+    try{if(window.GDIUser&&typeof GDIUser.auth==='function')return GDIUser.auth()!=='out';}catch(_){}
+    return true; // neste worker, navegar já exige login
+  }
+  function getResumeOf(d,key){
+    try{
+      if(window.GDIUser&&GDIUser.loaded()&&typeof GDIUser.getResume==='function'){
+        const r=GDIUser.getResume(key);if(r)return r;
+      }
+    }catch(_){}
+    return (d&&d.resume&&d.resume[key])||null;
+  }
 
   function resumeKeyFor(path){
     const p=String(path||'');
@@ -1028,17 +1066,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(_){return String(p||'').split('?')[0].replace(/\/+$/,'')}
   }
   function low(p){return normPath(p).toLowerCase()}
-
-  // gdiOkPath blindado: se não existir, lançar erro ou rejeitar, considera OK
-  // (o safeGo já detecta sessão expirada na hora do clique).
   function okPath(x){
     try{
       if(typeof window.gdiOkPath!=='function')return true;
       return !!window.gdiOkPath(x);
     }catch(_){return true}
   }
-
-  // '' = home (tudo) | '/6' = drive 6 | '/6:/pasta' = subárvore da pasta
   function subtreePrefix(){
     const cur=low(window.location.pathname);
     if(cur==='')return'';
@@ -1052,12 +1085,9 @@ body.gdi-fv .gdi-player-wrap iframe{
     const lp=low(path);
     return lp.indexOf(pre+'/')===0||lp===pre;
   }
-
   function pickTarget(){
-    const d=(window.GDIUser&&GDIUser.dump())||null;
-    if(!d)return null;
-    let best=null,bestAt=-1;       // melhor alvo aprovado por gdiOkPath
-    let bestAny=null,bestAnyAt=-1; // melhor alvo absoluto (fallback)
+    const d=stateD();if(!d)return null;
+    let best=null,bestAt=-1,bestAny=null,bestAnyAt=-1;
     const consider=(k,at)=>{
       if(!k)return;
       if(!inSubtree(k))return;
@@ -1067,19 +1097,14 @@ body.gdi-fv .gdi-player-wrap iframe{
     };
     if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
     if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
-    try{
-      const last=(typeof GDIUser.getLast==='function')?GDIUser.getLast():(d.last||null);
-      if(last&&last.path)consider(last.path,last.at);
-    }catch(_){}
+    if(d.last&&d.last.path)consider(d.last.path,d.last.at);
     return best||bestAny||null;
   }
-
   function playerHref(p){
     const s=String(p||'');
     if(!s||s.indexOf('/fallback')===0)return'';
     return s.includes('?')?s+'&a=view':s+'?a=view';
   }
-
   async function safeGo(ev){
     const a=ev.currentTarget;
     const href=a.getAttribute('href')||'';
@@ -1094,8 +1119,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
-
-  // labels em cascata: [drive] → [ramo seguinte à pasta] → aula
   function labels(target){
     const cur=normPath(window.location.pathname);
     const isDriveRoot=/^\/\d+:$/.test(cur);
@@ -1103,14 +1126,14 @@ body.gdi-fv .gdi-player-wrap iframe{
     let rest=tNorm;
     if(!isDriveRoot&&tNorm.indexOf(cur+'/')===0)rest=tNorm.slice(cur.length+1);
     const seg=rest.split('/').filter(Boolean);
-    if(isDriveRoot&&/^\d+:$/.test(seg[0]||''))seg.shift(); // tira o '6:' redundante
+    if(isDriveRoot&&/^\d+:$/.test(seg[0]||''))seg.shift();
     let drivePart='';
     const cd=window.current_drive_order;
     if(isDriveRoot&&window.drive_names&&window.drive_names[cd])drivePart=window.drive_names[cd];
     let ramo='';
     if(seg.length>1){
       let s0=seg[0];
-      if(/^\d+:$/.test(s0)){ // na home, mostra o NOME do drive em vez de '6:'
+      if(/^\d+:$/.test(s0)){
         const dn=(window.drive_names||[])[parseInt(s0,10)];
         if(dn)s0=dn;
       }
@@ -1124,7 +1147,6 @@ body.gdi-fv .gdi-player-wrap iframe{
       drive:drivePart
     };
   }
-
   function driveLabel(){
     const cur=normPath(window.location.pathname);
     if(cur==='')return'seus cursos';
@@ -1133,9 +1155,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(m&&dn&&dn[parseInt(m[1],10)])return dn[parseInt(m[1],10)];
     return'';
   }
-
   function srsDueCount(){
-    const d=GDIUser.dump();if(!d)return 0;
+    const d=stateD();if(!d)return 0;
     const now=Date.now();let n=0;
     for(const k in(d.notes||{})){
       (d.notes[k]||[]).forEach(x=>{
@@ -1147,24 +1168,21 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return n;
   }
-
   function srsOpen(){
     const old=document.getElementById('gdi-srs-panel');
     if(old){old.remove();return;}
-    const due=(function(){
-      const d=GDIUser.dump();if(!d)return[];
-      const out=[];const now=Date.now();
-      for(const k in(d.notes||{})){
-        (d.notes[k]||[]).forEach(x=>{
-          const id=k+'|'+x.at;
-          const e=d.srs&&d.srs[id];
-          const due2=e?e.due:(x.at+86400000);
-          if(due2<=now)out.push({id,key:k,at:x.at,text:x.text,t:x.t,due:due2});
-        });
-      }
-      out.sort((a,b)=>a.due-b.due);
-      return out;
-    })();
+    const d=stateD()||{};
+    const now=Date.now();
+    const due=[];
+    for(const k in(d.notes||{})){
+      (d.notes[k]||[]).forEach(x=>{
+        const id=k+'|'+x.at;
+        const e=d.srs&&d.srs[id];
+        const t=e?e.due:(x.at+86400000);
+        if(t<=now)due.push({id,key:k,at:x.at,text:x.text,t:x.t,due:t});
+      });
+    }
+    due.sort((a,b)=>a.due-b.due);
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
     document.body.appendChild(ov);
@@ -1190,77 +1208,74 @@ body.gdi-fv .gdi-player-wrap iframe{
           <a class="gdi-mode-btn" data-gdi-go href="${escHtml(playerHref(n.key))}"><i class="bi bi-play-fill"></i> Abrir aula</a>
         </div></div>`;
       document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
-      document.getElementById('gdi-srs-good').addEventListener('click',()=>{GDIUser.srsGrade(n.id,true);idx++;render();});
-      document.getElementById('gdi-srs-again').addEventListener('click',()=>{GDIUser.srsGrade(n.id,false);idx++;render();});
+      document.getElementById('gdi-srs-good').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,true)}catch(_){}idx++;render();});
+      document.getElementById('gdi-srs-again').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,false)}catch(_){}idx++;render();});
       ov.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     }
     render();
   }
-
   function dbg(){
-    const d=(window.GDIUser&&GDIUser.dump())||{};
+    const d=stateD();
     return{
       url:window.location.pathname,
       subarvore:subtreePrefix()||'(tudo)',
-      usuarioCarregado:!!(window.GDIUser&&GDIUser.loaded()),
+      gdiUserCarregado:!!(window.GDIUser&&GDIUser.loaded&&GDIUser.loaded()),
+      fonteDados:(window.GDIUser&&GDIUser.loaded())?'GDIUser':(rescue?'resgate /userstate':'nenhuma'),
       alvo:pickTarget(),
-      chaves_watched:Object.keys(d.watched||{}).length,
-      chaves_resume:Object.keys(d.resume||{}).length,
-      history:Array.isArray(d.history)?d.history.length:0,
-      gdiOkPath:typeof window.gdiOkPath,
-      hostCard:!!(document.querySelector('#content .gdi-wrap')||document.getElementById('content'))
+      chaves_watched:Object.keys((d&&d.watched)||{}).length,
+      history:Array.isArray(d&&d.history)?d.history.length:0
     };
   }
   window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
 
   function continueCardInit(){
-    if(!(window.GDIUser&&GDIUser.loaded())){
-      // retry próprio (além do user:ready): até 6 tentativas de 750ms
+    const d=stateD();
+    if(!d){
+      ensureRescue();
       const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
-      if(n<=6){log('aguardando dados do usu\u00e1rio (tentativa '+n+')');setTimeout(continueCardInit,750);}
+      if(n<=12)setTimeout(continueCardInit,750);
       return;
     }
     continueCardInit.__n=0;
-    if(document.querySelector('#content .gdi-study'))return; // página do player: sem card
+    if(document.querySelector('#content .gdi-study'))return;
     const host=document.querySelector('#content .gdi-wrap')||document.getElementById('content');
     if(!host)return;
     const p=window.location.pathname;
     const isHome=p==='/'||/^\/\d+:\/?$/.test(p);
     const target=pickTarget();
-    const logged=GDIUser.auth()!=='out';
-    const d=GDIUser.dump();
+    const logged=authIn();
     const days=new Set();
     const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
-    if(d){for(const k in d.watched)addDay(d.watched[k]&&d.watched[k].at);
-      for(const k in d.resume)addDay(d.resume[k]&&d.resume[k].at);
-      if(d.last)addDay(d.last.at);
-      for(const k in d.notes)(d.notes[k]||[]).forEach(n=>addDay(n.at));}
+    for(const k in d.watched)addDay(d.watched[k]&&d.watched[k].at);
+    for(const k in d.resume)addDay(d.resume[k]&&d.resume[k].at);
+    if(d.last)addDay(d.last.at);
+    for(const k in d.notes)(d.notes[k]||[]).forEach(n=>addDay(n.at));
     let streak=0;const day=new Date();
     const has=dt=>days.has(dt.toDateString());
     if(!has(day))day.setDate(day.getDate()-1);
     while(has(day)){streak++;day.setDate(day.getDate()-1);}
     let hours=0;
-    if(d)for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
+    for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    const histRaw=(d&&Array.isArray(d.history))?d.history:[];
+    const histRaw=Array.isArray(d.history)?d.history:[];
     const hist=histRaw.filter(h=>h&&h.path&&h.path!==p&&inSubtree(h.path)&&okPath(h.path));
-    // assinatura: evita re-render em loop (o loader roda a cada mudança no #content)
-    const sig=String(target)+'|'+hist.length+'|'+due+'|'+streak;
-    const old=document.getElementById('gdi-home-card');
-    if(old&&continueCardInit.__sig===sig)return;
-    continueCardInit.__sig=sig;
     if(!target&&!streak&&!hours&&!hist.length&&!due){
-      if(old)old.remove();
+      const old0=document.getElementById('gdi-home-card');
+      if(old0)old0.remove();
       log('sem dados nesta sub\u00e1rvore \u2014 card oculto',dbg());
       return;
     }
     const lbl=target?labels(target):null;
     const rKey=target?resumeKeyFor(target):'';
-    const r=target?(typeof GDIUser.getResume==='function'?GDIUser.getResume(rKey):null):null;
-    const btn=target?(logged
-      ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
-      :`<a class="gdi-btn gdi-btn-primary" href="/login"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
+    const r=target?getResumeOf(d,rKey):null;
+    const canSrs=!!(window.GDIUser&&typeof GDIUser.srsGrade==='function');
+    const sig=String(target)+'|'+hist.length+'|'+due+'|'+streak;
+    const old=document.getElementById('gdi-home-card');
+    if(old&&continueCardInit.__sig===sig)return;
+    continueCardInit.__sig=sig;
+    if(old)old.remove();
+    const btn=target?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`:'';
     let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
     if(target){
       const topLine=lbl.drive?lbl.drive:(driveLabel()||'Continuar');
@@ -1278,7 +1293,7 @@ body.gdi-fv .gdi-player-wrap iframe{
         ${streak>0?`<span><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
         ${hours>0?`<span><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
       </div>`;
-      if(due>0)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
+      if(due>0&&canSrs)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
     }else if(streak>0){
       html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
     }
@@ -1289,16 +1304,16 @@ body.gdi-fv .gdi-player-wrap iframe{
       </div>`;
     }
     html+='</div>';
-    if(old)old.remove();
     host.insertAdjacentHTML('afterbegin',html);
     host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-    log('card renderizado \u2014 alvo:',target||'(s\u00f3 estat\u00edsticas)');
+    log('card renderizado \u2014 alvo:',target||'(s\u00f3 estat\u00edsticas)','| fonte:',(window.GDIUser&&GDIUser.loaded())?'GDIUser':'resgate /userstate');
   }
 
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
-  log('v19.3 registrado (cascata blindada)');
+  Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
+  log('v19.4 registrado (fonte de dados pr\u00f3pria)');
 })();
 
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
