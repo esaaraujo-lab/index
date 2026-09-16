@@ -1,14 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.2 — COMPLETO
+   gdi-extras.js v2.3 — COMPLETO
+   • M13 v19.2: card Continuar em cascata + RETOMADO o retry no
+     user:ready (bug dos tiles sumidos em F5), isHome aceita /6:/
+     com barra final, "last" respeita a subárvore da pasta
+   • M11 v2: Modo descanso — botão no canto esquerdo visível SOMENTE
+     em tela cheia (janela grande) na página do player de vídeo;
+     ativado apenas por clique do usuário, sem fade automático
    • M20: playlist no extras — recolhível (Alfacon), ✓ confiável
      (chave dupla + auto-cura), filtro, 🔄 cache, 💾 playlist.json
-   • Correção do bug "nome vira tamanho": seletor do span do tamanho
-     agora pega só filho DIRETO do item (el.lastElementChild)
-   • M13 v2: card Continuar com retry no user:ready
    • M10 v3: foco força player a 100% (CSS + inline)
    • M5 v3: auto-assistido grava nas duas chaves
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.2 carregado');
+console.log('[GDI Extras Modular] v2.3 carregado');
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -59,8 +62,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-note-del{background:none;border:0;color:#8b949e;cursor:pointer;font-size:13px;padding:0 2px;}
 .gdi-note-del:hover{color:#ff6b6b;}
 .gdi-notes-empty{color:#8b949e;font-size:12px;text-align:center;padding:6px;}
-#gdi-pom-root,#gdi-sleep-btn{opacity:.30;transition:opacity .25s ease;}
-#gdi-pom-root:hover,#gdi-sleep-btn:hover{opacity:.95;}
+#gdi-pom-root{opacity:.30;transition:opacity .25s ease;}
+#gdi-pom-root:hover{opacity:.95;}
+#gdi-sleep-btn{opacity:.8;transition:opacity .25s ease;}
+#gdi-sleep-btn:hover{opacity:1;}
 #gdi-note-marks{position:relative;height:16px;margin-top:4px;cursor:pointer;display:none;}
 .gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
   border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
@@ -749,70 +754,94 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M11: MODO DESCANSO (áudio + despertar) ═══
+// ═══ M11 v2: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
+//     tela cheia (janela grande) na página do player; ativado só por clique ═══
+// Por que não funcionava antes: o botão ficava em document.body, e elementos
+// FORA do elemento em tela cheia não são exibidos — ao entrar na janela grande
+// ele sumia. Agora botão e overlay são movidos PARA DENTRO do fullscreen.
 (function(){
-  let wakeBound=false;
-  window.GDI_MODULES.push({name:'sleep-mode',init:function(){
-    if(!document.querySelector('.gdi-player-wrap')&&!document.getElementById('aplayer-container'))return;
-    if(document.getElementById('gdi-sleep-btn'))return;
-    const isVideoPage=!!document.querySelector('.gdi-player-wrap');
-    const overlay=document.createElement('div');
+  let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
+  const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
+  const onVideoPage=()=>!!document.querySelector('.gdi-player-wrap');
+  const onAudioPage=()=>!!document.getElementById('aplayer-container');
+  function ensureEls(){
+    if(btn&&btn.isConnected)return;
+    overlay=document.createElement('div');
     overlay.id='gdi-sleep-overlay';
-    overlay.style.cssText='position:fixed;inset:0;z-index:8000;background:#000;opacity:0;pointer-events:none;transition:opacity 3s ease;cursor:pointer;';
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
     overlay.title='Clique para sair do modo descanso';
-    document.body.appendChild(overlay);
-    const btn=document.createElement('button');
+    overlay.addEventListener('click',()=>exitSleep());
+    btn=document.createElement('button');
     btn.id='gdi-sleep-btn';
     btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
-    btn.title=isVideoPage?'Modo descanso (apenas \u00e1udio) \u2014 clique para ligar':'Modo descanso';
-    btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:8001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.15);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
+    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+    btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
+    btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
+    document.body.appendChild(overlay);
     document.body.appendChild(btn);
-    let sleeping=false,fadeTimer=null;
-    const FADE_DELAY=8000,FADE_TARGET=0.97;
-    function enter(){
-      if(sleeping)return;
-      try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen();}catch(e){}
-      sleeping=true;
-      overlay.style.pointerEvents='all';
-      overlay.style.opacity=String(FADE_TARGET);
-      btn.innerHTML='<i class="bi bi-sun-fill"></i>';
-      btn.style.color='#ffd43b';
+  }
+  function enterSleep(){
+    if(sleeping)return;
+    sleeping=true;
+    wakeGuard=Date.now()+2500; // carência: o clique que ativou não desperta na hora
+    overlay.style.transition='opacity 2.5s ease';
+    overlay.style.pointerEvents='all';
+    overlay.style.opacity='0.97';
+    btn.innerHTML='<i class="bi bi-sun-fill"></i>';
+    btn.style.color='#ffd43b';
+    btn.title='Sair do modo descanso';
+  }
+  function exitSleep(){
+    if(!sleeping)return;
+    sleeping=false;
+    overlay.style.transition='opacity .5s ease';
+    overlay.style.opacity='0';
+    overlay.style.pointerEvents='none';
+    btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+    btn.style.color='#74c0fc';
+    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+  }
+  function syncFs(){
+    ensureEls();
+    const fs=fsEl();
+    const video=onVideoPage(),audio=onAudioPage();
+    if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
+    let fsOk=false;
+    if(fs&&fs.tagName!=='VIDEO'){
+      if(!video)fsOk=true; // página de áudio: qualquer tela cheia serve
+      else fsOk=fs.contains(document.querySelector('.gdi-player-wrap'))||fs===document.documentElement||fs===document.body;
     }
-    function exit(){
-      sleeping=false;
-      overlay.style.opacity='0';
-      overlay.style.pointerEvents='none';
-      btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
-      btn.style.color='#74c0fc';
-      clearTimeout(fadeTimer);
-    }
-    function sched(){clearTimeout(fadeTimer);fadeTimer=setTimeout(enter,FADE_DELAY);}
-    function cancel(){clearTimeout(fadeTimer);if(sleeping)exit();}
-    overlay.addEventListener('click',exit);
-    btn.addEventListener('click',()=>{sleeping?exit():enter();});
-    Bus.onGlobal('media:ready',({type,el,ap})=>{
-      if(ap){
-        if(ap.__gdiSleep)return;ap.__gdiSleep=true;
-        try{ap.on('play',sched);ap.on('pause',cancel);ap.on('ended',cancel);}catch(_){}
-        return;
-      }
+    const host=fsOk?fs:document.body;
+    if(btn.parentElement!==host)host.appendChild(btn);
+    if(overlay.parentElement!==host)host.appendChild(overlay);
+    // Página de vídeo: botão visível APENAS em tela cheia (janela grande).
+    btn.style.display=(video&&!fsOk)?'none':'flex';
+    if(sleeping&&video&&!fsOk)exitSleep(); // saiu da tela cheia → sai do descanso
+  }
+  function bindOnce(){
+    if(bound)return;bound=true;
+    document.addEventListener('fullscreenchange',syncFs);
+    document.addEventListener('webkitfullscreenchange',syncFs);
+    // Despertar: clique, tecla, toque ou movimento (após a carência). O clique
+    // no próprio botão é ignorado aqui para não cancelar o toggle do clique.
+    ['mousemove','mousedown','keydown','touchstart'].forEach(ev=>{
+      document.addEventListener(ev,e=>{
+        if(!sleeping||Date.now()<wakeGuard)return;
+        if(ev!=='mousemove'&&e.target&&btn&&(e.target===btn||btn.contains(e.target)))return;
+        exitSleep();
+      },{passive:true});
+    });
+    Bus.onGlobal('media:ready',({type,el})=>{
       if(type==='video'&&el&&!el.__gdiSleepEnd){
         el.__gdiSleepEnd=true;
-        try{el.addEventListener('ended',exit);}catch(_){}
+        try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
-    if(!wakeBound){
-      wakeBound=true;
-      ['mousemove','keydown','touchstart'].forEach(ev=>{
-        document.addEventListener(ev,()=>{
-          if(sleeping){
-            exit();
-            const a=window._gdiAPlayer;
-            if(a&&a.audio&&!a.audio.paused)sched();
-          }
-        },{passive:true});
-      });
-    }
+  }
+  window.GDI_MODULES.push({name:'sleep-mode',init:function(){
+    ensureEls();
+    bindOnce();
+    syncFs();
   }});
 })();
 
@@ -962,15 +991,18 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.1) ═══
-// O tile reflete a SUBÁRVORE da pasta atual:
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.3 — BLINDADO) ═══
 // • Home (/)                → aula mais recente global
-// • Drive /6:/              → aula mais recente dentro do drive 6
+// • Drive /6:/              → aula mais recente DENTRO do drive 6
 // • Pasta em qualquer nível → aula mais recente DENTRO daquela pasta
-//   (ex.: em DISCIPLINAS ISOLADAS mostra a última de qualquer disciplina
-//    dentro dela; em MATEMÁTICA, a última de MATEMÁTICA, etc.)
-// O label da pasta mostra o PRÓXIMO nível, indicando em qual ramo você parou.
+// v19.3: gdiOkPath virou opcional/blindado (nunca lança, nunca esconde o
+// tile), sem chamada gdiOkPath no pathname atual, playerHref sempre gera
+// href, host com fallback para #content, retry extra além do user:ready,
+// diagnóstico via gdiM13Debug() no console.
 (function(){
+  const DBG=true;
+  const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
+
   function resumeKeyFor(path){
     const p=String(path||'');
     if(p.indexOf('/fallback?')===0){
@@ -981,37 +1013,59 @@ body.gdi-fv .gdi-player-wrap iframe{
   function normPath(p){
     try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(_){return String(p||'').split('?')[0].replace(/\/+$/,'')}
   }
-  // a subárvore da pasta atual: p começa com a pasta (ou é a home = tudo)
-  function inSubtree(path){
-    const cur=normPath(window.location.pathname);
-    if(cur===''||/^\/\d+:$/.test(cur))return true;       // home: tudo
-    const prefix=cur+'/';
-    return normPath(path).indexOf(prefix)===0;
+  function low(p){return normPath(p).toLowerCase()}
+
+  // gdiOkPath blindado: se não existir, lançar erro ou rejeitar, considera OK
+  // (o safeGo já detecta sessão expirada na hora do clique).
+  function okPath(x){
+    try{
+      if(typeof window.gdiOkPath!=='function')return true;
+      return !!window.gdiOkPath(x);
+    }catch(_){return true}
   }
+
+  // '' = home (tudo) | '/6' = drive 6 | '/6:/pasta' = subárvore da pasta
+  function subtreePrefix(){
+    const cur=low(window.location.pathname);
+    if(cur==='')return'';
+    const m=/^\/(\d+):$/.exec(cur);
+    if(m)return'/'+m[1]+':';
+    return cur;
+  }
+  function inSubtree(path){
+    const pre=subtreePrefix();
+    if(pre==='')return true;
+    const lp=low(path);
+    return lp.indexOf(pre+'/')===0||lp===pre;
+  }
+
   function pickTarget(){
-    if(!gdiOkPath(window.location.pathname)&&!/^\/(\d+:)?\/?$/.test(window.location.pathname)&&!window.location.pathname.endsWith('/'))return null;
-    const d=GDIUser.dump();if(!d)return null;
-    let best=null,bestAt=-1;
+    const d=(window.GDIUser&&GDIUser.dump())||null;
+    if(!d)return null;
+    let best=null,bestAt=-1;       // melhor alvo aprovado por gdiOkPath
+    let bestAny=null,bestAnyAt=-1; // melhor alvo absoluto (fallback)
     const consider=(k,at)=>{
-      if(!k||!gdiOkPath(k))return;
+      if(!k)return;
       if(!inSubtree(k))return;
       const a=Number(at)||0;
-      if(a>bestAt){bestAt=a;best=k;}
+      if(a>bestAnyAt){bestAnyAt=a;bestAny=k;}
+      if(a>bestAt&&okPath(k)){bestAt=a;best=k;}
     };
     if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
     if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
-    const last=GDIUser.getLast();
-    if(last&&last.path&&gdiOkPath(last.path)){
-      const a=Number(last.at)||0;
-      if(a>bestAt)best=last.path;
-    }
-    return best;
+    try{
+      const last=(typeof GDIUser.getLast==='function')?GDIUser.getLast():(d.last||null);
+      if(last&&last.path)consider(last.path,last.at);
+    }catch(_){}
+    return best||bestAny||null;
   }
+
   function playerHref(p){
     const s=String(p||'');
-    if(!s||!gdiOkPath(s))return'';
+    if(!s||s.indexOf('/fallback')===0)return'';
     return s.includes('?')?s+'&a=view':s+'?a=view';
   }
+
   async function safeGo(ev){
     const a=ev.currentTarget;
     const href=a.getAttribute('href')||'';
@@ -1026,20 +1080,28 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
-  // labels em cascata: [drive atual?] [ramo seguinte à pasta atual] [curso…]
+
+  // labels em cascata: [drive] → [ramo seguinte à pasta] → aula
   function labels(target){
     const cur=normPath(window.location.pathname);
     const isDriveRoot=/^\/\d+:$/.test(cur);
     const tNorm=normPath(target);
-    // remove o prefixo da pasta atual do caminho da aula
     let rest=tNorm;
     if(!isDriveRoot&&tNorm.indexOf(cur+'/')===0)rest=tNorm.slice(cur.length+1);
     const seg=rest.split('/').filter(Boolean);
+    if(isDriveRoot&&/^\d+:$/.test(seg[0]||''))seg.shift(); // tira o '6:' redundante
     let drivePart='';
     const cd=window.current_drive_order;
     if(isDriveRoot&&window.drive_names&&window.drive_names[cd])drivePart=window.drive_names[cd];
     let ramo='';
-    if(seg.length>1){try{ramo=decodeURIComponent(seg[0])}catch(_){ramo=seg[0]}}
+    if(seg.length>1){
+      let s0=seg[0];
+      if(/^\d+:$/.test(s0)){ // na home, mostra o NOME do drive em vez de '6:'
+        const dn=(window.drive_names||[])[parseInt(s0,10)];
+        if(dn)s0=dn;
+      }
+      try{ramo=decodeURIComponent(s0)}catch(_){ramo=s0}
+    }
     let name;
     try{name=decodeURIComponent(seg[seg.length-1]||'')}catch(_){name=seg[seg.length-1]||''}
     return{
@@ -1048,13 +1110,16 @@ body.gdi-fv .gdi-player-wrap iframe{
       drive:drivePart
     };
   }
+
   function driveLabel(){
     const cur=normPath(window.location.pathname);
+    if(cur==='')return'seus cursos';
     const m=/^\/(\d+):$/.exec(cur);
     const dn=window.drive_names;
     if(m&&dn&&dn[parseInt(m[1],10)])return dn[parseInt(m[1],10)];
-    return '';
+    return'';
   }
+
   function srsDueCount(){
     const d=GDIUser.dump();if(!d)return 0;
     const now=Date.now();let n=0;
@@ -1068,6 +1133,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return n;
   }
+
   function srsOpen(){
     const old=document.getElementById('gdi-srs-panel');
     if(old){old.remove();return;}
@@ -1116,20 +1182,43 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-  window.GDI_MODULES.push({name:'continue-card',init:function(){
+
+  function dbg(){
+    const d=(window.GDIUser&&GDIUser.dump())||{};
+    return{
+      url:window.location.pathname,
+      subarvore:subtreePrefix()||'(tudo)',
+      usuarioCarregado:!!(window.GDIUser&&GDIUser.loaded()),
+      alvo:pickTarget(),
+      chaves_watched:Object.keys(d.watched||{}).length,
+      chaves_resume:Object.keys(d.resume||{}).length,
+      history:Array.isArray(d.history)?d.history.length:0,
+      gdiOkPath:typeof window.gdiOkPath,
+      hostCard:!!(document.querySelector('#content .gdi-wrap')||document.getElementById('content'))
+    };
+  }
+  window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
+
+  function continueCardInit(){
+    if(!(window.GDIUser&&GDIUser.loaded())){
+      // retry próprio (além do user:ready): até 6 tentativas de 750ms
+      const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
+      if(n<=6){log('aguardando dados do usu\u00e1rio (tentativa '+n+')');setTimeout(continueCardInit,750);}
+      return;
+    }
+    continueCardInit.__n=0;
+    if(document.querySelector('#content .gdi-study'))return; // página do player: sem card
+    const host=document.querySelector('#content .gdi-wrap')||document.getElementById('content');
+    if(!host)return;
     const p=window.location.pathname;
-    if(!GDIUser.loaded())return;
-    const wrap=document.querySelector('#content .gdi-wrap');
-    if(!wrap)return;
-    const old=document.getElementById('gdi-home-card');if(old)old.remove();
-    const isHome=p==='/'||/^\/\d+:$/.test(p);
+    const isHome=p==='/'||/^\/\d+:\/?$/.test(p);
     const target=pickTarget();
     const logged=GDIUser.auth()!=='out';
     const d=GDIUser.dump();
     const days=new Set();
     const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
-    if(d){for(const k in d.watched)addDay(d.watched[k].at);
-      for(const k in d.resume)addDay(d.resume[k].at);
+    if(d){for(const k in d.watched)addDay(d.watched[k]&&d.watched[k].at);
+      for(const k in d.resume)addDay(d.resume[k]&&d.resume[k].at);
       if(d.last)addDay(d.last.at);
       for(const k in d.notes)(d.notes[k]||[]).forEach(n=>addDay(n.at));}
     let streak=0;const day=new Date();
@@ -1137,27 +1226,37 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(!has(day))day.setDate(day.getDate()-1);
     while(has(day)){streak++;day.setDate(day.getDate()-1);}
     let hours=0;
-    if(d)for(const k in d.resume){const r=d.resume[k];hours+=Math.min(r.t,r.d>0?r.d:r.t)}
+    if(d)for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    // Recentes filtrados pela subárvore atual (em qualquer nível)
-    const hist=(d&&d.history||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path)&&(isHome||normPath(h.path).indexOf(normPath(p)+'/')===0));
-    if(!target&&!streak&&!hours&&!hist.length&&!due)return;
+    const histRaw=(d&&Array.isArray(d.history))?d.history:[];
+    const hist=histRaw.filter(h=>h&&h.path&&h.path!==p&&inSubtree(h.path)&&okPath(h.path));
+    // assinatura: evita re-render em loop (o loader roda a cada mudança no #content)
+    const sig=String(target)+'|'+hist.length+'|'+due+'|'+streak;
+    const old=document.getElementById('gdi-home-card');
+    if(old&&continueCardInit.__sig===sig)return;
+    continueCardInit.__sig=sig;
+    if(!target&&!streak&&!hours&&!hist.length&&!due){
+      if(old)old.remove();
+      log('sem dados nesta sub\u00e1rvore \u2014 card oculto',dbg());
+      return;
+    }
     const lbl=target?labels(target):null;
     const rKey=target?resumeKeyFor(target):'';
-    const r=target?GDIUser.getResume(rKey):null;
+    const r=target?(typeof GDIUser.getResume==='function'?GDIUser.getResume(rKey):null):null;
     const btn=target?(logged
       ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
       :`<a class="gdi-btn gdi-btn-primary" href="/login"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
     let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
     if(target){
       const topLine=lbl.drive?lbl.drive:(driveLabel()||'Continuar');
+      const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
         <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
         <div style="min-width:0;">
           <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar em ${escHtml(topLine)}${lbl.folder?' \u2192 '+escHtml(lbl.folder):''}</div>
           <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
-          <div style="font-size:12px;color:#8b949e;">${r?'parou em '+gdiFmtTime(r.t)+' \u00b7 ':''}${escHtml(lbl.drive||driveLabel()||'')}${r?'':' \u00b7 sem posi\u00e7\u00e3o salva'}</div>
+          <div style="font-size:12px;color:#8b949e;">${escHtml(sub)}</div>
         </div></div>${btn}`;
     }
     if(isHome){
@@ -1169,7 +1268,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }else if(streak>0){
       html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
     }
-    // Recentes: mostra também em pastas (cascata), não só na home
     if(hist.length){
       html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
         <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
@@ -1177,11 +1275,18 @@ body.gdi-fv .gdi-player-wrap iframe{
       </div>`;
     }
     html+='</div>';
-    wrap.insertAdjacentHTML('afterbegin',html);
-    wrap.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
+    if(old)old.remove();
+    host.insertAdjacentHTML('afterbegin',html);
+    host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-  }});
+    log('card renderizado \u2014 alvo:',target||'(s\u00f3 estat\u00edsticas)');
+  }
+
+  window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
+  Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
+  log('v19.3 registrado (cascata blindada)');
 })();
+
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
 (function(){
   let busy=false;
