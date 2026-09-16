@@ -650,7 +650,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10 v3: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
+// ═══ M10 v4: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
+// v4: se o core não criar #gdi-slot-modes, o módulo cria a própria barra —
+//     não depende mais do template do app.min.js (causa das abas sumidas).
 (function(){
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
@@ -693,8 +695,20 @@ body.gdi-fv .gdi-player-wrap iframe{
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
-    const slot=document.getElementById('gdi-slot-modes');
-    if(!slot||slot.dataset.m10)return;
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(!study&&!wrap)return; // só em página de aula
+    let slot=document.getElementById('gdi-slot-modes');
+    if(!slot){
+      const host=(study&&study.querySelector('.gdi-study-left'))||wrap||study;
+      if(!host)return;
+      slot=document.createElement('div');
+      slot.id='gdi-slot-modes';
+      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;';
+      host.insertBefore(slot,host.firstChild);
+      console.log('[GDI M10] slot n\u00e3o encontrado no core \u2014 barra criada pelo extras');
+    }
+    if(slot.dataset.m10)return;
     slot.dataset.m10='1';
     slot.innerHTML=`
       <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
@@ -707,10 +721,10 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
     function applyLayout(m){
-      const study=document.getElementById('gdi-study');if(!study)return;
-      const grid=study.querySelector('.gdi-study-grid');
-      const right=study.querySelector('.gdi-study-right');
-      const left=study.querySelector('.gdi-study-left');
+      const st=document.getElementById('gdi-study');if(!st)return;
+      const grid=st.querySelector('.gdi-study-grid');
+      const right=st.querySelector('.gdi-study-right');
+      const left=st.querySelector('.gdi-study-left');
       if(grid){
         if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
         else grid.style.removeProperty('grid-template-columns');
