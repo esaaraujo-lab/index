@@ -1449,6 +1449,78 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
+// ═══ M19: TÍTULO LIMPO DA ABA ═══
+// O nome imenso (caminho inteiro da aula) vira curto e legível:
+//   "pasta pai · nome da aula"  →  "12. 8 em cada 10 profissionais · aula"
+// • decodifica (%20 → espaço), remove extensão, colapsa espaços duplos
+// • raiz do drive → nome do drive | truncado em 64 caracteres
+// • NÃO mexe quando o Pomodoro (M12) está com o cronômetro no título
+// • NÃO altera a URL (a rota é real — encurtar quebraria o refresh)
+(function(){
+  const MAX=64;
+  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/; // prefixo do pomodoro — deixar quieto
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
+  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
+  function build(name,parent){
+    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
+    let t=parent?parent+' \u00b7 '+name:name;
+    if(t.length>MAX)t=(name||'').slice(0,MAX);
+    return t;
+  }
+  // na página de aula: usa a entrada atual da playlist (vale também quando
+  // troca de aula sem recarregar a página)
+  function fromPlaylist(){
+    try{
+      const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
+        const m=pv[ci];
+        const ps=segs(m.pageUrl||'');
+        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
+      }
+    }catch(_){}
+    return null;
+  }
+  // demais páginas: deriva do próprio caminho da URL
+  function fromUrl(){
+    const seg=segs(window.location.pathname);
+    if(!seg.length)return null;
+    const first=seg[0]||'';
+    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null; // /0:search etc. — não mexe
+    if(/^\d+:$/.test(first)){
+      if(seg.length===1){
+        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
+        return dn||null;
+      }
+      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
+    }
+    return null; // /fallback e afins — deixa o título do core
+  }
+  function apply(){
+    try{
+      const cur=document.title||'';
+      if(POMO.test(cur))return; // pomodoro rodando: M12 manda no título
+      const next=fromPlaylist()||fromUrl();
+      if(!next||next===cur)return;
+      document.title=next;
+    }catch(_){}
+  }
+  function bindTitle(){
+    const el=document.querySelector('title');
+    if(!el){setTimeout(bindTitle,400);return;}
+    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
+  }
+  bindTitle();
+  setInterval(apply,1500); // rede de segurança
+  Bus.onGlobal('page:change',apply);
+  Bus.onGlobal('title:change',apply);
+  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
+  Bus.onGlobal('media:ready',apply);
+  window.GDI_MODULES.push({name:'clean-title',init:apply});
+  apply();
+  console.log('[GDI M19] t\u00edtulo limpo ativo');
+})();
 
 // ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
 // ★ Correção do bug "nome vira tamanho": o span do tamanho é pego por
