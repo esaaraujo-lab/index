@@ -1,17 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.3 — COMPLETO
-   • M13 v19.2: card Continuar em cascata + RETOMADO o retry no
-     user:ready (bug dos tiles sumidos em F5), isHome aceita /6:/
-     com barra final, "last" respeita a subárvore da pasta
-   • M11 v2: Modo descanso — botão no canto esquerdo visível SOMENTE
-     em tela cheia (janela grande) na página do player de vídeo;
-     ativado apenas por clique do usuário, sem fade automático
-   • M20: playlist no extras — recolhível (Alfacon), ✓ confiável
-     (chave dupla + auto-cura), filtro, 🔄 cache, 💾 playlist.json
-   • M10 v3: foco força player a 100% (CSS + inline)
-   • M5 v3: auto-assistido grava nas duas chaves
+   gdi-extras.js v2.4 — COMPLETO E REORDENADO (M1 → M22b)
+   • Ordem numérica: M1-M7, M9-M14, M16-M20, M22, M22b
+   • M11 v3.1: descanso consertado (tela cheia do player) + sem
+     acúmulo de overlays + auto-cura com atraso
+   • Anti-travamento: auto-curas (M12/M22b/M11) com debounce de
+     250ms + loader com trava anti-tempestade de render
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.3 carregado');
+console.log('[GDI Extras Modular] v2.4 carregado');
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -123,10 +118,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
 `;document.head.appendChild(s);})();
 
-// ── Loader dos módulos — observa #content (páginas de vídeo montam o DOM async) ──
+// ── Loader dos módulos — observa #content (com trava anti-tempestade) ──
 (function(){
-  let timer=null;
+  let timer=null,lastRun=0;
   function runAll(){
+    if(Date.now()-lastRun<100){schedule();return;}
+    lastRun=Date.now();
     (window.GDI_MODULES||[]).forEach(m=>{
       try{ if(m&&typeof m.init==='function') m.init(); }
       catch(e){ console.error('[GDI módulo]',m&&m.name,e); }
@@ -651,9 +648,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 })();
 
 // ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
-// v5: independe do core — cria a própria barra se #gdi-slot-modes não
-//     existir, e descobre as colunas do layout por âncoras (player +
-//     painel de materiais) mesmo se as classes do core mudarem.
 (function(){
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
@@ -695,7 +689,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     wb.classList.toggle('done',done);
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
-  // Colunas do layout: pelas classes padrão OU por âncoras (player + materiais)
   function findLayout(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
@@ -719,7 +712,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
-    if(!study&&!wrap)return; // ainda não é página de aula
+    if(!study&&!wrap)return;
     let slot=document.getElementById('gdi-slot-modes');
     let created=false;
     if(!slot){
@@ -791,37 +784,43 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M11 v3: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
+// ═══ M11 v3.1: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
 //     tela cheia (janela grande) na página do player; ativado só por clique ═══
-// v3: o player (plyr/video.js) entra em tela cheia no PRÓPRIO container
-//     (.video-js/.plyr), que fica DENTRO do .gdi-player-wrap — o teste da
-//     v2 exigia o contrário e o botão nunca aparecia. Agora qualquer tela
-//     cheia ligada ao player vale (igual, dentro ou contendo o wrap).
+// v3.1: sem acúmulo de overlays (recria só o que falta) + auto-cura com
+//       atraso de 250ms (não briga com o re-render do core).
+// v3: o player entra em tela cheia no PRÓPRIO container, que fica DENTRO do
+//     .gdi-player-wrap — aceita fullscreen igual/contendo/contido no wrap.
 (function(){
   let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
   const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
   const wrapEl=()=>document.querySelector('.gdi-player-wrap');
   const onAudioPage=()=>!!document.getElementById('aplayer-container');
   function ensureEls(){
-    if(btn&&btn.isConnected)return;
-    overlay=document.createElement('div');
-    overlay.id='gdi-sleep-overlay';
-    overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
-    overlay.title='Clique para sair do modo descanso';
-    overlay.addEventListener('click',()=>exitSleep());
-    btn=document.createElement('button');
-    btn.id='gdi-sleep-btn';
-    btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
-    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
-    btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
-    btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
-    document.body.appendChild(overlay);
-    document.body.appendChild(btn);
+    const needOv=!overlay||!overlay.isConnected;
+    const needBt=!btn||!btn.isConnected;
+    if(!needOv&&!needBt)return;
+    if(needOv){
+      overlay=document.createElement('div');
+      overlay.id='gdi-sleep-overlay';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
+      overlay.title='Clique para sair do modo descanso';
+      overlay.addEventListener('click',()=>exitSleep());
+    }
+    if(needBt){
+      btn=document.createElement('button');
+      btn.id='gdi-sleep-btn';
+      btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+      btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+      btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
+      btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
+    }
+    if(!overlay.parentElement)document.body.appendChild(overlay);
+    if(!btn.parentElement)document.body.appendChild(btn);
   }
   function enterSleep(){
     if(sleeping)return;
     sleeping=true;
-    wakeGuard=Date.now()+2500; // carência: o clique que ativou não desperta na hora
+    wakeGuard=Date.now()+2500;
     overlay.style.transition='opacity 2.5s ease';
     overlay.style.pointerEvents='all';
     overlay.style.opacity='0.97';
@@ -847,16 +846,14 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
     let fsOk=false;
     if(fs&&fs.tagName!=='VIDEO'){
-      if(!video)fsOk=true; // página de áudio: qualquer tela cheia serve
-      // tela cheia ligada ao player: o elemento É o wrap, CONTÉM o wrap
-      // (documento/body) ou está DENTRO do wrap (container do player)
+      if(!video)fsOk=true;
       else fsOk=fs===document.documentElement||fs===document.body||fs===wrap||fs.contains(wrap)||wrap.contains(fs);
     }
     const host=fsOk?fs:document.body;
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
-    btn.style.display=(video&&!fsOk)?'none':'flex'; // vídeo: só em tela cheia
-    if(sleeping&&video&&!fsOk)exitSleep(); // saiu da tela cheia → sai do descanso
+    btn.style.display=(video&&!fsOk)?'none':'flex';
+    if(sleeping&&video&&!fsOk)exitSleep();
   }
   function bindOnce(){
     if(bound)return;bound=true;
@@ -875,16 +872,19 @@ body.gdi-fv .gdi-player-wrap iframe{
         try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
       }
     });
-    // auto-cura: se o player reconstruir o próprio DOM e órfãar o botão,
-    // re-sincroniza (mesma técnica do Pomodoro/Central)
-    new MutationObserver(()=>{if(!btn||!btn.isConnected)syncFs();}).observe(document.body,{childList:true});
+    // auto-cura COM ATRASO (não reage em microtask — evita guerra de observers)
+    let healT=null;
+    new MutationObserver(()=>{
+      if(healT)return;
+      healT=setTimeout(()=>{healT=null;if(!btn||!btn.isConnected)syncFs();},250);
+    }).observe(document.body,{childList:true});
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
     ensureEls();
     bindOnce();
     syncFs();
   }});
-  console.log('[GDI M11] v3 descanso registrado');
+  console.log('[GDI M11] v3.1 descanso registrado');
 })();
 
 // ═══ M12: POMODORO v2.4 ═══
@@ -1026,11 +1026,18 @@ body.gdi-fv .gdi-player-wrap iframe{
         loadCfg();
         if(!st.running){st.phase='work';st.dots=0;dotsCache='';st.total=cfg.work*60;st.remain=st.total;persist();updateUI();}});});
     $id('gdi-pom-c-auto').addEventListener('change',e=>{cfg.autoStart=e.target.checked;localStorage.setItem(CKEY,JSON.stringify(cfg));});
-    new MutationObserver(()=>{if(!document.body.contains(root))document.body.appendChild(root);
-      if(!document.body.contains(flashEl))document.body.appendChild(flashEl);}).observe(document.body,{childList:true});
+    // auto-cura COM ATRASO (evita guerra de observers com o core)
+    let pomHealT=null;
+    new MutationObserver(()=>{
+      if(pomHealT)return;
+      pomHealT=setTimeout(()=>{pomHealT=null;
+        if(!document.body.contains(root))document.body.appendChild(root);
+        if(!document.body.contains(flashEl))document.body.appendChild(flashEl);
+      },250);
+    }).observe(document.body,{childList:true});
     updateUI();
     console.log('[GDI Pomodoro] v2.4 pronto');
-  }}); 
+  }});
 })();
 
 // ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
@@ -1054,7 +1061,6 @@ body.gdi-fv .gdi-player-wrap iframe{
       .join('');
     return reduced.length===0;
   }
-  // nome de exibição: o do arquivo; se genérico, sobe pastas até achar nome com conteúdo
   function realNameOf(path){
     const seg=normPath(path).split('/').filter(Boolean);
     let name=stripExt(seg[seg.length-1]||'');
@@ -1153,7 +1159,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
-  // nome + contexto do alvo (com nomes reais: genérico sobe para a pasta)
   function nameInfo(target){
     const cur=normPath(window.location.pathname);
     const isDriveRoot=/^\/\d+:$/.test(cur);
@@ -1238,8 +1243,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-
-  // fantasma? arquivo cujo nome começa com "pasta - "
   function ghostScore(path){
     const seg=normPath(path).split('/').filter(Boolean);
     if(seg.length<2)return 0;
@@ -1262,7 +1265,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     out.sort((a,b)=>(ghostScore(a.path)-ghostScore(b.path))||(b.at-a.at));
     return out;
   }
-  // o caminho existe de verdade? (mesmo check que a página da aula faz)
   const vCache=new Map();
   function verify(path){
     if(vCache.has(path))return Promise.resolve(vCache.get(path));
@@ -1279,7 +1281,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return null;
   }
-
   function dbg(){
     const d=stateD();
     return{
@@ -1292,7 +1293,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     };
   }
   window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
-
   let rendering=false;
   async function continueCardInit(){
     if(rendering)return;
@@ -1331,7 +1331,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    // ── recentes: dedup por caminho + NOME REAL (genérico → pasta) ──
     const hMap=new Map();
     (Array.isArray(d.history)?d.history:[]).forEach(h=>{
       if(!h||!h.path||h.path===p||!inSubtree(h.path)||!okPath(h.path))return;
@@ -1396,7 +1395,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
     log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| nome:',lbl?lbl.name:'-');
   }
-
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
   Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
@@ -1514,239 +1512,6 @@ body.gdi-fv .gdi-player-wrap iframe{
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
 })();
 
-// ═══ M19: TÍTULO LIMPO DA ABA ═══
-// O nome imenso (caminho inteiro da aula) vira curto e legível:
-//   "pasta pai · nome da aula"  →  "12. 8 em cada 10 profissionais · aula"
-// • decodifica (%20 → espaço), remove extensão, colapsa espaços duplos
-// • raiz do drive → nome do drive | truncado em 64 caracteres
-// • NÃO mexe quando o Pomodoro (M12) está com o cronômetro no título
-// • NÃO altera a URL (a rota é real — encurtar quebraria o refresh)
-(function(){
-  const MAX=64;
-  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/; // prefixo do pomodoro — deixar quieto
-  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
-  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
-  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
-  function build(name,parent){
-    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
-    let t=parent?parent+' \u00b7 '+name:name;
-    if(t.length>MAX)t=(name||'').slice(0,MAX);
-    return t;
-  }
-  // na página de aula: usa a entrada atual da playlist (vale também quando
-  // troca de aula sem recarregar a página)
-  function fromPlaylist(){
-    try{
-      const pv=window.playlistVideos,ci=window.currentIndex;
-      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
-        const m=pv[ci];
-        const ps=segs(m.pageUrl||'');
-        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
-      }
-    }catch(_){}
-    return null;
-  }
-  // demais páginas: deriva do próprio caminho da URL
-  function fromUrl(){
-    const seg=segs(window.location.pathname);
-    if(!seg.length)return null;
-    const first=seg[0]||'';
-    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null; // /0:search etc. — não mexe
-    if(/^\d+:$/.test(first)){
-      if(seg.length===1){
-        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
-        return dn||null;
-      }
-      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
-    }
-    return null; // /fallback e afins — deixa o título do core
-  }
-  function apply(){
-    try{
-      const cur=document.title||'';
-      if(POMO.test(cur))return; // pomodoro rodando: M12 manda no título
-      const next=fromPlaylist()||fromUrl();
-      if(!next||next===cur)return;
-      document.title=next;
-    }catch(_){}
-  }
-  function bindTitle(){
-    const el=document.querySelector('title');
-    if(!el){setTimeout(bindTitle,400);return;}
-    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
-  }
-  bindTitle();
-  setInterval(apply,1500); // rede de segurança
-  Bus.onGlobal('page:change',apply);
-  Bus.onGlobal('title:change',apply);
-  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
-  Bus.onGlobal('media:ready',apply);
-  window.GDI_MODULES.push({name:'clean-title',init:apply});
-  apply();
-  console.log('[GDI M19] t\u00edtulo limpo ativo');
-})();
-
-// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
-// ★ Correção do bug "nome vira tamanho": o span do tamanho é pego por
-//   el.lastElementChild (filho DIRETO), nunca por span:last-child que
-//   casava com o span do nome dentro do div interno.
-(function(){
-  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
-  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
-  window.gdiNormKey=norm;
-  window.gdiVideoKey=function(){
-    try{const pv=window.playlistVideos,ci=window.currentIndex;
-      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
-    }catch(_){}
-    return window.location.pathname;
-  };
-  window.gdiMarkVideo=function(){
-    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
-    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
-    Bus.emit('watched:changed');
-  };
-  window.gdiUnmarkVideo=function(){
-    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
-      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
-    });
-    Bus.emit('watched:changed');
-  };
-  function isW(m){
-    const raw=(m.pageUrl||'').split('?')[0];
-    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
-  }
-  function items(){return window.playlistVideos||[]}
-  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
-  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
-  function healKeys(){
-    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
-    const raw=(m.pageUrl||'').split('?')[0];
-    let a=false,b=false,c=false;
-    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
-    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
-        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
-  }
-  let writing=false; // evita loop do MutationObserver
-  function renderItems(){
-    const list=document.getElementById('gdi-playlist-list');
-    if(!list)return;
-    const pv=items(),ci=cur();
-    if(!pv.length){writing=true;list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';writing=false;return;}
-    const hide=localStorage.getItem(LS_HIDE)==='1';
-    let h='';
-    pv.forEach((m,idx)=>{
-      const w=isW(m),c=idx===ci;
-      if(hide&&w&&!c)return;
-      const nm=m.name||m.origName||'(sem nome)';
-      h+=`<div class="gdi-playlist-item" data-idx="${idx}" style="padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;${c?'background:var(--bs-primary,#1f6feb);color:#fff;':'background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);'}">
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;">
-          <i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2" ${w&&!c?'style="color:#3fb950;"':''}></i>
-          <span style="font-weight:${c?'600':'400'};${w&&!c?'opacity:.75;':''}">${escHtml(nm)}</span>
-        </div>
-        <span style="font-size:11px;opacity:0.8;white-space:nowrap;">${w?'\u2713 ':''}${m.size||''}</span>
-      </div>`;
-    });
-    writing=true;
-    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
-    writing=false;
-    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
-      el.addEventListener('click',()=>{
-        const k=parseInt(el.dataset.idx,10);
-        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
-      });
-    });
-    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
-      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
-  }
-  function renderMeta(){
-    const pv=items(),ci=cur();
-    const cnt=document.getElementById('gdi-pl-count');
-    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
-  }
-  function syncWatchedBtn(){
-    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
-    let done=false;
-    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
-    wb.classList.toggle('done',done);
-    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
-  }
-  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
-  function downloadJSON(){
-    const pv=items();
-    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
-    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
-      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
-    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
-    document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
-  }
-  function ensureUI(){
-    const wrap=document.getElementById('gdi-playlist-wrap');
-    if(!wrap||wrap.dataset.m20)return;
-    wrap.dataset.m20='1';
-    wrap.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
-      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
-        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
-        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
-        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
-      </button>
-      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
-      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
-      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
-    </div>
-    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
-      <div id="gdi-playlist-list"></div>
-    </div>`;
-    const body=wrap.querySelector('#gdi-playlist-body');
-    const chev=wrap.querySelector('#gdi-pl-chev');
-    const setOpen=v=>{
-      body.style.display=v?'block':'none';
-      chev.className='bi bi-chevron-'+(v?'up':'down');
-      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
-    };
-    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
-    setOpen(open); // padrão: RECOLHIDA, como no Alfacon
-    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
-    const fBtn=wrap.querySelector('#gdi-pl-filter');
-    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
-      fBtn.classList.toggle('active',on);
-      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
-    fBtn.addEventListener('click',()=>{
-      const on=localStorage.getItem(LS_HIDE)==='1';
-      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
-    fSync();
-    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
-      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
-      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
-      showToast('Cache apagado \u2014 reescaneando\u2026');
-      setTimeout(()=>location.reload(),600);
-    });
-    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
-  }
-  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
-    if(!document.getElementById('gdi-playlist-wrap'))return;
-    ensureUI();
-    const list=document.getElementById('gdi-playlist-list');
-    if(list&&!list.__m20obs){
-      list.__m20obs=true;
-      let lastWrite=0;
-      new MutationObserver(()=>{
-        if(writing||Date.now()-lastWrite<150)return; // ignora as próprias reescritas
-        lastWrite=Date.now();
-        setTimeout(()=>{healKeys();renderItems();renderMeta();},30);
-      }).observe(list,{childList:true});
-    }
-    refreshAll();
-  }});
-  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
-  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
-  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
-})();
-
 // ═══ M16: PWA best-effort ═══
 (function(){
   try{
@@ -1852,3 +1617,224 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   document.body.appendChild(wrap);
   try{GDIDebug.attach()}catch(_){}
 }});
+
+// ═══ M19: TÍTULO LIMPO DA ABA ═══
+(function(){
+  const MAX=64;
+  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/;
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
+  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
+  function build(name,parent){
+    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
+    let t=parent?parent+' \u00b7 '+name:name;
+    if(t.length>MAX)t=(name||'').slice(0,MAX);
+    return t;
+  }
+  function fromPlaylist(){
+    try{
+      const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
+        const m=pv[ci];
+        const ps=segs(m.pageUrl||'');
+        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
+      }
+    }catch(_){}
+    return null;
+  }
+  function fromUrl(){
+    const seg=segs(window.location.pathname);
+    if(!seg.length)return null;
+    const first=seg[0]||'';
+    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null;
+    if(/^\d+:$/.test(first)){
+      if(seg.length===1){
+        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
+        return dn||null;
+      }
+      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
+    }
+    return null;
+  }
+  function apply(){
+    try{
+      const cur=document.title||'';
+      if(POMO.test(cur))return;
+      const next=fromPlaylist()||fromUrl();
+      if(!next||next===cur)return;
+      document.title=next;
+    }catch(_){}
+  }
+  function bindTitle(){
+    const el=document.querySelector('title');
+    if(!el){setTimeout(bindTitle,400);return;}
+    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
+  }
+  bindTitle();
+  setInterval(apply,1500);
+  Bus.onGlobal('page:change',apply);
+  Bus.onGlobal('title:change',apply);
+  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
+  Bus.onGlobal('media:ready',apply);
+  window.GDI_MODULES.push({name:'clean-title',init:apply});
+  apply();
+  console.log('[GDI M19] t\u00edtulo limpo ativo');
+})();
+
+// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
+(function(){
+  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
+  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
+  window.gdiNormKey=norm;
+  window.gdiVideoKey=function(){
+    try{const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
+    }catch(_){}
+    return window.location.pathname;
+  };
+  window.gdiMarkVideo=function(){
+    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
+    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
+    Bus.emit('watched:changed');
+  };
+  window.gdiUnmarkVideo=function(){
+    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
+      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
+    });
+    Bus.emit('watched:changed');
+  };
+  function isW(m){
+    const raw=(m.pageUrl||'').split('?')[0];
+    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
+  }
+  function items(){return window.playlistVideos||[]}
+  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
+  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
+  function healKeys(){
+    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
+    const raw=(m.pageUrl||'').split('?')[0];
+    let a=false,b=false,c=false;
+    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
+    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
+        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
+  }
+  let writing=false;
+  function renderItems(){
+    const list=document.getElementById('gdi-playlist-list');
+    if(!list)return;
+    const pv=items(),ci=cur();
+    if(!pv.length){writing=true;list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';writing=false;return;}
+    const hide=localStorage.getItem(LS_HIDE)==='1';
+    let h='';
+    pv.forEach((m,idx)=>{
+      const w=isW(m),c=idx===ci;
+      if(hide&&w&&!c)return;
+      const nm=m.name||m.origName||'(sem nome)';
+      h+=`<div class="gdi-playlist-item" data-idx="${idx}" style="padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;${c?'background:var(--bs-primary,#1f6feb);color:#fff;':'background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);'}">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;">
+          <i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2" ${w&&!c?'style="color:#3fb950;"':''}></i>
+          <span style="font-weight:${c?'600':'400'};${w&&!c?'opacity:.75;':''}">${escHtml(nm)}</span>
+        </div>
+        <span style="font-size:11px;opacity:0.8;white-space:nowrap;">${w?'\u2713 ':''}${m.size||''}</span>
+      </div>`;
+    });
+    writing=true;
+    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
+    writing=false;
+    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const k=parseInt(el.dataset.idx,10);
+        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
+      });
+    });
+    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
+      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
+  }
+  function renderMeta(){
+    const pv=items(),ci=cur();
+    const cnt=document.getElementById('gdi-pl-count');
+    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
+  }
+  function syncWatchedBtn(){
+    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
+    let done=false;
+    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
+  function downloadJSON(){
+    const pv=items();
+    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
+    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
+      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
+  }
+  function ensureUI(){
+    const wrap=document.getElementById('gdi-playlist-wrap');
+    if(!wrap||wrap.dataset.m20)return;
+    wrap.dataset.m20='1';
+    wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
+        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
+        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+      </button>
+      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
+      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
+      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
+    </div>
+    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
+      <div id="gdi-playlist-list"></div>
+    </div>`;
+    const body=wrap.querySelector('#gdi-playlist-body');
+    const chev=wrap.querySelector('#gdi-pl-chev');
+    const setOpen=v=>{
+      body.style.display=v?'block':'none';
+      chev.className='bi bi-chevron-'+(v?'up':'down');
+      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
+    };
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
+    setOpen(open);
+    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
+    const fBtn=wrap.querySelector('#gdi-pl-filter');
+    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
+      fBtn.classList.toggle('active',on);
+      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
+    fBtn.addEventListener('click',()=>{
+      const on=localStorage.getItem(LS_HIDE)==='1';
+      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
+    fSync();
+    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
+      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
+      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
+      showToast('Cache apagado \u2014 reescaneando\u2026');
+      setTimeout(()=>location.reload(),600);
+    });
+    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
+  }
+  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
+    if(!document.getElementById('gdi-playlist-wrap'))return;
+    ensureUI();
+    const list=document.getElementById('gdi-playlist-list');
+    if(list&&!list.__m20obs){
+      list.__m20obs=true;
+      let lastWrite=0;
+      new MutationObserver(()=>{
+        if(writing||Date.now()-lastWrite<150)return;
+        lastWrite=Date.now();
+        setTimeout(()=>{healKeys();renderItems();renderMeta();},30);
+      }).observe(list,{childList:true});
+    }
+    refreshAll();
+  }});
+  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
+  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
+  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
+})();
