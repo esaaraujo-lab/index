@@ -650,9 +650,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10 v4: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
-// v4: se o core não criar #gdi-slot-modes, o módulo cria a própria barra —
-//     não depende mais do template do app.min.js (causa das abas sumidas).
+// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
+// v5: independe do core — cria a própria barra se #gdi-slot-modes não
+//     existir, e descobre as colunas do layout por âncoras (player +
+//     painel de materiais) mesmo se as classes do core mudarem.
 (function(){
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
@@ -694,22 +695,47 @@ body.gdi-fv .gdi-player-wrap iframe{
     wb.classList.toggle('done',done);
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
+  // Colunas do layout: pelas classes padrão OU por âncoras (player + materiais)
+  function findLayout(){
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(study){
+      const grid=study.querySelector('.gdi-study-grid');
+      const left=(grid||study).querySelector('.gdi-study-left');
+      const right=(grid||study).querySelector('.gdi-study-right');
+      if(grid&&(left||right))return{grid,left,right};
+    }
+    const rightEl=document.getElementById('gdi-slot-right')||document.getElementById('gdi-mat-body');
+    if(wrap&&rightEl&&rightEl!==wrap){
+      let p=wrap.parentElement;
+      while(p&&p!==document.body&&!p.contains(rightEl))p=p.parentElement;
+      if(p&&p!==document.body&&p.contains(wrap)){
+        const col=el=>{let n=el;while(n&&n.parentElement&&n.parentElement!==p)n=n.parentElement;return n;};
+        return{grid:p,left:col(wrap),right:col(rightEl)};
+      }
+    }
+    return{grid:null,left:null,right:null};
+  }
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
-    if(!study&&!wrap)return; // só em página de aula
+    if(!study&&!wrap)return; // ainda não é página de aula
     let slot=document.getElementById('gdi-slot-modes');
+    let created=false;
     if(!slot){
-      const host=(study&&study.querySelector('.gdi-study-left'))||wrap||study;
-      if(!host)return;
+      const host=study?study.querySelector('.gdi-study-left'):null;
       slot=document.createElement('div');
       slot.id='gdi-slot-modes';
-      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;';
-      host.insertBefore(slot,host.firstChild);
-      console.log('[GDI M10] slot n\u00e3o encontrado no core \u2014 barra criada pelo extras');
+      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px 0;';
+      if(host)host.insertBefore(slot,host.firstChild);
+      else if(wrap&&wrap.parentElement)wrap.parentElement.insertBefore(slot,wrap);
+      else if(study)study.insertBefore(slot,study.firstChild);
+      else return;
+      created=true;
     }
     if(slot.dataset.m10)return;
     slot.dataset.m10='1';
+    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
     slot.innerHTML=`
       <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
       <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
@@ -721,10 +747,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
     }
     function applyLayout(m){
-      const st=document.getElementById('gdi-study');if(!st)return;
-      const grid=st.querySelector('.gdi-study-grid');
-      const right=st.querySelector('.gdi-study-right');
-      const left=st.querySelector('.gdi-study-left');
+      const{grid,left,right}=findLayout();
       if(grid){
         if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
         else grid.style.removeProperty('grid-template-columns');
