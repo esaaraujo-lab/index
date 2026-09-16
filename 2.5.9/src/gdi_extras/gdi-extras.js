@@ -1028,10 +1028,39 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.5 — alvo verificado) ═══
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
+// v19.6: nomes genéricos ("video.mp4", "aula", "001 - aula", "Parte 1"…)
+//        são trocados pelo nome da PASTA da aula (tile e Recentes);
+//        cabeçalho "Continuar em {contexto}" (sem "Continuar em Continuar").
+// v19.5: alvo VERIFICADO no servidor (fantasmas ignorados, cai pro próximo).
+// v19.4: fonte de dados própria (/userstate) quando o GDIUser não carrega.
 (function(){
   const DBG=true;
   const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
+
+  // ── nomes reais ──
+  function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()}
+  const GENERIC_WORDS=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|lesson|lessons|class|classes|modulo|m\u00f3dulo|module|modulos|m\u00f3dulos|modules|parte|partes|pt|cap|caps|capitulo|cap\u00edtulo|ext|ep|eps|episodio|epis\u00f3dio|live|revisao|revis\u00e3o|arquivo|file)$/i;
+  function isGenericName(raw){
+    const n=stripExt(raw).toLowerCase();
+    if(!n)return true;
+    const reduced=n.replace(/[\s\-_.:,;|()/\\]+/g,' ').split(' ')
+      .filter(w=>w&&!/^\d+$/.test(w)&&!GENERIC_WORDS.test(w)&&!GENERIC_WORDS.test(w.replace(/\d+$/,'')))
+      .join('');
+    return reduced.length===0;
+  }
+  // nome de exibição: o do arquivo; se genérico, sobe pastas até achar nome com conteúdo
+  function realNameOf(path){
+    const seg=normPath(path).split('/').filter(Boolean);
+    let name=stripExt(seg[seg.length-1]||'');
+    if(isGenericName(name)){
+      for(let j=seg.length-2;j>=0;j--){
+        if(/^\d+:$/.test(seg[j]))break;
+        if(!isGenericName(seg[j])){name=stripExt(seg[j]);break;}
+      }
+    }
+    return name||'Aula';
+  }
 
   // ── camada de dados: GDIUser → fallback /userstate direto ──
   let rescue=null,rescueAt=0;
@@ -1119,7 +1148,8 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
-  function labels(target){
+  // nome + contexto do alvo (com nomes reais: genérico sobe para a pasta)
+  function nameInfo(target){
     const cur=normPath(window.location.pathname);
     const isDriveRoot=/^\/\d+:$/.test(cur);
     const tNorm=normPath(target);
@@ -1127,33 +1157,22 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(!isDriveRoot&&tNorm.indexOf(cur+'/')===0)rest=tNorm.slice(cur.length+1);
     const seg=rest.split('/').filter(Boolean);
     if(isDriveRoot&&/^\d+:$/.test(seg[0]||''))seg.shift();
-    let drivePart='';
-    const cd=window.current_drive_order;
-    if(isDriveRoot&&window.drive_names&&window.drive_names[cd])drivePart=window.drive_names[cd];
-    let ramo='';
-    if(seg.length>1){
-      let s0=seg[0];
-      if(/^\d+:$/.test(s0)){
-        const dn=(window.drive_names||[])[parseInt(s0,10)];
-        if(dn)s0=dn;
-      }
-      try{ramo=decodeURIComponent(s0)}catch(_){ramo=s0}
+    if(seg.length&&/^\d+:$/.test(seg[0])){
+      const dn=(window.drive_names||[])[parseInt(seg[0],10)];
+      if(dn)seg[0]=dn;
     }
-    let name;
-    try{name=decodeURIComponent(seg[seg.length-1]||'')}catch(_){name=seg[seg.length-1]||''}
-    return{
-      name:(name||'').replace(/\.[a-z0-9]+$/i,''),
-      folder:ramo||drivePart||'',
-      drive:drivePart
-    };
-  }
-  function driveLabel(){
-    const cur=normPath(window.location.pathname);
-    if(cur==='')return'seus cursos';
-    const m=/^\/(\d+):$/.exec(cur);
-    const dn=window.drive_names;
-    if(m&&dn&&dn[parseInt(m[1],10)])return dn[parseInt(m[1],10)];
-    return'';
+    let src=seg.length-1;
+    let name=stripExt(seg[src]||'');
+    if(isGenericName(name)){
+      for(let j=seg.length-2;j>=0;j--){
+        if(/^\d+:$/.test(seg[j]))break;
+        if(!isGenericName(seg[j])){src=j;name=stripExt(seg[j]);break;}
+      }
+    }
+    const folder=src>0?seg[src-1]:'';
+    let drivePart='';
+    if(isDriveRoot&&window.drive_names&&window.drive_names[window.current_drive_order])drivePart=window.drive_names[window.current_drive_order];
+    return{name:name||'Aula',folder,drive:drivePart};
   }
   function srsDueCount(){
     const d=stateD();if(!d)return 0;
@@ -1200,7 +1219,7 @@ body.gdi-fv .gdi-player-wrap iframe{
           <span style="font-size:11px;color:#8b949e;text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
-        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(lbl)}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
@@ -1244,7 +1263,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(vCache.has(path))return Promise.resolve(vCache.get(path));
     const pr=fetch(path,{method:'POST',credentials:'same-origin'})
       .then(r=>{vCache.set(path,r.ok);return r.ok})
-      .catch(()=>{vCache.set(path,true);return true}); // rede falhou → não bloqueia
+      .catch(()=>{vCache.set(path,true);return true});
     vCache.set(path,pr);
     return pr;
   }
@@ -1253,7 +1272,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     for(const c of cands.slice(0,4)){
       if(await verify(c.path))return c.path;
     }
-    return null; // todos os candidatos são fantasmas
+    return null;
   }
 
   function dbg(){
@@ -1264,7 +1283,6 @@ body.gdi-fv .gdi-player-wrap iframe{
       gdiUserCarregado:!!(window.GDIUser&&GDIUser.loaded&&GDIUser.loaded()),
       fonteDados:(window.GDIUser&&GDIUser.loaded())?'GDIUser':(rescue?'resgate /userstate':'nenhuma'),
       candidatos:pickCandidates().slice(0,3).map(c=>c.path),
-      chaves_resume:Object.keys((d&&d.resume)||{}).length,
       history:Array.isArray(d&&d.history)?d.history.length:0
     };
   }
@@ -1289,12 +1307,11 @@ body.gdi-fv .gdi-player-wrap iframe{
   async function renderCard(d){
     if(document.querySelector('#content .gdi-study'))return;
     const target=await bestTarget();
-    if(document.querySelector('#content .gdi-study'))return; // navegou durante a verificação
+    if(document.querySelector('#content .gdi-study'))return;
     const host=document.querySelector('#content .gdi-wrap')||document.getElementById('content');
     if(!host)return;
     const p=window.location.pathname;
     const isHome=p==='/'||/^\/\d+:\/?$/.test(p);
-    const logged=authIn();
     const days=new Set();
     const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
     for(const k in d.watched)addDay(d.watched[k]&&d.watched[k].at);
@@ -1309,7 +1326,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    // ── recentes: dedup por caminho + rótulo com a PASTA quando nomes repetem ──
+    // ── recentes: dedup por caminho + NOME REAL (genérico → pasta) ──
     const hMap=new Map();
     (Array.isArray(d.history)?d.history:[]).forEach(h=>{
       if(!h||!h.path||h.path===p||!inSubtree(h.path)||!okPath(h.path))return;
@@ -1318,21 +1335,17 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(!prev||(Number(h.at)||0)>=(Number(prev.at)||0))hMap.set(k,h);
     });
     const hist=[...hMap.values()].sort((a,b)=>(Number(b.at)||0)-(Number(a.at)||0)).slice(0,6);
-    const cnt={};
-    hist.forEach(h=>{const nm=String(h.name||'').trim();cnt[nm]=(cnt[nm]||0)+1;});
-    const chipLabel=h=>{
-      const nm=String(h.name||'').trim();
-      if(nm&&cnt[nm]===1)return nm;
-      const ps=normPath(h.path).split('/').filter(Boolean);
-      return ps.length>=2?ps[ps.length-2]:(nm||'Aula');
-    };
+    const chips=hist.map(h=>({h,label:realNameOf(h.path)}));
+    const cc={};
+    chips.forEach(c=>{cc[c.label]=(cc[c.label]||0)+1});
+    chips.forEach(c=>{if(cc[c.label]>1)c.label=(c.label+' \u00b7 '+stripExt(c.h.name||'')).slice(0,30)});
     if(!target&&!streak&&!hours&&!hist.length&&!due){
       const old0=document.getElementById('gdi-home-card');
       if(old0)old0.remove();
       log('sem dados utiliz\u00e1veis nesta sub\u00e1rvore \u2014 card oculto',dbg());
       return;
     }
-    const lbl=target?labels(target):null;
+    const lbl=target?nameInfo(target):null;
     const rKey=target?resumeKeyFor(target):'';
     const r=target?getResumeOf(d,rKey):null;
     const canSrs=!!(window.GDIUser&&typeof GDIUser.srsGrade==='function');
@@ -1347,7 +1360,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       let head;
       if(lbl.drive)head='Continuar em '+lbl.drive+(lbl.folder?' \u2192 '+lbl.folder:'');
       else if(lbl.folder)head='Continuar em '+lbl.folder;
-      else head='';
+      else head='Continuar';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
         <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
@@ -1366,23 +1379,23 @@ body.gdi-fv .gdi-player-wrap iframe{
     }else if(streak>0){
       html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
     }
-    if(hist.length){
+    if(chips.length){
       html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
         <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
-        ${hist.map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(normPath(h.path))}">${escHtml(chipLabel(h).slice(0,26))}</a>`).join('')}
+        ${chips.map(c=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(c.h.path))}" title="${escHtml(normPath(c.h.path))}">${escHtml(c.label.slice(0,26))}</a>`).join('')}
       </div>`;
     }
     html+='</div>';
     host.insertAdjacentHTML('afterbegin',html);
     host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-    log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| fonte:',(window.GDIUser&&GDIUser.loaded())?'GDIUser':'resgate /userstate');
+    log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| nome:',lbl?lbl.name:'-');
   }
 
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
   Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
-  log('v19.5 registrado (alvo verificado)');
+  log('v19.6 registrado (alvo verificado + nomes reais)');
 })();
 
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
