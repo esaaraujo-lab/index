@@ -1347,7 +1347,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       let head;
       if(lbl.drive)head='Continuar em '+lbl.drive+(lbl.folder?' \u2192 '+lbl.folder:'');
       else if(lbl.folder)head='Continuar em '+lbl.folder;
-      else head='Continuar';
+      else head='';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
         <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
