@@ -2004,6 +2004,39 @@ body.gdi-fv .gdi-player-wrap iframe{
   log('central de estudos ativa');
 })();
 
+// ═══ M22b: CONSERTO DA CENTRAL — auto-cura do botão 📚 + tecla C ═══
+// O core re-renderiza a página e remove elementos do <body>; o Pomodoro
+// sobrevive por auto-cura e a Central não tinha. Este módulo re-anexa o
+// botão (e o painel, se estiver aberto) e conserta o atalho C (que no M22
+// só funcionava depois que o painel existia).
+(function(){
+  const log=(...a)=>{try{console.log('[GDI M22b]',...a)}catch(_){}};
+  let fab=null,panelEl=null,tries=0;
+  function heal(){
+    if(fab&&!document.body.contains(fab))document.body.appendChild(fab);
+    if(!panelEl){const p=document.getElementById('gdi-central');if(p)panelEl=p;}
+    if(panelEl&&!document.body.contains(panelEl)&&panelEl.style.display!=='none')document.body.appendChild(panelEl);
+  }
+  function init(){
+    if(!fab)fab=document.getElementById('gdi-central-fab');
+    if(!fab){if(++tries<24)setTimeout(init,250);else log('bot\u00e3o da Central n\u00e3o encontrado (M22 ausente?)');return;}
+    new MutationObserver(heal).observe(document.body,{childList:true});
+    window.GDI_MODULES.push({name:'central-heal',init:heal});
+    document.addEventListener('keydown',e=>{
+      const t=e.target;
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+      if(e.ctrlKey||e.metaKey||e.altKey)return;
+      if(e.key.toLowerCase()!=='c')return;
+      // só abre quando o painel ainda não existe; fechar/abrir depois
+      // continua por conta do próprio M22 (que já faz certo)
+      if(!document.getElementById('gdi-central')){e.preventDefault();fab.click();}
+    });
+    heal();
+    log('auto-cura ativa \u2014 bot\u00e3o e tecla C');
+  }
+  init();
+})();
+
 // ═══ M19: TÍTULO LIMPO DA ABA ═══
 // O nome imenso (caminho inteiro da aula) vira curto e legível:
 //   "pasta pai · nome da aula"  →  "12. 8 em cada 10 profissionais · aula"
