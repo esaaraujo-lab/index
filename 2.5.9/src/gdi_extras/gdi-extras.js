@@ -1049,19 +1049,27 @@ body.gdi-fv .gdi-player-wrap iframe{
     return name||'Aula';
   }
   let rescue=null,rescueAt=0;
-  function ensureRescue(force){
-    if(!force&&rescue&&Date.now()-rescueAt<60000)return;
-    fetch('/userstate',{credentials:'same-origin'})
-      .then(r=>r.ok?r.json():null)
-      .then(j=>{
-        if(j&&typeof j==='object'){
-          rescue=j;rescueAt=Date.now();
-          log('estado obtido do /userstate \u2014 resume:',Object.keys(j.resume||{}).length,'| history:',(j.history||[]).length);
-          setTimeout(continueCardInit,30);
-        }
-      })
-      .catch(e=>log('falha no /userstate:',e));
-  }
+    function ensureRescue(force){
+      if(!force&&rescue&&Date.now()-rescueAt<60000)return;
+      const ctrl=new AbortController();
+      const timeout=setTimeout(()=>ctrl.abort(),5000);  // ← Timeout de 5s
+      fetch('/userstate',{credentials:'same-origin',signal:ctrl.signal})
+        .then(r=>{
+          clearTimeout(timeout);
+          return r.ok?r.json():null;
+        })
+        .then(j=>{
+          if(j&&typeof j==='object'){
+            rescue=j;rescueAt=Date.now();
+            log('estado obtido do /userstate — resume:',Object.keys(j.resume||{}).length,'| history:',(j.history||[]).length);
+            setTimeout(continueCardInit,30);
+          }
+        })
+        .catch(e=>{
+          clearTimeout(timeout);
+          log('falha no /userstate:',e);
+        });
+    }
   function stateD(){
     try{
       if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}
@@ -1273,9 +1281,10 @@ body.gdi-fv .gdi-player-wrap iframe{
     const d0=stateD();
     if(!d0){
       ensureRescue();
-      const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
-      if(n<=12)setTimeout(continueCardInit,750);
-      return;
+    const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
+    if(n<=5) setTimeout(continueCardInit,1500);  // ← Reduzir tentativas + aumentar delay
+    else { log('máximo de tentativas alcançado'); continueCardInit.__n=0; }
+    return;
     }
     continueCardInit.__n=0;
     rendering=true;
