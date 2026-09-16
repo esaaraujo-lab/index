@@ -962,7 +962,14 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13 v2: CARD "CONTINUAR" + REVISÃO ESPAÇADA (retry no user:ready) ═══
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.1) ═══
+// O tile reflete a SUBÁRVORE da pasta atual:
+// • Home (/)                → aula mais recente global
+// • Drive /6:/              → aula mais recente dentro do drive 6
+// • Pasta em qualquer nível → aula mais recente DENTRO daquela pasta
+//   (ex.: em DISCIPLINAS ISOLADAS mostra a última de qualquer disciplina
+//    dentro dela; em MATEMÁTICA, a última de MATEMÁTICA, etc.)
+// O label da pasta mostra o PRÓXIMO nível, indicando em qual ramo você parou.
 (function(){
   function resumeKeyFor(path){
     const p=String(path||'');
@@ -971,14 +978,34 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return p.split('?')[0];
   }
-  function pathDrive(path){
-    const m=/^\/(\d+):\//.exec(String(path||'').split('?')[0]);
-    if(m)return parseInt(m[1],10);
-    return 0;
+  function normPath(p){
+    try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(_){return String(p||'').split('?')[0].replace(/\/+$/,'')}
   }
-  function curDrive(){
-    const o=window.current_drive_order;
-    return(typeof o==='number'&&o>=0)?o:null;
+  // a subárvore da pasta atual: p começa com a pasta (ou é a home = tudo)
+  function inSubtree(path){
+    const cur=normPath(window.location.pathname);
+    if(cur===''||/^\/\d+:$/.test(cur))return true;       // home: tudo
+    const prefix=cur+'/';
+    return normPath(path).indexOf(prefix)===0;
+  }
+  function pickTarget(){
+    if(!gdiOkPath(window.location.pathname)&&!/^\/(\d+:)?\/?$/.test(window.location.pathname)&&!window.location.pathname.endsWith('/'))return null;
+    const d=GDIUser.dump();if(!d)return null;
+    let best=null,bestAt=-1;
+    const consider=(k,at)=>{
+      if(!k||!gdiOkPath(k))return;
+      if(!inSubtree(k))return;
+      const a=Number(at)||0;
+      if(a>bestAt){bestAt=a;best=k;}
+    };
+    if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
+    if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
+    const last=GDIUser.getLast();
+    if(last&&last.path&&gdiOkPath(last.path)){
+      const a=Number(last.at)||0;
+      if(a>bestAt)best=last.path;
+    }
+    return best;
   }
   function playerHref(p){
     const s=String(p||'');
@@ -999,85 +1026,83 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
+  // labels em cascata: [drive atual?] [ramo seguinte à pasta atual] [curso…]
   function labels(target){
-    const pOnly=String(target||'').split('?')[0];
-    const seg=pOnly.split('/').filter(Boolean);
-    if(seg.length&&/^\d+:$/.test(seg[0])){
-      const idx=parseInt(seg[0],10);
-      seg[0]=window.drive_names&&window.drive_names[idx]||seg[0];
-    }else if(seg.length){
-      const dn=window.drive_names&&window.drive_names[pathDrive(pOnly)];
-      if(dn)seg.unshift(dn);
-    }
-    let name,folder;
-    try{name=decodeURIComponent(seg.pop()||'')}catch(_){name=seg.pop()||''}
-    try{folder=seg.length?decodeURIComponent(seg[seg.length-1]):''}catch(_){folder=''}
-    return{name:name.replace(/\.[a-z0-9]+$/i,''),folder};
+    const cur=normPath(window.location.pathname);
+    const isDriveRoot=/^\/\d+:$/.test(cur);
+    const tNorm=normPath(target);
+    // remove o prefixo da pasta atual do caminho da aula
+    let rest=tNorm;
+    if(!isDriveRoot&&tNorm.indexOf(cur+'/')===0)rest=tNorm.slice(cur.length+1);
+    const seg=rest.split('/').filter(Boolean);
+    let drivePart='';
+    const cd=window.current_drive_order;
+    if(isDriveRoot&&window.drive_names&&window.drive_names[cd])drivePart=window.drive_names[cd];
+    let ramo='';
+    if(seg.length>1){try{ramo=decodeURIComponent(seg[0])}catch(_){ramo=seg[0]}}
+    let name;
+    try{name=decodeURIComponent(seg[seg.length-1]||'')}catch(_){name=seg[seg.length-1]||''}
+    return{
+      name:(name||'').replace(/\.[a-z0-9]+$/i,''),
+      folder:ramo||drivePart||'',
+      drive:drivePart
+    };
   }
   function driveLabel(){
-    const cur=curDrive();const dn=window.drive_names;
-    if(cur===null||!dn||!dn[cur])return'seus cursos';
-    return dn[cur];
+    const cur=normPath(window.location.pathname);
+    const m=/^\/(\d+):$/.exec(cur);
+    const dn=window.drive_names;
+    if(m&&dn&&dn[parseInt(m[1],10)])return dn[parseInt(m[1],10)];
+    return '';
   }
-  function pickTarget(){
-    const cur=curDrive();
-    const d=GDIUser.dump();if(!d)return null;
-    if(cur===null){
-      let best=null,bestAt=-1;
-      const c2=(k,at)=>{if(!k||!gdiOkPath(k))return;const a=Number(at)||0;if(a>bestAt){bestAt=a;best=k;}};
-      if(d.watched)for(const k in d.watched)c2(k,d.watched[k]&&d.watched[k].at);
-      if(d.resume)for(const k in d.resume)c2(k,d.resume[k]&&d.resume[k].at);
-      if(d.last&&d.last.path&&gdiOkPath(d.last.path)){const a=Number(d.last.at)||0;if(a>bestAt)best=d.last.path;}
-      return best;
-    }
-    const inD=p=>pathDrive(p)===cur;
-    const last=GDIUser.getLast();
-    if(last&&last.path&&inD(last.path))return last.path;
-    let best=null,bestAt=-1;
-    const c2=(k,at)=>{if(!k||!inD(k))return;const a=Number(at)||0;if(a>bestAt){bestAt=a;best=k;}};
-    if(d.watched)for(const k in d.watched)c2(k,d.watched[k]&&d.watched[k].at);
-    if(d.resume)for(const k in d.resume)c2(k,d.resume[k]&&d.resume[k].at);
-    return best;
-  }
-  function srsDue(){
-    const d=GDIUser.dump();if(!d)return[];
-    const out=[];const now=Date.now();
+  function srsDueCount(){
+    const d=GDIUser.dump();if(!d)return 0;
+    const now=Date.now();let n=0;
     for(const k in(d.notes||{})){
-      (d.notes[k]||[]).forEach(n=>{
-        const id=k+'|'+n.at;
+      (d.notes[k]||[]).forEach(x=>{
+        const id=k+'|'+x.at;
         const e=d.srs&&d.srs[id];
-        const due=e?e.due:(n.at+86400000);
-        if(due<=now)out.push({id,key:k,at:n.at,text:n.text,t:n.t,due});
+        const due=e?e.due:(x.at+86400000);
+        if(due<=now)n++;
       });
     }
-    out.sort((a,b)=>a.due-b.due);
-    return out;
-  }
-  function srsLabel(key){
-    try{const seg=String(key).split('?')[0].split('/').filter(Boolean);
-      return decodeURIComponent(seg.pop()||'').replace(/\.[a-z0-9]+$/i,'')||'Aula';}catch(_){return'Aula'}
+    return n;
   }
   function srsOpen(){
     const old=document.getElementById('gdi-srs-panel');
     if(old){old.remove();return;}
-    const due=srsDue();
+    const due=(function(){
+      const d=GDIUser.dump();if(!d)return[];
+      const out=[];const now=Date.now();
+      for(const k in(d.notes||{})){
+        (d.notes[k]||[]).forEach(x=>{
+          const id=k+'|'+x.at;
+          const e=d.srs&&d.srs[id];
+          const due2=e?e.due:(x.at+86400000);
+          if(due2<=now)out.push({id,key:k,at:x.at,text:x.text,t:x.t,due:due2});
+        });
+      }
+      out.sort((a,b)=>a.due-b.due);
+      return out;
+    })();
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
-    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
     document.body.appendChild(ov);
     let idx=0;
     function render(){
       if(idx>=due.length){
-        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">Voc\u00ea revisou todas as anota\u00e7\u00f5es de hoje. Elas voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
+        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
         document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
         return;
       }
       const n=due[idx];
+      let lbl='Aula';try{lbl=decodeURIComponent(String(n.key).split('?')[0].split('/').filter(Boolean).pop()||'Aula').replace(/\.[a-z0-9]+$/i,'')}catch(_){}
       ov.innerHTML=`<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:22px;max-width:540px;width:100%;color:#e6edf3;font-family:system-ui;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
+          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
-        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(srsLabel(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(lbl)}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
@@ -1091,14 +1116,13 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-  function continueCardInit(){
+  window.GDI_MODULES.push({name:'continue-card',init:function(){
     const p=window.location.pathname;
     if(!GDIUser.loaded())return;
     const wrap=document.querySelector('#content .gdi-wrap');
     if(!wrap)return;
     const old=document.getElementById('gdi-home-card');if(old)old.remove();
-    const isHome=/^\/(\d+:)?\/?$/.test(p);
-    if(!isHome&&document.querySelector('#content .gdi-study'))return;
+    const isHome=p==='/'||/^\/\d+:$/.test(p);
     const target=pickTarget();
     const logged=GDIUser.auth()!=='out';
     const d=GDIUser.dump();
@@ -1115,49 +1139,49 @@ body.gdi-fv .gdi-player-wrap iframe{
     let hours=0;
     if(d)for(const k in d.resume){const r=d.resume[k];hours+=Math.min(r.t,r.d>0?r.d:r.t)}
     hours/=3600;
-    const due=srsDue().length;
-    const hist=isHome?((d&&d.history)||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path)):[];
+    const due=srsDueCount();
+    // Recentes filtrados pela subárvore atual (em qualquer nível)
+    const hist=(d&&d.history||[]).filter(h=>h.path&&h.path!==p&&gdiOkPath(h.path)&&(isHome||normPath(h.path).indexOf(normPath(p)+'/')===0));
     if(!target&&!streak&&!hours&&!hist.length&&!due)return;
     const lbl=target?labels(target):null;
     const rKey=target?resumeKeyFor(target):'';
     const r=target?GDIUser.getResume(rKey):null;
     const btn=target?(logged
       ?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`
-      :`<a class="gdi-btn gdi-btn-primary" href="/login" title="Entre para retomar de onde parou"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
+      :`<a class="gdi-btn gdi-btn-primary" href="/login"><i class="bi bi-box-arrow-in-right"></i> Entrar para retomar</a>`):'';
     let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
     if(target){
+      const topLine=lbl.drive?lbl.drive:(driveLabel()||'Continuar');
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
         <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
         <div style="min-width:0;">
-          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar em ${escHtml(driveLabel())}</div>
+          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar em ${escHtml(topLine)}${lbl.folder?' \u2192 '+escHtml(lbl.folder):''}</div>
           <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
-          <div style="font-size:12px;color:#8b949e;">${escHtml(lbl.folder)}${r?' \u00b7 parou em '+gdiFmtTime(r.t):''}</div>
+          <div style="font-size:12px;color:#8b949e;">${r?'parou em '+gdiFmtTime(r.t)+' \u00b7 ':''}${escHtml(lbl.drive||driveLabel()||'')}${r?'':' \u00b7 sem posi\u00e7\u00e3o salva'}</div>
         </div></div>${btn}`;
     }
     if(isHome){
       html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
-        ${streak>0?`<span title="Dias seguidos com atividade de estudo"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
-        ${hours>0?`<span title="Soma das posi\u00e7\u00f5es salvas (estimativa)"><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
+        ${streak>0?`<span><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
+        ${hours>0?`<span><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
       </div>`;
-      if(due>0)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;" title="Revis\u00e3o espa\u00e7ada das suas anota\u00e7\u00f5es (1, 7 e 30 dias)"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
-      if(hist.length){
-        html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-          <span style="font-size:11px;color:#8b949e;"><i class="bi bi-clock-history"></i> Recentes:</span>
-          ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
-        </div>`;
-      }
+      if(due>0)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
     }else if(streak>0){
-      html+=`<span style="font-size:12px;color:#8b949e;" title="Dias seguidos com atividade"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
+      html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
+    }
+    // Recentes: mostra também em pastas (cascata), não só na home
+    if(hist.length){
+      html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+        <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
+        ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+      </div>`;
     }
     html+='</div>';
     wrap.insertAdjacentHTML('afterbegin',html);
     wrap.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-  }
-  window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
-  Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
+  }});
 })();
-
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
 (function(){
   let busy=false;
