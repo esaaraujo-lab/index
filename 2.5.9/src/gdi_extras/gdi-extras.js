@@ -1028,14 +1028,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.4 — fonte de dados própria) ═══
-// • Home (/)  → aula mais recente global
-// • Drive /6:/ → aula mais recente DENTRO do drive 6
-// • Pasta em qualquer nível → aula mais recente DENTRO daquela pasta
-// v19.4: o /userstate do worker está OK, mas o GDIUser do core não conclui
-// o carregamento (loaded() nunca vira true — o SAVE funciona, o LOAD não).
-// Este módulo usa o GDIUser quando disponível e, senão, busca o /userstate
-// diretamente e monta o card do jeito que for.
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.5 — alvo verificado) ═══
 (function(){
   const DBG=true;
   const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
@@ -1049,7 +1042,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       .then(j=>{
         if(j&&typeof j==='object'){
           rescue=j;rescueAt=Date.now();
-          log('estado obtido do /userstate \u2014 watched:',Object.keys(j.watched||{}).length,'| history:',(j.history||[]).length);
+          log('estado obtido do /userstate \u2014 resume:',Object.keys(j.resume||{}).length,'| history:',(j.history||[]).length);
           setTimeout(continueCardInit,30);
         }
       })
@@ -1067,7 +1060,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   }
   function authIn(){
     try{if(window.GDIUser&&typeof GDIUser.auth==='function')return GDIUser.auth()!=='out';}catch(_){}
-    return true; // neste worker, navegar já exige login
+    return true;
   }
   function getResumeOf(d,key){
     try{
@@ -1077,7 +1070,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     return (d&&d.resume&&d.resume[key])||null;
   }
-
   function resumeKeyFor(path){
     const p=String(path||'');
     if(p.indexOf('/fallback?')===0){
@@ -1107,21 +1099,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(pre==='')return true;
     const lp=low(path);
     return lp.indexOf(pre+'/')===0||lp===pre;
-  }
-  function pickTarget(){
-    const d=stateD();if(!d)return null;
-    let best=null,bestAt=-1,bestAny=null,bestAnyAt=-1;
-    const consider=(k,at)=>{
-      if(!k)return;
-      if(!inSubtree(k))return;
-      const a=Number(at)||0;
-      if(a>bestAnyAt){bestAnyAt=a;bestAny=k;}
-      if(a>bestAt&&okPath(k)){bestAt=a;best=k;}
-    };
-    if(d.watched)for(const k in d.watched)consider(k,d.watched[k]&&d.watched[k].at);
-    if(d.resume)for(const k in d.resume)consider(k,d.resume[k]&&d.resume[k].at);
-    if(d.last&&d.last.path)consider(d.last.path,d.last.at);
-    return best||bestAny||null;
   }
   function playerHref(p){
     const s=String(p||'');
@@ -1237,6 +1214,48 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
+
+  // fantasma? arquivo cujo nome começa com "pasta - "
+  function ghostScore(path){
+    const seg=normPath(path).split('/').filter(Boolean);
+    if(seg.length<2)return 0;
+    return seg[seg.length-1].indexOf(seg[seg.length-2]+' - ')===0?1:0;
+  }
+  function pickCandidates(){
+    const d=stateD();if(!d)return[];
+    const seen=new Set(),out=[];
+    const add=(k,at)=>{
+      if(!k)return;
+      const key=normPath(k);
+      if(seen.has(key)||!inSubtree(k)||!okPath(k))return;
+      seen.add(key);
+      out.push({path:String(k).split('?')[0],at:Number(at)||0});
+    };
+    if(d.watched)for(const k in d.watched)add(k,d.watched[k]&&d.watched[k].at);
+    if(d.resume)for(const k in d.resume)add(k,d.resume[k]&&d.resume[k].at);
+    if(d.last&&d.last.path)add(d.last.path,d.last.at);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at)});
+    out.sort((a,b)=>(ghostScore(a.path)-ghostScore(b.path))||(b.at-a.at));
+    return out;
+  }
+  // o caminho existe de verdade? (mesmo check que a página da aula faz)
+  const vCache=new Map();
+  function verify(path){
+    if(vCache.has(path))return Promise.resolve(vCache.get(path));
+    const pr=fetch(path,{method:'POST',credentials:'same-origin'})
+      .then(r=>{vCache.set(path,r.ok);return r.ok})
+      .catch(()=>{vCache.set(path,true);return true}); // rede falhou → não bloqueia
+    vCache.set(path,pr);
+    return pr;
+  }
+  async function bestTarget(){
+    const cands=pickCandidates();
+    for(const c of cands.slice(0,4)){
+      if(await verify(c.path))return c.path;
+    }
+    return null; // todos os candidatos são fantasmas
+  }
+
   function dbg(){
     const d=stateD();
     return{
@@ -1244,28 +1263,37 @@ body.gdi-fv .gdi-player-wrap iframe{
       subarvore:subtreePrefix()||'(tudo)',
       gdiUserCarregado:!!(window.GDIUser&&GDIUser.loaded&&GDIUser.loaded()),
       fonteDados:(window.GDIUser&&GDIUser.loaded())?'GDIUser':(rescue?'resgate /userstate':'nenhuma'),
-      alvo:pickTarget(),
-      chaves_watched:Object.keys((d&&d.watched)||{}).length,
+      candidatos:pickCandidates().slice(0,3).map(c=>c.path),
+      chaves_resume:Object.keys((d&&d.resume)||{}).length,
       history:Array.isArray(d&&d.history)?d.history.length:0
     };
   }
   window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
 
-  function continueCardInit(){
-    const d=stateD();
-    if(!d){
+  let rendering=false;
+  async function continueCardInit(){
+    if(rendering)return;
+    const d0=stateD();
+    if(!d0){
       ensureRescue();
       const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
       if(n<=12)setTimeout(continueCardInit,750);
       return;
     }
     continueCardInit.__n=0;
+    rendering=true;
+    try{await renderCard(d0);}
+    catch(e){log('erro no render:',e)}
+    finally{rendering=false;}
+  }
+  async function renderCard(d){
     if(document.querySelector('#content .gdi-study'))return;
+    const target=await bestTarget();
+    if(document.querySelector('#content .gdi-study'))return; // navegou durante a verificação
     const host=document.querySelector('#content .gdi-wrap')||document.getElementById('content');
     if(!host)return;
     const p=window.location.pathname;
     const isHome=p==='/'||/^\/\d+:\/?$/.test(p);
-    const target=pickTarget();
     const logged=authIn();
     const days=new Set();
     const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
@@ -1281,19 +1309,34 @@ body.gdi-fv .gdi-player-wrap iframe{
     for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    const histRaw=Array.isArray(d.history)?d.history:[];
-    const hist=histRaw.filter(h=>h&&h.path&&h.path!==p&&inSubtree(h.path)&&okPath(h.path));
+    // ── recentes: dedup por caminho + rótulo com a PASTA quando nomes repetem ──
+    const hMap=new Map();
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{
+      if(!h||!h.path||h.path===p||!inSubtree(h.path)||!okPath(h.path))return;
+      const k=normPath(h.path);
+      const prev=hMap.get(k);
+      if(!prev||(Number(h.at)||0)>=(Number(prev.at)||0))hMap.set(k,h);
+    });
+    const hist=[...hMap.values()].sort((a,b)=>(Number(b.at)||0)-(Number(a.at)||0)).slice(0,6);
+    const cnt={};
+    hist.forEach(h=>{const nm=String(h.name||'').trim();cnt[nm]=(cnt[nm]||0)+1;});
+    const chipLabel=h=>{
+      const nm=String(h.name||'').trim();
+      if(nm&&cnt[nm]===1)return nm;
+      const ps=normPath(h.path).split('/').filter(Boolean);
+      return ps.length>=2?ps[ps.length-2]:(nm||'Aula');
+    };
     if(!target&&!streak&&!hours&&!hist.length&&!due){
       const old0=document.getElementById('gdi-home-card');
       if(old0)old0.remove();
-      log('sem dados nesta sub\u00e1rvore \u2014 card oculto',dbg());
+      log('sem dados utiliz\u00e1veis nesta sub\u00e1rvore \u2014 card oculto',dbg());
       return;
     }
     const lbl=target?labels(target):null;
     const rKey=target?resumeKeyFor(target):'';
     const r=target?getResumeOf(d,rKey):null;
     const canSrs=!!(window.GDIUser&&typeof GDIUser.srsGrade==='function');
-    const sig=String(target)+'|'+hist.length+'|'+due+'|'+streak;
+    const sig=String(target)+'|'+hist.map(h=>normPath(h.path)).join(',')+'|'+due+'|'+streak;
     const old=document.getElementById('gdi-home-card');
     if(old&&continueCardInit.__sig===sig)return;
     continueCardInit.__sig=sig;
@@ -1301,12 +1344,15 @@ body.gdi-fv .gdi-player-wrap iframe{
     const btn=target?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`:'';
     let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
     if(target){
-      const topLine=lbl.drive?lbl.drive:(driveLabel()||'Continuar');
+      let head;
+      if(lbl.drive)head='Continuar em '+lbl.drive+(lbl.folder?' \u2192 '+lbl.folder:'');
+      else if(lbl.folder)head='Continuar em '+lbl.folder;
+      else head='Continuar';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
         <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
         <div style="min-width:0;">
-          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Continuar em ${escHtml(topLine)}${lbl.folder?' \u2192 '+escHtml(lbl.folder):''}</div>
+          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
           <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
           <div style="font-size:12px;color:#8b949e;">${escHtml(sub)}</div>
         </div></div>${btn}`;
@@ -1323,20 +1369,20 @@ body.gdi-fv .gdi-player-wrap iframe{
     if(hist.length){
       html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
         <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
-        ${hist.slice(0,6).map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(h.name||'')}">${escHtml((h.name||'').slice(0,26)||'Aula')}</a>`).join('')}
+        ${hist.map(h=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(h.path))}" title="${escHtml(normPath(h.path))}">${escHtml(chipLabel(h).slice(0,26))}</a>`).join('')}
       </div>`;
     }
     html+='</div>';
     host.insertAdjacentHTML('afterbegin',html);
     host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
     document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
-    log('card renderizado \u2014 alvo:',target||'(s\u00f3 estat\u00edsticas)','| fonte:',(window.GDIUser&&GDIUser.loaded())?'GDIUser':'resgate /userstate');
+    log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| fonte:',(window.GDIUser&&GDIUser.loaded())?'GDIUser':'resgate /userstate');
   }
 
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
   Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
-  log('v19.4 registrado (fonte de dados pr\u00f3pria)');
+  log('v19.5 registrado (alvo verificado)');
 })();
 
 // ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
