@@ -2620,3 +2620,199 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     }catch(_){}
   }});
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// M-AI: WIDGET DA IA FERRETO (tutora de estudos)
+// Botão flutuante + painel de chat. Chama POST /api/ai (rota do
+// worker.js que suporta CF Workers AI ou endpoint OpenAI-compat).
+// Conversa persistida em sessionStorage. UI no <html> (fora do
+// body) para sobreviver a trocas de página. Estilo Ferreto.
+// ═══════════════════════════════════════════════════════════════
+(function(){
+  if(window.__gdiAiWidget)return;window.__gdiAiWidget=true;
+
+  // CSS
+  if(!document.getElementById('gdi-ai-style')){
+    const s=document.createElement('style');s.id='gdi-ai-style';s.textContent=`
+#gdi-ai-fab{position:fixed;bottom:20px;right:20px;z-index:10001;width:56px;height:56px;border-radius:50%;
+  border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
+  color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
+  transition:transform .18s,box-shadow .18s;}
+#gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
+#gdi-ai-fab .bi-robot-fill{font-size:26px;}
+#gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
+  background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
+#gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
+@keyframes gdi-ai-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
+#gdi-ai-panel{position:fixed;bottom:88px;right:20px;z-index:10001;width:380px;max-width:calc(100vw - 32px);
+  height:540px;max-height:calc(100vh - 120px);display:none;flex-direction:column;
+  background:var(--ferreto-surface,rgba(22,27,38,.92));
+  -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
+  border:1px solid var(--ferreto-border-strong,rgba(255,255,255,.16));
+  border-radius:18px;box-shadow:0 20px 60px -12px rgba(0,0,0,.6);
+  overflow:hidden;transform-origin:bottom right;animation:gdi-ai-in .22s ease;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
+@keyframes gdi-ai-in{from{opacity:0;transform:scale(.92) translateY(12px);}to{opacity:1;transform:none;}}
+#gdi-ai-panel.open{display:flex;}
+#gdi-ai-head{display:flex;align-items:center;gap:10px;padding:14px 16px;
+  background:linear-gradient(135deg,rgba(255,139,159,.18),rgba(93,222,218,.1));
+  border-bottom:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
+#gdi-ai-head .gdi-ai-avatar{width:36px;height:36px;border-radius:50%;flex:none;
+  background:linear-gradient(135deg,#ff8b9f,#c026d3);display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:18px;}
+#gdi-ai-head .gdi-ai-info{flex:1;min-width:0;}
+#gdi-ai-head .gdi-ai-name{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;font-weight:700;color:var(--ferreto-text,#f3f5fa);}
+#gdi-ai-head .gdi-ai-status{font-size:11px;color:var(--ferreto-text-muted,#9aa4b8);display:flex;align-items:center;gap:5px;}
+#gdi-ai-head .gdi-ai-dot{width:7px;height:7px;border-radius:50%;background:#3fb950;}
+#gdi-ai-close{background:none;border:0;color:var(--ferreto-text-muted,#9aa4b8);font-size:18px;cursor:pointer;padding:4px;border-radius:8px;}
+#gdi-ai-close:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));color:var(--ferreto-text,#f3f5fa);}
+#gdi-ai-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+#gdi-ai-body::-webkit-scrollbar{width:6px;}
+#gdi-ai-body::-webkit-scrollbar-thumb{background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:20px;}
+.gdi-ai-msg{display:flex;gap:8px;max-width:88%;animation:gdi-ai-in .2s ease;}
+.gdi-ai-msg.user{align-self:flex-end;flex-direction:row-reverse;}
+.gdi-ai-msg .gdi-ai-bubble{padding:10px 13px;border-radius:14px;font-size:13.5px;line-height:1.5;word-break:break-word;}
+.gdi-ai-msg.assistant .gdi-ai-bubble{background:var(--ferreto-surface-3,rgba(255,255,255,.08));color:var(--ferreto-text,#f3f5fa);border-bottom-left-radius:4px;}
+.gdi-ai-msg.user .gdi-ai-bubble{background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;border-bottom-right-radius:4px;}
+.gdi-ai-msg .gdi-ai-bubble p{margin:0 0 6px;} .gdi-ai-msg .gdi-ai-bubble p:last-child{margin:0;}
+.gdi-ai-msg .gdi-ai-bubble code{background:rgba(0,0,0,.25);padding:1px 5px;border-radius:4px;font-size:12px;}
+.gdi-ai-msg .gdi-ai-bubble pre{background:rgba(0,0,0,.3);padding:8px;border-radius:8px;overflow-x:auto;margin:6px 0;}
+.gdi-ai-typing{display:flex;gap:4px;padding:12px 14px;}
+.gdi-ai-typing span{width:7px;height:7px;border-radius:50%;background:var(--ferreto-text-muted,#9aa4b8);animation:gdi-ai-typ 1.2s ease infinite;}
+.gdi-ai-typing span:nth-child(2){animation-delay:.2s;} .gdi-ai-typing span:nth-child(3){animation-delay:.4s;}
+@keyframes gdi-ai-typ{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-4px);}}
+#gdi-ai-input-wrap{display:flex;gap:8px;padding:12px;border-top:1px solid var(--ferreto-border,rgba(255,255,255,.09));background:var(--ferreto-surface-2,rgba(255,255,255,.045));}
+#gdi-ai-input{flex:1;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border:1px solid var(--ferreto-border,rgba(255,255,255,.09));
+  border-radius:999px;padding:10px 14px;color:var(--ferreto-text,#f3f5fa);font-size:13.5px;outline:none;font-family:inherit;transition:.15s;}
+#gdi-ai-input:focus{border-color:var(--ferreto-primary,#ff8b9f);box-shadow:0 0 0 3px rgba(255,139,159,.25);}
+#gdi-ai-input::placeholder{color:var(--ferreto-text-faint,#6b7488);}
+#gdi-ai-send{width:38px;height:38px;border-radius:50%;border:0;cursor:pointer;flex:none;
+  background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s;}
+#gdi-ai-send:hover{filter:brightness(1.1);transform:scale(1.05);}
+#gdi-ai-send:disabled{opacity:.5;cursor:default;transform:none;}
+.gdi-ai-err{font-size:12px;color:#ff8b8b;text-align:center;padding:8px;margin:0 4px;}
+@media(max-width:480px){#gdi-ai-panel{right:8px;left:8px;width:auto;bottom:80px;height:calc(100vh - 160px);}}
+`;document.documentElement.appendChild(s);
+  }
+
+  const STORE='gdi-ai-chat';
+  let messages=[];
+  try{messages=JSON.parse(sessionStorage.getItem(STORE))||[];}catch(_){}
+
+  function save(){try{sessionStorage.setItem(STORE,JSON.stringify(messages.slice(-20)));}catch(_){}}
+
+  function renderMd(txt){
+    if(window.marked){try{return marked.parse(txt);}catch(_){}}
+    return txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  // UI no <html> (fora do body) — sobrevive a trocas de página
+  const root=GDI_ROOT();
+  const fab=document.createElement('button');
+  fab.id='gdi-ai-fab';fab.title='IA Ferreto — sua tutora de estudos';
+  fab.innerHTML='<i class="bi bi-robot-fill"></i><span id="gdi-ai-fab-badge"></span>';
+  root.appendChild(fab);
+
+  const panel=document.createElement('div');
+  panel.id='gdi-ai-panel';
+  panel.innerHTML=`
+    <div id="gdi-ai-head">
+      <div class="gdi-ai-avatar"><i class="bi bi-robot-fill"></i></div>
+      <div class="gdi-ai-info">
+        <div class="gdi-ai-name">IA Ferreto</div>
+        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> Tutora de estudos · online</div>
+      </div>
+      <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div id="gdi-ai-body"></div>
+    <div id="gdi-ai-input-wrap">
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte sobre a aula, peça um resumo..." autocomplete="off">
+      <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
+    </div>`;
+  root.appendChild(panel);
+
+  const body=panel.querySelector('#gdi-ai-body');
+  const input=panel.querySelector('#gdi-ai-input');
+  const sendBtn=panel.querySelector('#gdi-ai-send');
+  const badge=panel.querySelector('#gdi-ai-fab-badge');
+
+  function addMsg(role,text){
+    const m={role,text};
+    messages.push(m);save();
+    const el=document.createElement('div');
+    el.className='gdi-ai-msg '+(role==='user'?'user':'assistant');
+    el.innerHTML='<div class="gdi-ai-bubble">'+(role==='user'?esc(text):renderMd(text))+'</div>';
+    body.appendChild(el);body.scrollTop=body.scrollHeight;
+    return el;
+  }
+  function renderHistory(){
+    body.innerHTML='';
+    if(!messages.length){
+      addMsg('assistant','Oi! Sou a **IA Ferreto**, sua tutora de estudos. 👋\n\nPosso ajudar com:\n- Explicar um tema da aula\n- Fazer um resumo\n- Tirar dúvidas\n- Sugerir um plano de estudos\n\nO que você precisa hoje?');
+      messages.pop();save(); // saudação não conta no histórico
+      return;
+    }
+    messages.forEach(m=>{
+      const el=document.createElement('div');
+      el.className='gdi-ai-msg '+(m.role==='user'?'user':'assistant');
+      el.innerHTML='<div class="gdi-ai-bubble">'+(m.role==='user'?esc(m.text):renderMd(m.text))+'</div>';
+      body.appendChild(el);
+    });
+    body.scrollTop=body.scrollHeight;
+  }
+
+  let typingEl=null;
+  function showTyping(){
+    typingEl=document.createElement('div');typingEl.className='gdi-ai-msg assistant';
+    typingEl.innerHTML='<div class="gdi-ai-bubble"><div class="gdi-ai-typing"><span></span><span></span><span></span></div></div>';
+    body.appendChild(typingEl);body.scrollTop=body.scrollHeight;
+  }
+  function hideTyping(){if(typingEl){typingEl.remove();typingEl=null;}}
+
+  let busy=false;
+  async function send(){
+    const txt=input.value.trim();if(!txt||busy)return;
+    busy=true;sendBtn.disabled=true;input.value='';
+    addMsg('user',txt);
+    showTyping();
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:txt,messages:messages.filter(m=>m.role!=='system').slice(-8).map(m=>({role:m.role,content:m.text}))})});
+      const data=await r.json();
+      hideTyping();
+      if(data.ok&&data.response){
+        addMsg('assistant',data.response);
+      }else{
+        const errEl=document.createElement('div');errEl.className='gdi-ai-err';
+        errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
+        body.appendChild(errEl);body.scrollTop=body.scrollHeight;
+        setTimeout(()=>errEl.remove(),5000);
+      }
+    }catch(e){
+      hideTyping();
+      const errEl=document.createElement('div');errEl.className='gdi-ai-err';
+      errEl.textContent='Erro de conexão. Verifique sua internet.';
+      body.appendChild(errEl);body.scrollTop=body.scrollHeight;
+      setTimeout(()=>errEl.remove(),5000);
+    }
+    busy=false;sendBtn.disabled=false;input.focus();
+  }
+
+  function toggle(){
+    const open=panel.classList.toggle('open');
+    if(open){badge.classList.remove('show');renderHistory();setTimeout(()=>input.focus(),100);}
+  }
+  fab.addEventListener('click',toggle);
+  panel.querySelector('#gdi-ai-close').addEventListener('click',()=>panel.classList.remove('open'));
+  sendBtn.addEventListener('click',send);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+
+  // badge de novidade após 8s se nunca abriu
+  if(!sessionStorage.getItem('gdi-ai-seen')){
+    setTimeout(()=>{if(!panel.classList.contains('open'))badge.classList.add('show');},8000);
+  }
+  fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
+
+  console.log('[GDI Extras] M-AI widget IA Ferreto ativo');
+})();
