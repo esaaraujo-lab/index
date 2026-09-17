@@ -1,0 +1,1991 @@
+/* ═══════════════════════════════════════════════════════════════
+   gdi-extras.js v2.3 — COMPLETO
+   • M13 v19.2: card Continuar em cascata + RETOMADO o retry no
+     user:ready (bug dos tiles sumidos em F5), isHome aceita /6:/
+     com barra final, "last" respeita a subárvore da pasta
+   • M11 v2: Modo descanso — botão no canto esquerdo visível SOMENTE
+     em tela cheia (janela grande) na página do player de vídeo;
+     ativado apenas por clique do usuário, sem fade automático
+   • M20: playlist no extras — recolhível (Alfacon), ✓ confiável
+     (chave dupla + auto-cura), filtro, 🔄 cache, 💾 playlist.json
+   • M10 v3: foco força player a 100% (CSS + inline)
+   • M5 v3: auto-assistido grava nas duas chaves
+   ═══════════════════════════════════════════════════════════════ */
+console.log('[GDI Extras Modular] v2.3 carregado');
+
+window.GDI_MODULES = window.GDI_MODULES || [];
+
+// ── CSS dos módulos (injetado 1×) ──
+(function(){if(document.getElementById('gdi-extras-style'))return;const s=document.createElement('style');s.id='gdi-extras-style';s.textContent=`
+.gdi-debug-wrap{width:100%;background:#0d1117;border-top:2px solid #f0883e;font-family:monospace;font-size:12px;}
+.gdi-debug-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#161b22;cursor:pointer;user-select:none;color:#8b949e;}
+.gdi-debug-head:hover{background:#1c2128;}
+.gdi-debug-head strong{color:#f0f6fc;display:flex;align-items:center;gap:6px;}
+.gdi-dbg-count{background:#1f6feb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
+.gdi-debug-actions{display:flex;gap:8px;}
+.gdi-debug-actions button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:2px 9px;cursor:pointer;font-size:11px;}
+.gdi-debug-actions button:hover{background:#1c2128;color:#f0f6fc;}
+#gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:#e6edf3;}
+#gdi-debug-log.collapsed{display:none;}
+.gdi-dbg-entry{padding:3px 0;border-bottom:1px solid #21262d;line-height:1.6;}
+.gdi-dbg-ts{color:#484f58;margin-right:6px;}
+.gdi-dbg-badge{font-weight:bold;margin-right:6px;}
+.gdi-dbg-msg{color:#e6edf3;}
+.gdi-dbg-pre{margin:2px 0 2px 20px;padding:4px 8px;background:#161b22;border-left:2px solid #30363d;white-space:pre-wrap;word-break:break-all;color:#8b949e;font-size:11px;}
+.gdi-dbg-empty{color:#484f58;}
+.gdi-mat-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#e6edf3;}
+.gdi-mat-head strong{display:flex;align-items:center;gap:6px;}
+#gdi-mat-status{font-size:11px;color:#8b949e;}
+.gdi-mat-tabs{display:flex;flex-wrap:wrap;gap:6px;}
+.gdi-mat-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  min-width:74px;padding:7px 8px;border-radius:10px;cursor:pointer;user-select:none;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#c9d1d9;transition:all .15s;}
+.gdi-mat-tab i{font-size:20px;}
+.gdi-mat-tab span{font-size:10px;font-weight:600;letter-spacing:.02em;}
+.gdi-mat-tab:hover{background:rgba(255,255,255,.13);color:#fff;}
+.gdi-mat-tab.active{background:var(--bs-primary,#1f6feb);border-color:var(--bs-primary,#1f6feb);color:#fff;}
+.gdi-mat-body{height:calc(100dvh - 250px);min-height:420px;border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;overflow:hidden;background:#161b22;position:relative;}
+body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
+.gdi-notes{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(0,0,0,.18);}
+.gdi-notes-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#e6edf3;margin-bottom:6px;flex-wrap:wrap;gap:6px;}
+#gdi-note-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;
+  color:#e6edf3;padding:8px;font-size:13px;resize:vertical;min-height:44px;}
+.gdi-notes-actions{display:flex;align-items:center;gap:8px;margin-top:6px;}
+#gdi-note-time{font-size:11px;color:#7aa2ff;font-variant-numeric:tabular-nums;cursor:pointer;}
+#gdi-note-save{margin-left:auto;background:var(--bs-primary,#1f6feb);border:0;color:#fff;border-radius:7px;
+  padding:5px 12px;font-size:12px;cursor:pointer;}
+#gdi-notes-list{margin-top:8px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
+.gdi-note{display:flex;gap:8px;align-items:flex-start;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 8px;font-size:12px;}
+.gdi-note-time{color:#7aa2ff;cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;margin-top:2px;}
+.gdi-note-text{flex:1;color:#e6edf3;word-break:break-word;}
+.gdi-note-del{background:none;border:0;color:#8b949e;cursor:pointer;font-size:13px;padding:0 2px;}
+.gdi-note-del:hover{color:#ff6b6b;}
+.gdi-notes-empty{color:#8b949e;font-size:12px;text-align:center;padding:6px;}
+#gdi-pom-root{opacity:.30;transition:opacity .25s ease;}
+#gdi-pom-root:hover{opacity:.95;}
+#gdi-sleep-btn{opacity:.8;transition:opacity .25s ease;}
+#gdi-sleep-btn:hover{opacity:1;}
+#gdi-note-marks{position:relative;height:16px;margin-top:4px;cursor:pointer;display:none;}
+.gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
+  border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
+.gdi-note-mark:hover{background:#ffd43b;transform:translateX(-50%) scale(1.35);}
+#gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#8b949e;flex-wrap:wrap;}
+#gdi-home-card{animation:gdi-card-in .3s ease;}
+@keyframes gdi-card-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.gdi-player-wrap{position:relative;}
+#gdi-skip-intro{position:absolute;right:14px;bottom:64px;z-index:20;background:rgba(13,15,20,.92);
+  border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;
+  cursor:pointer;display:none;box-shadow:0 6px 20px rgba(0,0,0,.5);}
+#gdi-skip-intro:hover{background:rgba(45,50,62,.95);}
+.gdi-modprog{margin-left:8px;font-size:11px;color:#8b949e;background:rgba(255,255,255,.06);
+  border-radius:6px;padding:2px 8px;white-space:nowrap;}
+.gdi-modprog b{color:#8ab4ff;font-weight:600;}
+.gdi-pdf-controls{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);flex-wrap:wrap;}
+#gdi-pom-root{position:fixed;bottom:76px;right:16px;z-index:10000;font-family:inherit;}
+#gdi-pom-fab{position:relative;width:50px;height:50px;border-radius:50%;cursor:pointer;
+  background:conic-gradient(var(--pom-c,#1f6feb) calc(var(--pom-p,0)*1%),rgba(255,255,255,.09) 0);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.5);
+  transition:transform .18s;user-select:none;-webkit-tap-highlight-color:transparent;}
+#gdi-pom-fab:hover{transform:scale(1.08);}
+#gdi-pom-fab::after{content:'';position:absolute;inset:3px;border-radius:50%;
+  background:rgba(14,15,22,.97);border:1px solid rgba(255,255,255,.12);}
+#gdi-pom-fab>span{position:relative;z-index:1;font-size:22px;}
+@keyframes gdi-pom-pulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.5);}
+  50%{box-shadow:0 0 0 10px rgba(255,90,90,.22),0 6px 20px rgba(0,0,0,.5);}}
+#gdi-pom-fab.warning{animation:gdi-pom-pulse .8s ease-in-out infinite;}
+#gdi-pom-panel{position:absolute;bottom:60px;right:0;width:254px;
+  background:rgba(15,16,24,.86);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.12);border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.55);
+  padding:16px 16px 12px;transform-origin:bottom right;transform:scale(.85) translateY(10px);
+  opacity:0;pointer-events:none;transition:transform .22s cubic-bezier(.34,1.45,.64,1),opacity .18s;}
+#gdi-pom-panel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:all;}
+.gdi-pom-phase-label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  margin-bottom:6px;text-align:center;color:#8b949e;}
+#gdi-pom-display{font-size:46px;font-weight:800;text-align:center;color:#f0f6fc;
+  letter-spacing:.04em;font-variant-numeric:tabular-nums;line-height:1;}
+#gdi-pom-progress{height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px 0 10px;overflow:hidden;}
+#gdi-pom-progress-bar{height:4px;border-radius:2px;width:100%;transition:width .3s linear,background .4s;}
+#gdi-pom-sessions-dots{display:flex;gap:5px;justify-content:center;margin-bottom:10px;}
+.gdi-pom-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.14);transition:background .3s,transform .3s;}
+.gdi-pom-dot.done{background:#1f6feb;transform:scale(1.15);}
+#gdi-pom-btns{display:flex;gap:6px;justify-content:center;margin-bottom:6px;}
+.gdi-pom-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);color:#e6edf3;
+  border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;transition:background .15s;white-space:nowrap;}
+.gdi-pom-btn:hover{background:rgba(255,255,255,.18);}
+#gdi-pom-divider{height:1px;background:rgba(255,255,255,.08);margin:10px 0 8px;}
+#gdi-pom-cfg{display:flex;flex-direction:column;gap:6px;}
+.gdi-pom-cfg-row,.gdi-pom-switch{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#8b949e;}
+.gdi-pom-switch{cursor:pointer;}
+.gdi-pom-switch input{accent-color:#1f6feb;cursor:pointer;}
+.gdi-pom-cfg-row input{width:44px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);
+  border-radius:6px;color:#f0f6fc;text-align:center;padding:2px 4px;font-size:11px;}
+#gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
+`;document.head.appendChild(s);})();
+
+// ── Loader dos módulos — observa #content (páginas de vídeo montam o DOM async) ──
+(function(){
+  let timer=null;
+  function runAll(){
+    (window.GDI_MODULES||[]).forEach(m=>{
+      try{ if(m&&typeof m.init==='function') m.init(); }
+      catch(e){ console.error('[GDI módulo]',m&&m.name,e); }
+    });
+  }
+  function schedule(){clearTimeout(timer);timer=setTimeout(runAll,80);}
+  function bindContent(){
+    const c=document.getElementById('content');
+    if(c&&!c.__gdiModObs){c.__gdiModObs=true;
+      new MutationObserver(schedule).observe(c,{childList:true});}
+  }
+  Bus.onGlobal('page:change',schedule);
+  document.addEventListener('DOMContentLoaded',()=>{bindContent();schedule();});
+  window.addEventListener('load',()=>{bindContent();schedule();});
+  bindContent();
+})();
+
+// ═══ M1: SENHAS PROTEGIDAS ═══
+(function(){
+  const _PWK='gdi-'+(window.location.host||'local');
+  function _pwXor(s){let o='';for(let i=0;i<s.length;i++)o+=String.fromCharCode(s.charCodeAt(i)^_PWK.charCodeAt(i%_PWK.length));return o}
+  window.gdiSetPw=function(p,v){try{localStorage.setItem('gdi_pw_'+btoa(encodeURIComponent(p)),btoa(encodeURIComponent(_pwXor(String(v)))))}catch(_){}};
+  window.gdiGetPw=function(p){try{
+    const v=localStorage.getItem('gdi_pw_'+btoa(encodeURIComponent(p)));
+    if(v==null)return'';
+    return _pwXor(decodeURIComponent(atob(v)));
+  }catch(_){return''}};
+  try{
+    if(localStorage.getItem('gdi_pw_migrated'))return;
+    const del=[];
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
+      if(k&&k.indexOf('password')===0){const v=localStorage.getItem(k);if(v)gdiSetPw(k.slice(8),v);del.push(k);}}
+    del.forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem('gdi_pw_migrated','1');
+    if(del.length)console.log('[módulo senhas]',del.length,'senhas migradas');
+  }catch(_){}
+})();
+
+// ═══ M2: AUTENTICAÇÃO (Entrar/Sair) ═══
+(function(){
+  window.gdiRenderAuth=function(){
+    const slot=document.getElementById('gdi-auth-slot');
+    if(!slot)return;
+    const st=GDIUser.auth();
+    if(st==='in'){
+      slot.innerHTML='<a class="gdi-nav-btn" href="/logout" title="Sua conta \u2014 clique para sair (o progresso fica salvo nela)" onclick="try{GDIUser.flush()}catch(_){}"><i class="bi bi-person-check"></i><span class="d-none d-md-inline">Sair</span></a>';
+    }else if(st==='out'){
+      slot.innerHTML='<a class="gdi-nav-btn" href="/login" title="Entrar na sua conta para salvar o progresso"><i class="bi bi-box-arrow-in-right"></i><span class="d-none d-md-inline">Entrar</span></a>';
+    }
+  };
+  window.GDI_MODULES.push({name:'auth',init:function(){window.gdiRenderAuth();}});
+  Bus.onGlobal('auth:change',()=>window.gdiRenderAuth());
+})();
+
+// ═══ M3: VELOCIDADE DO VÍDEO SALVA ═══
+(function(){
+  const RKEY='gdi-rate';let applying=false;
+  const getR=()=>{const v=parseFloat(localStorage.getItem(RKEY));return(v>=0.25&&v<=4)?v:null};
+  document.addEventListener('ratechange',e=>{
+    const v=e.target;if(!v||v.tagName!=='VIDEO'||applying)return;
+    const r=v.playbackRate;if(r&&r>=0.25&&r<=4)try{localStorage.setItem(RKEY,String(r))}catch(_){}
+  },true);
+  const apply=v=>{const r=getR();if(!r||Math.abs(v.playbackRate-r)<0.01)return;
+    applying=true;try{v.playbackRate=r}catch(_){}applying=false;};
+  document.addEventListener('play',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
+  document.addEventListener('loadedmetadata',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
+})();
+
+// ═══ M4: ATALHOS (N/P, J = próxima não assistida, ]/[ trechos) ═══
+(function(){
+  let marksVideo=null;
+  Bus.onGlobal('media:ready',({type,el})=>{if(type==='video')marksVideo=el;});
+  function notesNow(){try{return GDIUser.getNotes(window.location.pathname)||[]}catch(_){return[]}}
+  document.addEventListener('keydown',e=>{
+    const t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    const k=e.key.toLowerCase();
+    if(k==='n'){const b=document.getElementById('gdi-btn-next');if(b&&!b.disabled){e.preventDefault();b.click();}}
+    else if(k==='p'){const b=document.getElementById('gdi-btn-prev');if(b&&!b.disabled){e.preventDefault();b.click();}}
+    else if(k==='j'){
+      const pv=window.playlistVideos;if(!pv||!pv.length)return;
+      const start=(typeof window.currentIndex==='number'&&window.currentIndex>=0)?window.currentIndex+1:0;
+      for(let i2=start;i2<pv.length;i2++){
+        let w=false;try{const raw=(pv[i2].pageUrl||'').split('?')[0];
+          w=GDIUser.isWatched(raw)||(window.gdiNormKey&&GDIUser.isWatched(gdiNormKey(raw)));}catch(_){}
+        if(!w){e.preventDefault();window.switchVideo(i2);return;}
+      }
+      showToast('Todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
+    }
+    else if(e.key===']'||e.key==='['){
+      const v=marksVideo;if(!v)return;
+      const notes=notesNow().slice().sort((a,b)=>a.t-b.t);if(!notes.length)return;
+      const t2=v.currentTime;
+      if(e.key===']'){const nx=notes.find(n=>n.t>t2+0.5);
+        if(nx){try{v.currentTime=nx.t;v.play().catch(()=>{});}catch(_){}showToast('\u2192 trecho '+gdiFmtTime(nx.t));}}
+      else{const pv=[...notes].reverse().find(n=>n.t<t2-1.5);
+        if(pv){try{v.currentTime=pv.t;v.play().catch(()=>{});}catch(_){}showToast('\u2190 trecho '+gdiFmtTime(pv.t));}}
+    }
+  });
+})();
+
+// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% (chave dupla via M20) ═══
+(function(){
+  Bus.onGlobal('media:ready',({type,el})=>{
+    if(type!=='video'||!el||el.__m5v3)return;
+    el.__m5v3=true;
+    const LAST_KEY=()=>window.location.pathname+(window.location.search||'');
+    el.addEventListener('timeupdate',()=>{
+      const el2=document.getElementById('gdi-note-time');
+      if(el2)el2.textContent=gdiFmtTime(el.currentTime);
+      if(!el.__autoW&&isFinite(el.duration)&&el.duration>60&&el.currentTime/el.duration>=0.9){
+        el.__autoW=true;
+        try{
+          if(window.gdiMarkVideo)gdiMarkVideo();
+          else GDIUser.markWatched(window.location.pathname);
+          GDIUser.setLast(LAST_KEY());
+        }catch(_){}
+        Bus.emit('watched:changed');
+      }
+    });
+    el.addEventListener('loadedmetadata',()=>{
+      const el3=document.getElementById('gdi-note-time');
+      if(el3)el3.textContent='00:00';
+    });
+    const nt=document.getElementById('gdi-note-time');
+    if(nt&&!nt.__seekB){nt.__seekB=true;
+      nt.addEventListener('click',()=>{
+        const v=document.querySelector('video');
+        if(v&&nt.textContent.includes(':')){
+          const pp=nt.textContent.split(':');
+          const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
+          try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
+        }
+      });
+    }
+  });
+})();
+
+// ═══ M6: MARCAS NA TIMELINE + NOTAS + REVISÃO + EXPORT (md/anki) + DUPLO-TOQUE ═══
+(function(){
+  let mv=null,reviewOn=false;
+  const SPAN=20;
+  Bus.onGlobal('media:ready',({type,el})=>{
+    if(type!=='video'||!el||el.__m6)return;
+    el.__m6=true;mv=el;
+    el.addEventListener('loadedmetadata',draw);
+    el.addEventListener('timeupdate',tick);
+  });
+  function notesNow(){try{return GDIUser.getNotes(window.location.pathname)||[]}catch(_){return[]}}
+  function draw(){
+    const bar=document.getElementById('gdi-note-marks');if(!bar)return;
+    const dur=(mv&&isFinite(mv.duration))?mv.duration:0;
+    const notes=notesNow();
+    bar.innerHTML='';
+    if(!dur||!notes.length){bar.style.display='none';return;}
+    bar.style.display='block';
+    notes.forEach(nt=>{
+      const d=document.createElement('div');d.className='gdi-note-mark';
+      d.style.left=Math.min(100,Math.max(0,nt.t/dur*100))+'%';
+      d.title=gdiFmtTime(nt.t)+' \u2014 '+nt.text;
+      d.addEventListener('click',()=>{if(mv){try{mv.currentTime=nt.t;mv.play().catch(()=>{});}catch(_){}}});
+      bar.appendChild(d);
+    });
+  }
+  function tick(){
+    if(!reviewOn)return;
+    const v=mv;if(!v)return;
+    const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
+    if(!notes.length){reviewOn=false;document.getElementById('gdi-review-btn')?.classList.remove('active');return;}
+    const t=v.currentTime;
+    let idx=-1;for(let i=0;i<notes.length;i++)if(notes[i].t<=t)idx=i;
+    if(idx<0)return;
+    const nxt=notes[idx+1];
+    if(nxt&&t>=notes[idx].t+SPAN&&t<nxt.t){try{v.currentTime=nxt.t;}catch(_){}}
+    else if(!nxt&&t>=notes[idx].t+SPAN){
+      reviewOn=false;
+      document.getElementById('gdi-review-btn')?.classList.remove('active');
+      showToast('Revis\u00e3o conclu\u00edda \u2713');
+    }
+  }
+  function exportMenu(){
+    const old=document.getElementById('gdi-exp-menu');
+    if(old){old.remove();return;}
+    const btn=document.getElementById('gdi-notes-export');
+    const m=document.createElement('div');m.id='gdi-exp-menu';
+    const r=btn.getBoundingClientRect();
+    m.style.cssText='position:fixed;z-index:10001;background:rgba(15,16,24,.97);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);left:'+Math.max(8,r.left-60)+'px;top:'+(r.bottom+6)+'px;';
+    m.innerHTML=`<button class="gdi-mode-btn" id="gdi-exp-md" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-markdown"></i> Markdown (.md)</button>
+    <button class="gdi-mode-btn" id="gdi-exp-anki" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-collection"></i> Anki / texto (.txt)</button>`;
+    document.body.appendChild(m);
+    document.getElementById('gdi-exp-md').onclick=()=>{m.remove();doExport('md');};
+    document.getElementById('gdi-exp-anki').onclick=()=>{m.remove();doExport('anki');};
+    setTimeout(()=>document.addEventListener('click',function h(e2){
+      if(!m.contains(e2.target)){m.remove();document.removeEventListener('click',h);}
+    }),0);
+  }
+  function doExport(fmt){
+    const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
+    if(!notes.length){showToast('Nenhuma anota\u00e7\u00e3o para exportar');return;}
+    let name='aula';try{name=decodeURIComponent(window.location.pathname.split('/').pop()||'aula')}catch(_){}
+    const base=(name.replace(/\.[a-z0-9]+$/i,'')||'aula')+' \u2014 anota\u00e7\u00f5es';
+    let content,type,ext;
+    if(fmt==='anki'){
+      content=notes.map(nt=>nt.text.replace(/\t/g,' ')+'\t'+name+' \u2014 '+gdiFmtTime(nt.t)).join('\n');
+      type='text/plain;charset=utf-8';ext='anki.txt';
+    }else{
+      content='# Anota\u00e7\u00f5es \u2014 '+name+'\n\n'+notes.map(nt=>'- **['+gdiFmtTime(nt.t)+']** '+nt.text).join('\n')+'\n';
+      type='text/markdown;charset=utf-8';ext='md';
+    }
+    const blob=new Blob([content],{type});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=base+'.'+ext;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
+  }
+  window.GDI_REVIEW_SPAN=SPAN;
+  window.GDI_MODULES.push({name:'marks-ui',init:function(){
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(wrap&&!document.getElementById('gdi-note-marks')){
+      const bar=document.createElement('div');bar.id='gdi-note-marks';
+      wrap.insertAdjacentElement('afterend',bar);
+    }
+    if(wrap&&Os.isMobile&&!wrap.__gdiDblTap){
+      wrap.__gdiDblTap=true;
+      let lt=0,lx=0;
+      wrap.addEventListener('touchend',e=>{
+        const now=Date.now();
+        const x=(e.changedTouches&&e.changedTouches[0]&&e.changedTouches[0].clientX)||0;
+        if(now-lt<320&&Math.abs(x-lx)<90){
+          const rect=wrap.getBoundingClientRect();
+          const v=wrap.querySelector('video');
+          if(v&&isFinite(v.duration)&&v.duration>0){
+            const fwd=(x-rect.left)>rect.width/2;
+            v.currentTime=Math.min(Math.max(0,v.currentTime+(fwd?10:-10)),Math.max(0,v.duration-0.5));
+            showToast((fwd?'\u2192 +10s \u2192 ':'\u2190 -10s \u2190 ')+gdiFmtTime(v.currentTime));
+          }
+          lt=0;
+        }else{lt=now;lx=x;}
+      },{passive:true});
+    }
+    const head=document.querySelector('.gdi-notes-head');
+    if(head&&!head.dataset.gdiNotes){
+      head.dataset.gdiNotes='1';
+      const w=document.createElement('div');w.style.cssText='display:flex;gap:6px;';
+      w.innerHTML=`<button id="gdi-notes-export" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;" title="Baixar anota\u00e7\u00f5es"><i class="bi bi-download"></i> Exportar</button>
+      <button id="gdi-review-btn" class="gdi-mode-btn" style="padding:3px 10px;font-size:11px;" title="Tocar s\u00f3 os trechos anotados (${SPAN}s cada)"><i class="bi bi-fast-forward-fill"></i> Revis\u00e3o</button>`;
+      head.appendChild(w);
+      document.getElementById('gdi-notes-export').addEventListener('click',exportMenu);
+      document.getElementById('gdi-review-btn').addEventListener('click',()=>{
+        reviewOn=!reviewOn;
+        document.getElementById('gdi-review-btn').classList.toggle('active',reviewOn);
+        if(reviewOn){
+          const notes=notesNow().slice().sort((a,b)=>a.t-b.t);
+          if(mv&&notes.length){
+            const nx=notes.find(n=>n.t>mv.currentTime-0.5)||notes[0];
+            try{mv.currentTime=nx.t;mv.play().catch(()=>{});}catch(_){}
+          }
+          showToast('Modo revis\u00e3o LIGADO \u2014 '+SPAN+'s por trecho ( ] e [ pulam entre eles)');
+        }else showToast('Modo revis\u00e3o desligado');
+      });
+    }
+    const slot=document.getElementById('gdi-slot-left');
+    if(slot&&!document.getElementById('gdi-notes')){
+      slot.insertAdjacentHTML('beforeend',`
+      <div class="gdi-notes" id="gdi-notes">
+        <div class="gdi-notes-head"><strong>\ud83d\udcdd Minhas anota\u00e7\u00f5es</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
+        <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anota\u00e7\u00e3o para esta aula\u2026"></textarea>
+        <div class="gdi-notes-actions">
+          <span id="gdi-note-time" title="Clique para ir a este momento do v\u00eddeo">00:00</span>
+          <button id="gdi-note-save"><i class="bi bi-save me-1"></i>Salvar</button>
+        </div>
+        <div id="gdi-notes-list"><div class="gdi-notes-empty">Carregando suas anota\u00e7\u00f5es\u2026</div></div>
+      </div>`);
+      document.getElementById('gdi-note-save').addEventListener('click',()=>{
+        const ta=document.getElementById('gdi-note-input');
+        const txt=(ta.value||'').trim();
+        if(!txt){showToast('Digite a anota\u00e7\u00e3o antes de salvar');return;}
+        const v=document.querySelector('video');
+        const tNow=v&&isFinite(v.currentTime)?v.currentTime:0;
+        GDIUser.addNote(window.location.pathname,tNow,txt);
+        ta.value='';
+        render();
+        showToast('Anota\u00e7\u00e3o salva na sua conta');
+      });
+      const nt=document.getElementById('gdi-note-time');
+      if(nt&&!nt.__seekB){nt.__seekB=true;
+        nt.addEventListener('click',()=>{
+          const v=document.querySelector('video');
+          if(v&&nt.textContent.includes(':')){
+            const pp=nt.textContent.split(':');
+            const sec=(parseInt(pp[0],10)||0)*60+(parseInt(pp[1],10)||0);
+            try{v.currentTime=sec;v.play().catch(()=>{});}catch(_){}
+          }
+        });
+      }
+      Bus.on('video:switched',()=>{
+        const ta=document.getElementById('gdi-note-input');
+        if(ta&&ta.value.trim()){ta.value='';showToast('Rascunho descartado ao trocar de aula');}
+        render();
+      });
+      GDIUser.ready().then(render).catch(()=>{});
+      Bus.onGlobal('user:ready',render);
+    }
+    function render(){
+      const listEl=document.getElementById('gdi-notes-list');
+      const cntEl=document.getElementById('gdi-notes-count');
+      if(!listEl)return;
+      const notes=GDIUser.getNotes(window.location.pathname);
+      if(cntEl)cntEl.textContent=notes.length?notes.length+' nota'+(notes.length>1?'s':''):'';
+      if(!notes.length){listEl.innerHTML='<div class="gdi-notes-empty">Nenhuma anota\u00e7\u00e3o ainda. Digite acima e salve.</div>';draw();return;}
+      const sorted=[...notes].map((nt,idx)=>({...nt,idx})).sort((x,y)=>x.t-y.t);
+      listEl.innerHTML=sorted.map(nt=>`
+        <div class="gdi-note">
+          <span class="gdi-note-time" data-seek="${nt.idx}" title="Ir para este momento">${gdiFmtTime(nt.t)}</span>
+          <span class="gdi-note-text">${escHtml(nt.text)}</span>
+          <button class="gdi-note-del" data-del="${nt.idx}" title="Excluir"><i class="bi bi-x-lg"></i></button>
+        </div>`).join('');
+      listEl.querySelectorAll('[data-seek]').forEach(el=>{
+        el.addEventListener('click',()=>{
+          const nt=GDIUser.getNotes(window.location.pathname)[+el.dataset.seek];
+          const v=document.querySelector('video');
+          if(nt&&v){try{v.currentTime=nt.t;v.play().catch(()=>{});}catch(_){}}
+        });
+      });
+      listEl.querySelectorAll('[data-del]').forEach(el=>{
+        el.addEventListener('click',()=>{GDIUser.delNote(window.location.pathname,+el.dataset.del);render();});
+      });
+      draw();
+    }
+    draw();
+  }});
+  Bus.onGlobal('user:ready',()=>{try{draw()}catch(_){}});
+})();
+
+// ═══ M7: PULAR INTRO POR CURSO ═══
+(function(){
+  let skipBtn=null;
+  function courseKey(){
+    try{const fl=window.playlistVideos[window.currentIndex]?.folder;if(fl)return fl;}catch(_){}
+    return window.location.pathname.split('/').slice(0,-1).join('/')+'/';
+  }
+  Bus.onGlobal('media:ready',({type,el})=>{
+    if(type!=='video'||!el||el.__m7)return;
+    el.__m7=true;
+    const upd=()=>{
+      if(!skipBtn||!document.body.contains(skipBtn))return;
+      const S=GDIUser.getIntro(courseKey());
+      const tm=el.currentTime;
+      let show=false;
+      if(S&&S>0)show=tm>0.4&&tm<S-0.3&&tm<180;
+      else show=tm>1&&tm<120;
+      skipBtn.innerHTML=S
+        ?'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o ('+gdiFmtTime(S)+')'
+        :'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
+      skipBtn.style.display=show?'block':'none';
+    };
+    el.addEventListener('timeupdate',upd);
+    el.addEventListener('seeked',()=>setTimeout(upd,80));
+    el.addEventListener('play',upd);
+  });
+  window.GDI_MODULES.push({name:'skip-intro',init:function(){
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(!wrap)return;
+    if(!skipBtn||!document.body.contains(skipBtn)){
+      skipBtn=document.createElement('button');
+      skipBtn.id='gdi-skip-intro';
+      skipBtn.innerHTML='<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
+      wrap.appendChild(skipBtn);
+      skipBtn.addEventListener('click',()=>{
+        const v=document.querySelector('.gdi-player-wrap video');if(!v)return;
+        const ck=courseKey();
+        if(!GDIUser.getIntro(ck)){
+          GDIUser.setIntro(ck,Math.max(1,Math.round(v.currentTime)));
+          showToast('Intro de '+gdiFmtTime(v.currentTime|0)+' memorizada para este curso \u2713');
+        }
+        try{v.currentTime=GDIUser.getIntro(ck)||v.currentTime;v.play().catch(()=>{});}catch(_){}
+        skipBtn.style.display='none';
+      });
+    }
+  }});
+})();
+
+// ═══ M9: MATERIAIS (PDFs por aula) ═══
+(function(){
+  const frames=new Map();let gen=0;
+  function classify(name){
+    const n2=name.toLowerCase();
+    if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
+    if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
+    if(/quest|exerc|prova/.test(n2))          return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
+    if(/resumo|iara|\bia\b|intelig/.test(n2)) return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
+    return                                    {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
+  }
+  function courseBase(){
+    let nm='';
+    try{nm=window.playlistVideos[window.currentIndex]?.origName||''}catch(_){}
+    if(!nm){try{nm=decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop()||'')}catch(_){nm=''}}
+    return nm.replace(/\.[a-z0-9]+$/i,'').toLowerCase().trim();
+  }
+  function ensurePanel(){
+    const right=document.getElementById('gdi-slot-right');
+    if(!right)return null;
+    if(!right.dataset.m9){
+      right.dataset.m9='1';
+      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#7aa2ff;"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
+      <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span></div>
+      <div class="gdi-mat-body" id="gdi-mat-body"></div>`;
+    }
+    return{
+      tabsEl:document.getElementById('gdi-mat-tabs'),
+      bodyEl:document.getElementById('gdi-mat-body'),
+      statusEl:document.getElementById('gdi-mat-status')
+    };
+  }
+  async function build(){
+    const myGen=++gen;
+    const p=window.location.pathname;
+    if(p.endsWith('/')||p.includes('/fallback'))return;
+    let panel=null;
+    for(let i=0;i<40;i++){
+      panel=ensurePanel();
+      if(panel&&panel.tabsEl&&panel.bodyEl)break;
+      if(myGen!==gen)return;
+      await sleep(200);
+    }
+    if(!panel||!panel.tabsEl||!panel.bodyEl)return;
+    const{tabsEl,bodyEl,statusEl}=panel;
+    const UI=window.UI||{};
+    const curPath=window.location.pathname;
+    const fPath=curPath.split("/").slice(0,-1).join("/")+"/";
+    const pPath=curPath.split("/").slice(0,-2).join("/")+"/";
+    tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
+    if(statusEl)statusEl.textContent='';
+    bodyEl.innerHTML='';
+    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
+    try{
+      let found=[];
+      const here=await gdiListAllFiles(fPath,gdiGetPw(fPath));
+      found=here.filter(isPdf);
+      if(!found.length){
+        const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
+        for(const sf of subs){
+          const fp=fPath+encodeURIComponent(sf.name)+'/';
+          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isPdf));
+          if(found.length)break;
+        }
+      }
+      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
+      const seen=new Set();const uniq=[];
+      found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
+      const pdfs=uniq.slice(0,12);
+      if(myGen!==gen)return;
+      if(!pdfs.length){
+        if(tabsEl.isConnected){
+          tabsEl.innerHTML='';
+          if(statusEl)statusEl.textContent='sem PDF';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+        }
+        return;
+      }
+      const base=courseBase();
+      const items=pdfs.map(x=>{
+        const cls=classify(x.name);
+        const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
+        const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
+        const match=base&&x.name.toLowerCase().includes(base)?0:1;
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
+      });
+      items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
+      const used={};
+      items.forEach((it,idx)=>{
+        used[it.label]=(used[it.label]||0)+1;
+        it.tabLabel=used[it.label]>1?it.label+' '+used[it.label]:it.label;
+        it.idx=idx;
+      });
+      if(!tabsEl.isConnected)return;
+      tabsEl.innerHTML=items.map(it=>`
+        <div class="gdi-mat-tab" data-mat="${it.idx}" title="${escHtml(it.name)}">
+          <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
+        </div>`).join('');
+      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
+      const isMobile=Os.isMobile;
+      function show(idx){
+        if(!tabsEl.isConnected||!bodyEl.isConnected)return;
+        tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
+        if(isMobile){
+          bodyEl.innerHTML=`<div class="gdi-mat-empty">
+            <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:#7aa2ff;"></i>
+            <div style="text-align:center;padding:0 16px;">
+              <div style="font-weight:600;margin-bottom:4px;">${escHtml(items[idx].name)}</div>
+              <div style="font-size:11px;color:#8b949e;margin-bottom:14px;">Toque para abrir o PDF</div>
+            </div>
+            <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;justify-content:center;min-width:200px;">
+              <i class="bi bi-box-arrow-up-right"></i> Abrir material
+            </a>
+          </div>`;
+          return;
+        }
+        let ifr=frames.get(items[idx].url);
+        if(!ifr){
+          ifr=document.createElement('iframe');
+          ifr.src=items[idx].url;ifr.loading='lazy';
+          ifr.title=items[idx].name;
+          frames.set(items[idx].url,ifr);
+        }
+        bodyEl.innerHTML='';bodyEl.appendChild(ifr);
+      }
+      tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>{
+        t.addEventListener('click',()=>show(+t.dataset.mat));
+      });
+      show(0);
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
+    }catch(err){
+      if(myGen!==gen)return;
+      if(statusEl)statusEl.textContent='sem PDF';
+      if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
+    }
+  }
+  Bus.onGlobal('video:switched',()=>{setTimeout(build,80);});
+  window.GDI_MODULES.push({name:'materials',init:build});
+})();
+
+// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
+// v5: independe do core — cria a própria barra se #gdi-slot-modes não
+//     existir, e descobre as colunas do layout por âncoras (player +
+//     painel de materiais) mesmo se as classes do core mudarem.
+(function(){
+  if(!document.getElementById('gdi-focus-style')){
+    const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
+body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
+body.gdi-fv .gdi-study-right{display:none!important;}
+body.gdi-fm .gdi-study-left{display:none!important;}
+body.gdi-fv .gdi-study-left{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap video,
+body.gdi-fv .gdi-player-wrap .plyr,
+body.gdi-fv .gdi-player-wrap .plyr__video-wrapper,
+body.gdi-fv .gdi-player-wrap .video-js,
+body.gdi-fv .gdi-player-wrap .dplayer,
+body.gdi-fv .gdi-player-wrap .dplayer-video-wrap,
+body.gdi-fv .gdi-player-wrap .dplayer-video,
+body.gdi-fv .gdi-player-wrap .jwplayer,
+body.gdi-fv .gdi-player-wrap #player,
+body.gdi-fv .gdi-player-wrap #vplayer,
+body.gdi-fv .gdi-player-wrap #player-container,
+body.gdi-fv .gdi-player-wrap iframe{
+  width:100%!important;max-width:100%!important;max-height:none!important;
+  margin-left:auto!important;margin-right:auto!important;display:block!important;}`;
+    document.head.appendChild(s);
+  }
+  function isDone(){
+    const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
+    let done=false;
+    try{
+      done=GDIUser.isWatched(key);
+      if(!done&&window.gdiNormKey)done=GDIUser.isWatched(gdiNormKey(key));
+      if(!done)done=GDIUser.isWatched(window.location.pathname);
+    }catch(_){}
+    return done;
+  }
+  function updBtn(){
+    const wb=document.getElementById('gdi-watched-btn');
+    if(!wb)return;
+    const done=isDone();
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  // Colunas do layout: pelas classes padrão OU por âncoras (player + materiais)
+  function findLayout(){
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(study){
+      const grid=study.querySelector('.gdi-study-grid');
+      const left=(grid||study).querySelector('.gdi-study-left');
+      const right=(grid||study).querySelector('.gdi-study-right');
+      if(grid&&(left||right))return{grid,left,right};
+    }
+    const rightEl=document.getElementById('gdi-slot-right')||document.getElementById('gdi-mat-body');
+    if(wrap&&rightEl&&rightEl!==wrap){
+      let p=wrap.parentElement;
+      while(p&&p!==document.body&&!p.contains(rightEl))p=p.parentElement;
+      if(p&&p!==document.body&&p.contains(wrap)){
+        const col=el=>{let n=el;while(n&&n.parentElement&&n.parentElement!==p)n=n.parentElement;return n;};
+        return{grid:p,left:col(wrap),right:col(rightEl)};
+      }
+    }
+    return{grid:null,left:null,right:null};
+  }
+  window.GDI_MODULES.push({name:'focus-modes',init:function(){
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(!study&&!wrap)return; // ainda não é página de aula
+    let slot=document.getElementById('gdi-slot-modes');
+    let created=false;
+    if(!slot){
+      const host=study?study.querySelector('.gdi-study-left'):null;
+      slot=document.createElement('div');
+      slot.id='gdi-slot-modes';
+      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px 0;';
+      if(host)host.insertBefore(slot,host.firstChild);
+      else if(wrap&&wrap.parentElement)wrap.parentElement.insertBefore(slot,wrap);
+      else if(study)study.insertBefore(slot,study.firstChild);
+      else return;
+      created=true;
+    }
+    if(slot.dataset.m10)return;
+    slot.dataset.m10='1';
+    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
+    slot.innerHTML=`
+      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+      <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    function zoom(){
+      const z=document.body.classList.contains('gdi-fm')?'150':'100';
+      const ifr=document.querySelector('#gdi-mat-body iframe');
+      if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
+    }
+    function applyLayout(m){
+      const{grid,left,right}=findLayout();
+      if(grid){
+        if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
+        else grid.style.removeProperty('grid-template-columns');
+      }
+      if(right){
+        if(m==='fv')right.style.setProperty('display','none','important');
+        else right.style.removeProperty('display');
+      }
+      if(left){
+        if(m==='fm')left.style.setProperty('display','none','important');
+        else left.style.removeProperty('display');
+      }
+    }
+    function setMode(m){
+      document.body.classList.toggle('gdi-fv',m==='fv');
+      document.body.classList.toggle('gdi-fm',m==='fm');
+      try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
+      slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+      applyLayout(m);
+      if(m!=='fv')setTimeout(zoom,60);
+    }
+    slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
+      b.addEventListener('click',()=>setMode(b.dataset.mode));
+    });
+    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    setMode(['fv','fm','split'].includes(saved)?saved:'split');
+    const wb=document.getElementById('gdi-watched-btn');
+    if(wb&&!wb.dataset.b){
+      wb.dataset.b='1';
+      wb.addEventListener('click',()=>{
+        const done=isDone();
+        if(done){window.gdiUnmarkVideo?gdiUnmarkVideo():GDIUser.unmarkWatched(window.location.pathname);}
+        else{window.gdiMarkVideo?gdiMarkVideo():GDIUser.markWatched(window.location.pathname);}
+        showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
+      });
+    }
+    updBtn();
+    Bus.onGlobal('watched:changed',updBtn);
+    Bus.onGlobal('user:ready',updBtn);
+    Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
+  }});
+})();
+
+// ═══ M11 v2: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
+//     tela cheia (janela grande) na página do player; ativado só por clique ═══
+// Por que não funcionava antes: o botão ficava em document.body, e elementos
+// FORA do elemento em tela cheia não são exibidos — ao entrar na janela grande
+// ele sumia. Agora botão e overlay são movidos PARA DENTRO do fullscreen.
+(function(){
+  let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
+  const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
+  const onVideoPage=()=>!!document.querySelector('.gdi-player-wrap');
+  const onAudioPage=()=>!!document.getElementById('aplayer-container');
+  function ensureEls(){
+    if(btn&&btn.isConnected)return;
+    overlay=document.createElement('div');
+    overlay.id='gdi-sleep-overlay';
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
+    overlay.title='Clique para sair do modo descanso';
+    overlay.addEventListener('click',()=>exitSleep());
+    btn=document.createElement('button');
+    btn.id='gdi-sleep-btn';
+    btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+    btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
+    btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
+    document.body.appendChild(overlay);
+    document.body.appendChild(btn);
+  }
+  function enterSleep(){
+    if(sleeping)return;
+    sleeping=true;
+    wakeGuard=Date.now()+2500; // carência: o clique que ativou não desperta na hora
+    overlay.style.transition='opacity 2.5s ease';
+    overlay.style.pointerEvents='all';
+    overlay.style.opacity='0.97';
+    btn.innerHTML='<i class="bi bi-sun-fill"></i>';
+    btn.style.color='#ffd43b';
+    btn.title='Sair do modo descanso';
+  }
+  function exitSleep(){
+    if(!sleeping)return;
+    sleeping=false;
+    overlay.style.transition='opacity .5s ease';
+    overlay.style.opacity='0';
+    overlay.style.pointerEvents='none';
+    btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+    btn.style.color='#74c0fc';
+    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+  }
+  function syncFs(){
+    ensureEls();
+    const fs=fsEl();
+    const video=onVideoPage(),audio=onAudioPage();
+    if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
+    let fsOk=false;
+    if(fs&&fs.tagName!=='VIDEO'){
+      if(!video)fsOk=true; // página de áudio: qualquer tela cheia serve
+      else fsOk=fs.contains(document.querySelector('.gdi-player-wrap'))||fs===document.documentElement||fs===document.body;
+    }
+    const host=fsOk?fs:document.body;
+    if(btn.parentElement!==host)host.appendChild(btn);
+    if(overlay.parentElement!==host)host.appendChild(overlay);
+    // Página de vídeo: botão visível APENAS em tela cheia (janela grande).
+    btn.style.display=(video&&!fsOk)?'none':'flex';
+    if(sleeping&&video&&!fsOk)exitSleep(); // saiu da tela cheia → sai do descanso
+  }
+  function bindOnce(){
+    if(bound)return;bound=true;
+    document.addEventListener('fullscreenchange',syncFs);
+    document.addEventListener('webkitfullscreenchange',syncFs);
+    // Despertar: clique, tecla, toque ou movimento (após a carência). O clique
+    // no próprio botão é ignorado aqui para não cancelar o toggle do clique.
+    ['mousemove','mousedown','keydown','touchstart'].forEach(ev=>{
+      document.addEventListener(ev,e=>{
+        if(!sleeping||Date.now()<wakeGuard)return;
+        if(ev!=='mousemove'&&e.target&&btn&&(e.target===btn||btn.contains(e.target)))return;
+        exitSleep();
+      },{passive:true});
+    });
+    Bus.onGlobal('media:ready',({type,el})=>{
+      if(type==='video'&&el&&!el.__gdiSleepEnd){
+        el.__gdiSleepEnd=true;
+        try{el.addEventListener('ended',()=>exitSleep());}catch(_){}
+      }
+    });
+  }
+  window.GDI_MODULES.push({name:'sleep-mode',init:function(){
+    ensureEls();
+    bindOnce();
+    syncFs();
+  }});
+})();
+
+// ═══ M12: POMODORO v2.4 ═══
+(function(){
+  window.GDI_MODULES.push({name:'pomodoro',init:function(){
+    if(window.__gdiPomodoroBooted)return;
+    window.__gdiPomodoroBooted=true;
+    const $id=x=>document.getElementById(x);
+    const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
+    const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+    const safeParse=s=>{try{return JSON.parse(s)}catch(e){return null}};
+    const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';document.body.appendChild(flashEl);
+    const root=document.createElement('div');root.id='gdi-pom-root';
+    root.innerHTML=`
+    <div id="gdi-pom-fab" title="Pomodoro"><span>🍅</span></div>
+    <div id="gdi-pom-panel">
+      <div class="gdi-pom-phase-label" id="gdi-pom-phase-label">🍅 Foco</div>
+      <div id="gdi-pom-display">25:00</div>
+      <div id="gdi-pom-progress"><div id="gdi-pom-progress-bar"></div></div>
+      <div id="gdi-pom-sessions-dots"></div>
+      <div id="gdi-pom-btns">
+        <button class="gdi-pom-btn" id="gdi-pom-start">▶ Iniciar</button>
+        <button class="gdi-pom-btn" id="gdi-pom-skip" title="Pular fase">⏭</button>
+        <button class="gdi-pom-btn" id="gdi-pom-reset" title="Zerar">↺</button>
+      </div>
+      <div id="gdi-pom-divider"></div>
+      <div id="gdi-pom-cfg">
+        <div class="gdi-pom-cfg-row"><span>🍅 Foco (min)</span><input id="gdi-pom-c-work" type="number" min="1" max="90" value="25"></div>
+        <div class="gdi-pom-cfg-row"><span>☕ Pausa curta</span><input id="gdi-pom-c-short" type="number" min="1" max="30" value="5"></div>
+        <div class="gdi-pom-cfg-row"><span>🛋 Pausa longa</span><input id="gdi-pom-c-long" type="number" min="1" max="60" value="15"></div>
+        <div class="gdi-pom-cfg-row"><span>🔁 Sessões p/ longa</span><input id="gdi-pom-c-sess" type="number" min="1" max="10" value="4"></div>
+        <label class="gdi-pom-switch"><span>▶ Auto-iniciar próxima fase</span><input id="gdi-pom-c-auto" type="checkbox" checked></label>
+      </div>
+    </div>`;
+    document.body.appendChild(root);
+    if(!document.querySelector('video,audio')&&!window._gdiAPlayer)root.style.display='none';
+    const CKEY='gdi-pom-cfg-v2',SKEY='gdi-pom-state-v2';
+    let cfg=Object.assign({work:25,short:5,long:15,sessions:4,autoStart:true},safeParse(localStorage.getItem(CKEY))||{});
+    let st={phase:'work',total:cfg.work*60,remain:cfg.work*60,dots:0,running:false,endAt:0};
+    let timer=null,lastWarn=-1,panelOpen=false,baseTitle=document.title,dotsCache='';
+    function check(){
+      const has=!!(document.querySelector('video,audio')||window._gdiAPlayer);
+      root.style.display=has?'':'none';
+      if(!has&&panelOpen){panelOpen=false;$id('gdi-pom-panel')?.classList.remove('open');}
+    }
+    function refreshBase(){baseTitle=document.title.replace(/^\d\d:\d\d \S+ \u00b7 /,'');if(st.running)updateUI();}
+    Bus.onGlobal('media:ready',()=>setTimeout(check,50));
+    Bus.onGlobal('page:change',()=>{setTimeout(check,30);setTimeout(refreshBase,60);});
+    Bus.onGlobal('title:change',()=>setTimeout(refreshBase,30));
+    function persist(){try{localStorage.setItem(SKEY,JSON.stringify({phase:st.phase,total:st.total,remain:st.remain,running:st.running,dots:st.dots,endAt:st.endAt}))}catch(e){}}
+    (function(){const s=safeParse(localStorage.getItem(SKEY));if(!s)return;
+      st.phase=s.phase||'work';st.dots=s.dots||0;st.total=s.total||st.total;
+      st.remain=(s.remain!=null&&s.remain>0)?s.remain:st.total;st.running=false;st.endAt=0;})();
+    let actx=null;
+    function beep(f,dur,type,vol){dur=dur||.3;type=type||'sine';vol=vol==null?.35:vol;
+      try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();
+        if(actx.state==='suspended')actx.resume();
+        const o=actx.createOscillator(),g=actx.createGain();
+        o.connect(g);g.connect(actx.destination);
+        o.type=type;o.frequency.value=f;
+        g.gain.setValueAtTime(vol,actx.currentTime);
+        g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+dur);
+        o.start();o.stop(actx.currentTime+dur);}catch(e){}}
+    function alarm(isBreak){const notes=isBreak?[660,880,1100]:[1100,880,660];
+      notes.forEach((f,i)=>setTimeout(()=>beep(f,.4,'sine',.5),i*300));
+      setTimeout(()=>notes.forEach((f,i)=>setTimeout(()=>beep(f,.3,'sine',.35),i*280)),1100);}
+    function flash(c){flashEl.style.background=c;flashEl.style.opacity='.4';setTimeout(()=>{flashEl.style.opacity='0'},600);}
+    function notify(t,b){if(!('Notification' in window))return;
+      if(Notification.permission==='granted'){try{new Notification(t,{body:b})}catch(e){}}
+      else if(Notification.permission==='default')Notification.requestPermission();}
+    function info(){
+      if(st.phase==='work')return{label:'🍅 Foco',c:'#1f6feb',fl:'#001a40'};
+      if(st.phase==='short')return{label:'☕ Pausa',c:'#2f9e44',fl:'#002a10'};
+      return{label:'🛋 Pausa longa',c:'#7048e8',fl:'#1a0040'};}
+    function dots(){
+      const key=st.dots+'/'+cfg.sessions;if(key===dotsCache)return;dotsCache=key;
+      const inC=st.dots%cfg.sessions;
+      const lit=st.dots>0&&inC===0?cfg.sessions:inC;
+      let h='';for(let i=0;i<cfg.sessions;i++)h+='<div class="gdi-pom-dot'+(i<lit?' done':'')+'"></div>';
+      const el=$id('gdi-pom-sessions-dots');if(el)el.innerHTML=h;}
+    function updateUI(){
+      const d=info(),time=fmt(st.remain),warn=st.running&&st.remain<=10&&st.remain>0;
+      const pct=st.total?st.remain/st.total*100:0;
+      const disp=$id('gdi-pom-display');
+      if(disp){disp.textContent=time;disp.style.color=warn?'#ff6b6b':'#f0f6fc';}
+      const lab=$id('gdi-pom-phase-label');
+      if(lab){lab.textContent=d.label;lab.style.color=d.c;}
+      const bar=$id('gdi-pom-progress-bar');
+      if(bar){bar.style.width=pct+'%';bar.style.background=warn?'#ff6b6b':d.c;}
+      const fab=$id('gdi-pom-fab');
+      if(fab){fab.style.setProperty('--pom-p',String(100-pct));
+        fab.style.setProperty('--pom-c',st.running?d.c:'rgba(255,255,255,.14)');
+        fab.classList.toggle('warning',!!warn);}
+      const btn=$id('gdi-pom-start');
+      if(btn)btn.textContent=st.running?'⏸ Pausar':'▶ '+(st.remain<st.total?'Continuar':'Iniciar');
+      dots();
+      if(st.running){
+        if(!/^\d\d:\d\d \S+ \u00b7 /.test(document.title))baseTitle=document.title;
+        const emoji=st.phase==='work'?'🍅':st.phase==='short'?'☕':'🛋';
+        document.title=fmt(st.remain)+' '+emoji+' \u00b7 '+baseTitle;
+      }}
+    function startLoop(){clearInterval(timer);st.running=true;
+      timer=setInterval(()=>{st.remain=Math.max(0,Math.round((st.endAt-Date.now())/1000));
+        if(st.remain<=0){next();return;}
+        if(st.remain<=10&&st.remain!==lastWarn){lastWarn=st.remain;beep(880+(10-st.remain)*20,.12,'square',.3);}
+        updateUI();},250);
+      lastWarn=-1;updateUI();}
+    function start(){st.endAt=Date.now()+st.remain*1000;persist();startLoop();}
+    function pause(){clearInterval(timer);timer=null;st.running=false;
+      document.title=document.title.replace(/^\d\d:\d\d \S+ \u00b7 /,'');persist();updateUI();}
+    function reset(){pause();st.phase='work';st.dots=0;st.total=cfg.work*60;st.remain=st.total;st.endAt=0;dotsCache='';persist();updateUI();}
+    function next(){clearInterval(timer);timer=null;st.running=false;
+      if(st.phase==='work'){st.dots++;const long=st.dots%cfg.sessions===0;
+        st.phase=long?'long':'short';st.total=(long?cfg.long:cfg.short)*60;
+        flash(info().fl);alarm(true);
+        notify(long?'Pausa longa! 🛋':'Pausa! ☕',fmt(st.total)+' de descanso. Você merece!');
+      }else{
+        if(st.phase==='long'){st.dots=0;dotsCache='';}
+        st.phase='work';st.total=cfg.work*60;
+        flash(info().fl);alarm(false);
+        notify('Hora de focar! 🍅',cfg.work+' minutos de concentração.');}
+      st.remain=st.total;
+      if(cfg.autoStart){st.endAt=Date.now()+st.total*1000;persist();startLoop();}
+      else{persist();updateUI();}}
+    $id('gdi-pom-fab').addEventListener('click',()=>{panelOpen=!panelOpen;$id('gdi-pom-panel').classList.toggle('open',panelOpen);if(panelOpen)updateUI();});
+    document.addEventListener('click',e=>{if(panelOpen&&!root.contains(e.target)){panelOpen=false;$id('gdi-pom-panel').classList.remove('open');}},{capture:true});
+    $id('gdi-pom-start').addEventListener('click',()=>st.running?pause():start());
+    $id('gdi-pom-skip').addEventListener('click',next);
+    $id('gdi-pom-reset').addEventListener('click',reset);
+    function loadCfg(){$id('gdi-pom-c-work').value=cfg.work;$id('gdi-pom-c-short').value=cfg.short;$id('gdi-pom-c-long').value=cfg.long;$id('gdi-pom-c-sess').value=cfg.sessions;$id('gdi-pom-c-auto').checked=!!cfg.autoStart;}
+    loadCfg();
+    ['gdi-pom-c-work','gdi-pom-c-short','gdi-pom-c-long','gdi-pom-c-sess'].forEach(id=>{
+      $id(id).addEventListener('change',()=>{
+        cfg.work=clamp(parseInt($id('gdi-pom-c-work').value)||25,1,90);
+        cfg.short=clamp(parseInt($id('gdi-pom-c-short').value)||5,1,30);
+        cfg.long=clamp(parseInt($id('gdi-pom-c-long').value)||15,1,60);
+        cfg.sessions=clamp(parseInt($id('gdi-pom-c-sess').value)||4,1,10);
+        localStorage.setItem(CKEY,JSON.stringify(cfg));
+        loadCfg();
+        if(!st.running){st.phase='work';st.dots=0;dotsCache='';st.total=cfg.work*60;st.remain=st.total;persist();updateUI();}});});
+    $id('gdi-pom-c-auto').addEventListener('change',e=>{cfg.autoStart=e.target.checked;localStorage.setItem(CKEY,JSON.stringify(cfg));});
+    new MutationObserver(()=>{if(!document.body.contains(root))document.body.appendChild(root);
+      if(!document.body.contains(flashEl))document.body.appendChild(flashEl);}).observe(document.body,{childList:true});
+    updateUI();
+    console.log('[GDI Pomodoro] v2.4 pronto');
+  }}); 
+})();
+
+// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
+// v19.6: nomes genéricos ("video.mp4", "aula", "001 - aula", "Parte 1"…)
+//        são trocados pelo nome da PASTA da aula (tile e Recentes);
+//        cabeçalho "Continuar em {contexto}" (sem "Continuar em Continuar").
+// v19.5: alvo VERIFICADO no servidor (fantasmas ignorados, cai pro próximo).
+// v19.4: fonte de dados própria (/userstate) quando o GDIUser não carrega.
+(function(){
+  const DBG=true;
+  const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
+
+  // ── nomes reais ──
+  function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()}
+  const GENERIC_WORDS=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|lesson|lessons|class|classes|modulo|m\u00f3dulo|module|modulos|m\u00f3dulos|modules|parte|partes|pt|cap|caps|capitulo|cap\u00edtulo|ext|ep|eps|episodio|epis\u00f3dio|live|revisao|revis\u00e3o|arquivo|file)$/i;
+  function isGenericName(raw){
+    const n=stripExt(raw).toLowerCase();
+    if(!n)return true;
+    const reduced=n.replace(/[\s\-_.:,;|()/\\]+/g,' ').split(' ')
+      .filter(w=>w&&!/^\d+$/.test(w)&&!GENERIC_WORDS.test(w)&&!GENERIC_WORDS.test(w.replace(/\d+$/,'')))
+      .join('');
+    return reduced.length===0;
+  }
+  // nome de exibição: o do arquivo; se genérico, sobe pastas até achar nome com conteúdo
+  function realNameOf(path){
+    const seg=normPath(path).split('/').filter(Boolean);
+    let name=stripExt(seg[seg.length-1]||'');
+    if(isGenericName(name)){
+      for(let j=seg.length-2;j>=0;j--){
+        if(/^\d+:$/.test(seg[j]))break;
+        if(!isGenericName(seg[j])){name=stripExt(seg[j]);break;}
+      }
+    }
+    return name||'Aula';
+  }
+
+  // ── camada de dados: GDIUser → fallback /userstate direto ──
+  let rescue=null,rescueAt=0;
+  function ensureRescue(force){
+    if(!force&&rescue&&Date.now()-rescueAt<60000)return;
+    fetch('/userstate',{credentials:'same-origin'})
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{
+        if(j&&typeof j==='object'){
+          rescue=j;rescueAt=Date.now();
+          log('estado obtido do /userstate \u2014 resume:',Object.keys(j.resume||{}).length,'| history:',(j.history||[]).length);
+          setTimeout(continueCardInit,30);
+        }
+      })
+      .catch(e=>log('falha no /userstate:',e));
+  }
+  function stateD(){
+    try{
+      if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}
+    }catch(_){}
+    if(rescue)return rescue;
+    try{
+      if(window.GDIUser){const d=GDIUser.dump();if(d&&Object.keys(d).length)return d;}
+    }catch(_){}
+    return null;
+  }
+  function authIn(){
+    try{if(window.GDIUser&&typeof GDIUser.auth==='function')return GDIUser.auth()!=='out';}catch(_){}
+    return true;
+  }
+  function getResumeOf(d,key){
+    try{
+      if(window.GDIUser&&GDIUser.loaded()&&typeof GDIUser.getResume==='function'){
+        const r=GDIUser.getResume(key);if(r)return r;
+      }
+    }catch(_){}
+    return (d&&d.resume&&d.resume[key])||null;
+  }
+  function resumeKeyFor(path){
+    const p=String(path||'');
+    if(p.indexOf('/fallback?')===0){
+      try{return '/fallback::'+(new URLSearchParams(p.split('?')[1]||'').get('id')||'')}catch(_){return ''}
+    }
+    return p.split('?')[0];
+  }
+  function normPath(p){
+    try{return decodeURIComponent(String(p||'').split('?')[0].replace(/\/+$/,''))}catch(_){return String(p||'').split('?')[0].replace(/\/+$/,'')}
+  }
+  function low(p){return normPath(p).toLowerCase()}
+  function okPath(x){
+    try{
+      if(typeof window.gdiOkPath!=='function')return true;
+      return !!window.gdiOkPath(x);
+    }catch(_){return true}
+  }
+  function subtreePrefix(){
+    const cur=low(window.location.pathname);
+    if(cur==='')return'';
+    const m=/^\/(\d+):$/.exec(cur);
+    if(m)return'/'+m[1]+':';
+    return cur;
+  }
+  function inSubtree(path){
+    const pre=subtreePrefix();
+    if(pre==='')return true;
+    const lp=low(path);
+    return lp.indexOf(pre+'/')===0||lp===pre;
+  }
+  function playerHref(p){
+    const s=String(p||'');
+    if(!s||s.indexOf('/fallback')===0)return'';
+    return s.includes('?')?s+'&a=view':s+'?a=view';
+  }
+  async function safeGo(ev){
+    const a=ev.currentTarget;
+    const href=a.getAttribute('href')||'';
+    if(!href||!href.startsWith('/'))return;
+    ev.preventDefault();
+    try{
+      const r=await fetch(href,{method:'HEAD',redirect:'manual',credentials:'same-origin'});
+      if(r.status>=300&&r.status<400){
+        const loc=(r.headers.get('location')||'')+' '+(r.url||'');
+        if(/login/i.test(loc)){showToast('Sess\u00e3o expirada \u2014 entre para retomar');location.href='/login';return;}
+      }
+    }catch(_){}
+    location.href=href;
+  }
+  // nome + contexto do alvo (com nomes reais: genérico sobe para a pasta)
+  function nameInfo(target){
+    const cur=normPath(window.location.pathname);
+    const isDriveRoot=/^\/\d+:$/.test(cur);
+    const tNorm=normPath(target);
+    let rest=tNorm;
+    if(!isDriveRoot&&tNorm.indexOf(cur+'/')===0)rest=tNorm.slice(cur.length+1);
+    const seg=rest.split('/').filter(Boolean);
+    if(isDriveRoot&&/^\d+:$/.test(seg[0]||''))seg.shift();
+    if(seg.length&&/^\d+:$/.test(seg[0])){
+      const dn=(window.drive_names||[])[parseInt(seg[0],10)];
+      if(dn)seg[0]=dn;
+    }
+    let src=seg.length-1;
+    let name=stripExt(seg[src]||'');
+    if(isGenericName(name)){
+      for(let j=seg.length-2;j>=0;j--){
+        if(/^\d+:$/.test(seg[j]))break;
+        if(!isGenericName(seg[j])){src=j;name=stripExt(seg[j]);break;}
+      }
+    }
+    const folder=src>0?seg[src-1]:'';
+    let drivePart='';
+    if(isDriveRoot&&window.drive_names&&window.drive_names[window.current_drive_order])drivePart=window.drive_names[window.current_drive_order];
+    return{name:name||'Aula',folder,drive:drivePart};
+  }
+  function srsDueCount(){
+    const d=stateD();if(!d)return 0;
+    const now=Date.now();let n=0;
+    for(const k in(d.notes||{})){
+      (d.notes[k]||[]).forEach(x=>{
+        const id=k+'|'+x.at;
+        const e=d.srs&&d.srs[id];
+        const due=e?e.due:(x.at+86400000);
+        if(due<=now)n++;
+      });
+    }
+    return n;
+  }
+  function srsOpen(){
+    const old=document.getElementById('gdi-srs-panel');
+    if(old){old.remove();return;}
+    const d=stateD()||{};
+    const now=Date.now();
+    const due=[];
+    for(const k in(d.notes||{})){
+      (d.notes[k]||[]).forEach(x=>{
+        const id=k+'|'+x.at;
+        const e=d.srs&&d.srs[id];
+        const t=e?e.due:(x.at+86400000);
+        if(t<=now)due.push({id,key:k,at:x.at,text:x.text,t:x.t,due:t});
+      });
+    }
+    due.sort((a,b)=>a.due-b.due);
+    const ov=document.createElement('div');ov.id='gdi-srs-panel';
+    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
+    document.body.appendChild(ov);
+    let idx=0;
+    function render(){
+      if(idx>=due.length){
+        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
+        document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
+        return;
+      }
+      const n=due[idx];
+      let lbl='Aula';try{lbl=decodeURIComponent(String(n.key).split('?')[0].split('/').filter(Boolean).pop()||'Aula').replace(/\.[a-z0-9]+$/i,'')}catch(_){}
+      ov.innerHTML=`<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:22px;max-width:540px;width:100%;color:#e6edf3;font-family:system-ui;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
+          <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
+        </div>
+        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
+          <button id="gdi-srs-again" class="gdi-mode-btn"><i class="bi bi-arrow-repeat"></i> N\u00e3o lembrei</button>
+          <a class="gdi-mode-btn" data-gdi-go href="${escHtml(playerHref(n.key))}"><i class="bi bi-play-fill"></i> Abrir aula</a>
+        </div></div>`;
+      document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
+      document.getElementById('gdi-srs-good').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,true)}catch(_){}idx++;render();});
+      document.getElementById('gdi-srs-again').addEventListener('click',()=>{try{GDIUser.srsGrade(n.id,false)}catch(_){}idx++;render();});
+      ov.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
+    }
+    render();
+  }
+
+  // fantasma? arquivo cujo nome começa com "pasta - "
+  function ghostScore(path){
+    const seg=normPath(path).split('/').filter(Boolean);
+    if(seg.length<2)return 0;
+    return seg[seg.length-1].indexOf(seg[seg.length-2]+' - ')===0?1:0;
+  }
+  function pickCandidates(){
+    const d=stateD();if(!d)return[];
+    const seen=new Set(),out=[];
+    const add=(k,at)=>{
+      if(!k)return;
+      const key=normPath(k);
+      if(seen.has(key)||!inSubtree(k)||!okPath(k))return;
+      seen.add(key);
+      out.push({path:String(k).split('?')[0],at:Number(at)||0});
+    };
+    if(d.watched)for(const k in d.watched)add(k,d.watched[k]&&d.watched[k].at);
+    if(d.resume)for(const k in d.resume)add(k,d.resume[k]&&d.resume[k].at);
+    if(d.last&&d.last.path)add(d.last.path,d.last.at);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at)});
+    out.sort((a,b)=>(ghostScore(a.path)-ghostScore(b.path))||(b.at-a.at));
+    return out;
+  }
+  // o caminho existe de verdade? (mesmo check que a página da aula faz)
+  const vCache=new Map();
+  function verify(path){
+    if(vCache.has(path))return Promise.resolve(vCache.get(path));
+    const pr=fetch(path,{method:'POST',credentials:'same-origin'})
+      .then(r=>{vCache.set(path,r.ok);return r.ok})
+      .catch(()=>{vCache.set(path,true);return true});
+    vCache.set(path,pr);
+    return pr;
+  }
+  async function bestTarget(){
+    const cands=pickCandidates();
+    for(const c of cands.slice(0,4)){
+      if(await verify(c.path))return c.path;
+    }
+    return null;
+  }
+
+  function dbg(){
+    const d=stateD();
+    return{
+      url:window.location.pathname,
+      subarvore:subtreePrefix()||'(tudo)',
+      gdiUserCarregado:!!(window.GDIUser&&GDIUser.loaded&&GDIUser.loaded()),
+      fonteDados:(window.GDIUser&&GDIUser.loaded())?'GDIUser':(rescue?'resgate /userstate':'nenhuma'),
+      candidatos:pickCandidates().slice(0,3).map(c=>c.path),
+      history:Array.isArray(d&&d.history)?d.history.length:0
+    };
+  }
+  window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
+
+  let rendering=false;
+  async function continueCardInit(){
+    if(rendering)return;
+    const d0=stateD();
+    if(!d0){
+      ensureRescue();
+      const n=(continueCardInit.__n=(continueCardInit.__n||0)+1);
+      if(n<=12)setTimeout(continueCardInit,750);
+      return;
+    }
+    continueCardInit.__n=0;
+    rendering=true;
+    try{await renderCard(d0);}
+    catch(e){log('erro no render:',e)}
+    finally{rendering=false;}
+  }
+  async function renderCard(d){
+    if(document.querySelector('#content .gdi-study'))return;
+    const target=await bestTarget();
+    if(document.querySelector('#content .gdi-study'))return;
+    const host=document.querySelector('#content .gdi-wrap')||document.getElementById('content');
+    if(!host)return;
+    const p=window.location.pathname;
+    const isHome=p==='/'||/^\/\d+:\/?$/.test(p);
+    const days=new Set();
+    const addDay=ts=>{if(ts)days.add(new Date(ts).toDateString())};
+    for(const k in d.watched)addDay(d.watched[k]&&d.watched[k].at);
+    for(const k in d.resume)addDay(d.resume[k]&&d.resume[k].at);
+    if(d.last)addDay(d.last.at);
+    for(const k in d.notes)(d.notes[k]||[]).forEach(n=>addDay(n.at));
+    let streak=0;const day=new Date();
+    const has=dt=>days.has(dt.toDateString());
+    if(!has(day))day.setDate(day.getDate()-1);
+    while(has(day)){streak++;day.setDate(day.getDate()-1);}
+    let hours=0;
+    for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
+    hours/=3600;
+    const due=srsDueCount();
+    // ── recentes: dedup por caminho + NOME REAL (genérico → pasta) ──
+    const hMap=new Map();
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{
+      if(!h||!h.path||h.path===p||!inSubtree(h.path)||!okPath(h.path))return;
+      const k=normPath(h.path);
+      const prev=hMap.get(k);
+      if(!prev||(Number(h.at)||0)>=(Number(prev.at)||0))hMap.set(k,h);
+    });
+    const hist=[...hMap.values()].sort((a,b)=>(Number(b.at)||0)-(Number(a.at)||0)).slice(0,6);
+    const chips=hist.map(h=>({h,label:realNameOf(h.path)}));
+    const cc={};
+    chips.forEach(c=>{cc[c.label]=(cc[c.label]||0)+1});
+    chips.forEach(c=>{if(cc[c.label]>1)c.label=(c.label+' \u00b7 '+stripExt(c.h.name||'')).slice(0,30)});
+    if(!target&&!streak&&!hours&&!hist.length&&!due){
+      const old0=document.getElementById('gdi-home-card');
+      if(old0)old0.remove();
+      log('sem dados utiliz\u00e1veis nesta sub\u00e1rvore \u2014 card oculto',dbg());
+      return;
+    }
+    const lbl=target?nameInfo(target):null;
+    const rKey=target?resumeKeyFor(target):'';
+    const r=target?getResumeOf(d,rKey):null;
+    const canSrs=!!(window.GDIUser&&typeof GDIUser.srsGrade==='function');
+    const sig=String(target)+'|'+hist.map(h=>normPath(h.path)).join(',')+'|'+due+'|'+streak;
+    const old=document.getElementById('gdi-home-card');
+    if(old&&continueCardInit.__sig===sig)return;
+    continueCardInit.__sig=sig;
+    if(old)old.remove();
+    const btn=target?`<a class="gdi-btn gdi-btn-primary" data-gdi-go href="${escHtml(playerHref(target))}"><i class="bi bi-play-fill"></i> Retomar</a>`:'';
+    let html='<div id="gdi-home-card" class="gdi-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:14px;">';
+    if(target){
+      let head;
+      if(lbl.drive)head='Continuar em '+lbl.drive+(lbl.folder?' \u2192 '+lbl.folder:'');
+      else if(lbl.folder)head='Continuar em '+lbl.folder;
+      else head='Continuar';
+      const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
+      html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+        <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
+        <div style="min-width:0;">
+          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
+          <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
+          <div style="font-size:12px;color:#8b949e;">${escHtml(sub)}</div>
+        </div></div>${btn}`;
+    }
+    if(isHome){
+      html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
+        ${streak>0?`<span><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
+        ${hours>0?`<span><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
+      </div>`;
+      if(due>0&&canSrs)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
+    }else if(streak>0){
+      html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
+    }
+    if(chips.length){
+      html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+        <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
+        ${chips.map(c=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(c.h.path))}" title="${escHtml(normPath(c.h.path))}">${escHtml(c.label.slice(0,26))}</a>`).join('')}
+      </div>`;
+    }
+    html+='</div>';
+    host.insertAdjacentHTML('afterbegin',html);
+    host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
+    document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
+    log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| nome:',lbl?lbl.name:'-');
+  }
+
+  window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
+  Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
+  Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
+  log('v19.6 registrado (alvo verificado + nomes reais)');
+})();
+
+// ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
+(function(){
+  let busy=false;
+  function modProgress(){
+    if(!GDIUser.loaded())return;
+    const rows=[...document.querySelectorAll('#list a.gdi-row')]
+      .filter(a=>a.querySelector('.gdi-row-icon i.bi-folder-fill')&&!a.querySelector('.gdi-modprog'))
+      .slice(0,30);
+    (async()=>{
+      for(const row of rows){
+        if(!document.body.contains(row))return;
+        const href=row.getAttribute('href')||'';
+        if(!href||href.startsWith('/fallback'))continue;
+        const files=await gdiListAllFiles(href,gdiGetPw(href));
+        if(!document.body.contains(row))continue;
+        let total=0,done=0;
+        for(const f of files){
+          if(f.mimeType==='application/vnd.google-apps.folder')continue;
+          if(!FILE_TYPES.video.includes((f.fileExtension||'').toLowerCase()))continue;
+          if(/\.part-/i.test(f.name))continue;
+          const bytes=Number(f.size)||0;if(bytes>0&&bytes<1024*1024)continue;
+          total++;
+          try{if(GDIUser.isWatched(href+encodeURIComponent(f.name)))done++;}catch(_){}
+        }
+        if(total>0&&document.body.contains(row)){
+          const pct=Math.round(done/total*100);
+          const el=document.createElement('span');
+          el.className='gdi-modprog';
+          el.innerHTML=`<b>${done}/${total}</b> \u00b7 ${pct}%`;
+          el.title='Progresso de v\u00eddeos nesta pasta';
+          row.querySelector('.gdi-row-acts')?.appendChild(el);
+        }
+        await sleep(40);
+      }
+    })();
+  }
+  function line(){
+    const countEl=document.getElementById('count');
+    if(!countEl||!countEl.classList.contains('show')){document.getElementById('gdi-progress-line')?.remove();return;}
+    const rows=document.querySelectorAll('#list div.gdi-row');
+    let done=0,total=0,firstTodo='';
+    rows.forEach(row=>{
+      if(!row.querySelector('.gdi-row-icon i.bi-camera-video-fill'))return;
+      const a=row.querySelector('a.gdi-row-name');if(!a)return;
+      const href=a.getAttribute('href')||'';
+      if(href.startsWith('/fallback'))return;
+      total++;
+      let w=false;try{w=GDIUser.isWatched(href.split('?')[0])}catch(_){}
+      if(w)done++;else if(!firstTodo)firstTodo=href;
+    });
+    const hasFolders=!!document.querySelector('#list a.gdi-row .gdi-row-icon i.bi-folder-fill');
+    const el0=document.getElementById('gdi-progress-line');
+    if((!total&&!hasFolders)||!GDIUser.loaded()){if(el0)el0.remove();return;}
+    let el=el0;
+    if(!el){el=document.createElement('div');el.id='gdi-progress-line';countEl.insertAdjacentElement('afterend',el);}
+    let html='';
+    if(total){
+      const pct=Math.round(done/total*100);
+      html+=`<i class="bi bi-bar-chart-fill" style="color:#7aa2ff;"></i>
+        <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
+        <div style="flex:1;max-width:160px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
+          <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
+        </div>`;
+      if(firstTodo)html+=`<button id="gdi-next-lesson" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" data-href="${escHtml(firstTodo)}" title="Abrir a primeira aula ainda n\u00e3o assistida"><i class="bi bi-play-fill"></i> N\u00e3o assistida</button>`;
+    }
+    if(hasFolders)html+=`<button id="gdi-course-btn" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" title="Somar o progresso de TODAS as subpastas"><i class="bi bi-diagram-3"></i> Progresso do curso</button>`;
+    el.innerHTML=html;
+    el.querySelector('#gdi-next-lesson')?.addEventListener('click',function(){location.href=this.dataset.href;});
+    el.querySelector('#gdi-course-btn')?.addEventListener('click',course);
+  }
+  async function course(){
+    if(busy)return;busy=true;
+    const btn=document.getElementById('gdi-course-btn');
+    if(btn){btn.disabled=true;btn.innerHTML='<i class="bi bi-hourglass-split"></i> calculando\u2026';}
+    try{
+      const folders=[...document.querySelectorAll('#list a.gdi-row')]
+        .filter(a=>a.querySelector('.gdi-row-icon i.bi-folder-fill'))
+        .map(a=>a.getAttribute('href')||'')
+        .filter(h=>h&&!h.startsWith('/fallback'));
+      let done=0,total=0;
+      const root=trimChar(window.location.pathname,'/')+'/';
+      const bases=[root,...folders.map(f=>f.endsWith('/')?f:f+'/')];
+      for(const base of bases){
+        const files=await gdiListAllFiles(base,gdiGetPw(base));
+        for(const f of files){
+          if(f.mimeType==='application/vnd.google-apps.folder')continue;
+          if(!FILE_TYPES.video.includes((f.fileExtension||'').toLowerCase()))continue;
+          if(/\.part-/i.test(f.name))continue;
+          const bytes=Number(f.size)||0;if(bytes>0&&bytes<1024*1024)continue;
+          total++;
+          try{if(GDIUser.isWatched(base+encodeURIComponent(f.name)))done++;}catch(_){}
+        }
+      }
+      const line=document.getElementById('gdi-progress-line');
+      if(line){
+        const pct=total?Math.round(done/total*100):0;
+        line.insertAdjacentHTML('beforeend',`<span style="color:#e6edf3;"><i class="bi bi-mortarboard-fill" style="color:#3fb950;"></i> Curso: <b>${done}/${total}</b> aulas (${pct}%)</span>`);
+        if(btn)btn.remove();
+      }
+    }catch(_){showToast('N\u00e3o foi poss\u00edvel calcular o progresso do curso');}
+    finally{busy=false;}
+  }
+  window.GDI_MODULES.push({name:'progress',init:function(){
+    const c=document.getElementById('count');
+    if(c&&!c.__m14){c.__m14=true;
+      new MutationObserver(()=>line()).observe(c,{childList:true,characterData:true,subtree:true});}
+    line();modProgress();
+  }});
+  Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
+})();
+// ═══ M19: TÍTULO LIMPO DA ABA ═══
+// O nome imenso (caminho inteiro da aula) vira curto e legível:
+//   "pasta pai · nome da aula"  →  "12. 8 em cada 10 profissionais · aula"
+// • decodifica (%20 → espaço), remove extensão, colapsa espaços duplos
+// • raiz do drive → nome do drive | truncado em 64 caracteres
+// • NÃO mexe quando o Pomodoro (M12) está com o cronômetro no título
+// • NÃO altera a URL (a rota é real — encurtar quebraria o refresh)
+(function(){
+  const MAX=64;
+  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/; // prefixo do pomodoro — deixar quieto
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
+  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
+  function build(name,parent){
+    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
+    let t=parent?parent+' \u00b7 '+name:name;
+    if(t.length>MAX)t=(name||'').slice(0,MAX);
+    return t;
+  }
+  // na página de aula: usa a entrada atual da playlist (vale também quando
+  // troca de aula sem recarregar a página)
+  function fromPlaylist(){
+    try{
+      const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
+        const m=pv[ci];
+        const ps=segs(m.pageUrl||'');
+        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
+      }
+    }catch(_){}
+    return null;
+  }
+  // demais páginas: deriva do próprio caminho da URL
+  function fromUrl(){
+    const seg=segs(window.location.pathname);
+    if(!seg.length)return null;
+    const first=seg[0]||'';
+    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null; // /0:search etc. — não mexe
+    if(/^\d+:$/.test(first)){
+      if(seg.length===1){
+        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
+        return dn||null;
+      }
+      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
+    }
+    return null; // /fallback e afins — deixa o título do core
+  }
+  function apply(){
+    try{
+      const cur=document.title||'';
+      if(POMO.test(cur))return; // pomodoro rodando: M12 manda no título
+      const next=fromPlaylist()||fromUrl();
+      if(!next||next===cur)return;
+      document.title=next;
+    }catch(_){}
+  }
+  function bindTitle(){
+    const el=document.querySelector('title');
+    if(!el){setTimeout(bindTitle,400);return;}
+    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
+  }
+  bindTitle();
+  setInterval(apply,1500); // rede de segurança
+  Bus.onGlobal('page:change',apply);
+  Bus.onGlobal('title:change',apply);
+  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
+  Bus.onGlobal('media:ready',apply);
+  window.GDI_MODULES.push({name:'clean-title',init:apply});
+  apply();
+  console.log('[GDI M19] t\u00edtulo limpo ativo');
+})();
+
+// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
+// ★ Correção do bug "nome vira tamanho": o span do tamanho é pego por
+//   el.lastElementChild (filho DIRETO), nunca por span:last-child que
+//   casava com o span do nome dentro do div interno.
+(function(){
+  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
+  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
+  window.gdiNormKey=norm;
+  window.gdiVideoKey=function(){
+    try{const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
+    }catch(_){}
+    return window.location.pathname;
+  };
+  window.gdiMarkVideo=function(){
+    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
+    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
+    Bus.emit('watched:changed');
+  };
+  window.gdiUnmarkVideo=function(){
+    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
+      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
+    });
+    Bus.emit('watched:changed');
+  };
+  function isW(m){
+    const raw=(m.pageUrl||'').split('?')[0];
+    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
+  }
+  function items(){return window.playlistVideos||[]}
+  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
+  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
+  function healKeys(){
+    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
+    const raw=(m.pageUrl||'').split('?')[0];
+    let a=false,b=false,c=false;
+    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
+    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
+        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
+  }
+  let writing=false; // evita loop do MutationObserver
+  function renderItems(){
+    const list=document.getElementById('gdi-playlist-list');
+    if(!list)return;
+    const pv=items(),ci=cur();
+    if(!pv.length){writing=true;list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';writing=false;return;}
+    const hide=localStorage.getItem(LS_HIDE)==='1';
+    let h='';
+    pv.forEach((m,idx)=>{
+      const w=isW(m),c=idx===ci;
+      if(hide&&w&&!c)return;
+      const nm=m.name||m.origName||'(sem nome)';
+      h+=`<div class="gdi-playlist-item" data-idx="${idx}" style="padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;${c?'background:var(--bs-primary,#1f6feb);color:#fff;':'background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);'}">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;">
+          <i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2" ${w&&!c?'style="color:#3fb950;"':''}></i>
+          <span style="font-weight:${c?'600':'400'};${w&&!c?'opacity:.75;':''}">${escHtml(nm)}</span>
+        </div>
+        <span style="font-size:11px;opacity:0.8;white-space:nowrap;">${w?'\u2713 ':''}${m.size||''}</span>
+      </div>`;
+    });
+    writing=true;
+    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
+    writing=false;
+    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const k=parseInt(el.dataset.idx,10);
+        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
+      });
+    });
+    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
+      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
+  }
+  function renderMeta(){
+    const pv=items(),ci=cur();
+    const cnt=document.getElementById('gdi-pl-count');
+    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
+  }
+  function syncWatchedBtn(){
+    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
+    let done=false;
+    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
+  function downloadJSON(){
+    const pv=items();
+    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
+    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
+      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
+  }
+  function ensureUI(){
+    const wrap=document.getElementById('gdi-playlist-wrap');
+    if(!wrap||wrap.dataset.m20)return;
+    wrap.dataset.m20='1';
+    wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
+        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
+        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+      </button>
+      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
+      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
+      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
+    </div>
+    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
+      <div id="gdi-playlist-list"></div>
+    </div>`;
+    const body=wrap.querySelector('#gdi-playlist-body');
+    const chev=wrap.querySelector('#gdi-pl-chev');
+    const setOpen=v=>{
+      body.style.display=v?'block':'none';
+      chev.className='bi bi-chevron-'+(v?'up':'down');
+      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
+    };
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
+    setOpen(open); // padrão: RECOLHIDA, como no Alfacon
+    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
+    const fBtn=wrap.querySelector('#gdi-pl-filter');
+    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
+      fBtn.classList.toggle('active',on);
+      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
+    fBtn.addEventListener('click',()=>{
+      const on=localStorage.getItem(LS_HIDE)==='1';
+      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
+    fSync();
+    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
+      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
+      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
+      showToast('Cache apagado \u2014 reescaneando\u2026');
+      setTimeout(()=>location.reload(),600);
+    });
+    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
+  }
+  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
+    if(!document.getElementById('gdi-playlist-wrap'))return;
+    ensureUI();
+    const list=document.getElementById('gdi-playlist-list');
+    if(list&&!list.__m20obs){
+      list.__m20obs=true;
+      let lastWrite=0;
+      new MutationObserver(()=>{
+        if(writing||Date.now()-lastWrite<150)return; // ignora as próprias reescritas
+        lastWrite=Date.now();
+        setTimeout(()=>{healKeys();renderItems();renderMeta();},30);
+      }).observe(list,{childList:true});
+    }
+    refreshAll();
+  }});
+  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
+  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
+  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
+})();
+
+// ═══ M16: PWA best-effort ═══
+(function(){
+  try{
+    if(!document.querySelector('link[rel="manifest"]')){
+      const origin=window.location.origin;
+      const MAN={name:(document.siteName||'Drive')+' Estudos',short_name:'Estudos',start_url:origin+'/',scope:origin+'/',display:'standalone',background_color:'#0b0e14',theme_color:'#0b0e14',icons:[]};
+      const l=document.createElement('link');l.rel='manifest';
+      l.href=URL.createObjectURL(new Blob([JSON.stringify(MAN)],{type:'application/manifest+json'}));
+      document.head.appendChild(l);
+    }
+  }catch(_){}
+  if('serviceWorker' in navigator&&location.protocol==='https:'){
+    navigator.serviceWorker.register('/gdi-sw.js',{scope:'/'})
+      .then(()=>console.log('[GDI PWA] offline ativo'))
+      .catch(()=>console.log('[GDI PWA] offline opcional desativado'));
+  }
+})();
+
+// ═══ M17: VISUALIZADOR DE PDF (pdf.js) ═══
+(function(){
+  window.file_pdf = function(i,e,t,n,a,c){
+    const l=`<div class="gdi-wrap">
+  <div class="gdi-viewer">
+    <div class="gdi-breadcrumb-wrap"><ol class="gdi-bc">${_viewerBreadcrumb()}</ol></div>
+    <div class="gdi-viewer-card">
+      <div class="gdi-file-header">
+        <span class="gdi-file-header-icon"><i class="bi bi-file-earmark-pdf-fill gdi-icon-pdf"></i></span>
+        <div class="gdi-file-header-info">
+          <div class="gdi-file-header-name">${escHtml(i)}</div>
+          <div class="gdi-file-header-meta">${escHtml(t)}</div>
+        </div>
+      </div>
+      <div class="gdi-viewer-body no-pad">
+        <div class="gdi-pdf-controls">
+          <button id="pdf-prev" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-left"></i></button>
+          <span style="font-size:13px;color:var(--gdi-text-muted);">Page <span id="pdf-page-num">1</span> / <span id="pdf-page-count">?</span></span>
+          <button id="pdf-next" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-right"></i></button>
+          <input id="pdf-zoom" type="range" min="50" max="200" value="100" style="width:100px;" title="Zoom">
+          <span id="pdf-zoom-val">100%</span>
+        </div>
+        <div style="padding:16px;">
+          <div id="pdf-spinner" class="gdi-spinner-wrap"><div class="gdi-spinner"></div></div>
+          <canvas id="pdf-canvas" style="max-width:100%;display:block;margin:auto;"></canvas>
+        </div>
+      </div>
+      <div class="gdi-viewer-footer">${renderDownloadButtons(n,e)}</div>
+    </div>
+  </div>
+</div>`;
+    $("#content").html(l);
+    let d=null,o=1,s=1;
+    function r(){
+      const p=document.getElementById("pdf-canvas"),g=p.getContext("2d");
+      pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+      function f(u){
+        d.getPage(u).then(function(h){
+          const m=h.getViewport({scale:s});
+          p.height=m.height,p.width=m.width,
+          h.render({canvasContext:g,viewport:m}).promise.then(function(){
+            $("#pdf-spinner").hide();
+          }),
+          document.getElementById("pdf-page-num").textContent=u;
+        });
+      }
+      pdfjsLib.getDocument(n).promise.then(function(u){
+        d=u,document.getElementById("pdf-page-count").textContent=u.numPages,f(o);
+      }).catch(function(u){
+        $("#pdf-spinner").html(`<div class="gdi-alert gdi-alert-error">Could not load PDF: ${u.message}</div>`);
+      }),
+      document.getElementById("pdf-prev").addEventListener("click",function(){o>1&&(o--,f(o))}),
+      document.getElementById("pdf-next").addEventListener("click",function(){d&&o<d.numPages&&(o++,f(o))}),
+      document.getElementById("pdf-zoom").addEventListener("input",function(){s=parseInt(this.value)/100,document.getElementById("pdf-zoom-val").textContent=this.value+"%",f(o)});
+    }
+    if(typeof pdfjsLib<"u")r();
+    else{
+      const p=document.createElement("script");
+      p.src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      p.onload=r,
+      p.onerror=function(){$("#pdf-spinner").html('<div class="gdi-alert gdi-alert-error">Failed to load PDF viewer.</div>')},
+      document.head.appendChild(p);
+    }
+  };
+})();
+
+// ═══ M18: PAINEL DE DEBUG (GDIDebug) ═══
+const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
+window.GDIDebug=GDIDebug;
+
+if(window.UI?.debug_mode){const i=window.fetch.bind(window);window.fetch=async function(t,n){const a=typeof t=="string"?t:t.url||String(t),c=(n?.method||"GET").toUpperCase();let l;try{l=n?.body?JSON.parse(n.body):void 0}catch{l=n?.body}GDIDebug.log("req",`\u2192 ${c} ${a}`,l!==void 0?l:null);const d=Date.now();try{const o=await i(t,n),s=o.clone();let r;try{r=await s.json()}catch{r=null}return GDIDebug.log(o.ok?"api":"error",`\u2190 ${o.status} ${a} (${Date.now()-d}ms)`,r),o}catch(o){throw GDIDebug.log("error",`\u2717 FETCH FAILED: ${a}`,String(o)),o}};const e=console.error.bind(console);console.error=function(...t){GDIDebug.log("error",t.map(n=>n instanceof Error?n.stack||n.message:typeof n=="object"?JSON.stringify(n):String(n)).join(" ")),e(...t)},window.addEventListener("error",t=>{GDIDebug.log("error",`Uncaught: ${t.message}`,`${t.filename}:${t.lineno}:${t.colno}`)}),window.addEventListener("unhandledrejection",t=>{GDIDebug.log("error",`UnhandledPromise: ${String(t.reason)}`)})}
+
+window.GDI_MODULES.push({name:'debug',init:function(){
+  if(!(window.UI&&window.UI.debug_mode))return;
+  if(document.getElementById('gdi-debug-wrap'))return;
+  const wrap=document.createElement('div');
+  wrap.className='gdi-debug-wrap';wrap.id='gdi-debug-wrap';
+  wrap.innerHTML=`<div class="gdi-debug-head" onclick="document.getElementById('gdi-debug-log').classList.toggle('collapsed')">
+    <strong><i class="bi bi-bug-fill" style="color:#f0883e;"></i> GDI Debug <span id="gdi-dbg-count" class="gdi-dbg-count">0</span></strong>
+    <div class="gdi-debug-actions">
+      <button onclick="event.stopPropagation();GDIDebug.clear()">Clear</button>
+      <button onclick="event.stopPropagation();document.getElementById('gdi-debug-log').classList.toggle('collapsed')">Toggle</button>
+    </div></div>
+  <div id="gdi-debug-log" class="collapsed"></div>`;
+  document.body.appendChild(wrap);
+  try{GDIDebug.attach()}catch(_){}
+}});
+
+// ═══════════════════════════════════════════════════════════════
+// M-FERRETO: TEMA VISUAL FERRETO PARA OS MÓDULOS EXTRAS
+// Carrega fontes (Poppins/Rubik/Inter), fixa tokens e reaplica a
+// linguagem visual Ferreto (coral #ff8b9f / teal #5ddeda) sobre os
+// componentes próprios deste extras (debug, pomodoro, notas,
+// materiais, playlist, sleep, skip-intro, continue-card, progress).
+// Roda 1× e observa trocas de tema. Não altera lógica dos módulos.
+// ═══════════════════════════════════════════════════════════════
+(function(){
+  if(window.__gdiFerretoExtras)return;window.__gdiFerretoExtras=true;
+  console.log('[GDI Extras] M-FERRETO tema aplicado');
+
+  // ── 1) Fontes Ferreto (Poppins / Rubik / Inter) ──
+  if(!document.getElementById('gdi-ferreto-fonts')){
+    const f=document.createElement('link');
+    f.id='gdi-ferreto-fonts';f.rel='stylesheet';
+    f.href='https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap';
+    document.head.appendChild(f);
+  }
+  if(!document.querySelector('link[rel="preconnect"][href*="fonts.gstatic"]')){
+    const p=document.createElement('link');p.rel='preconnect';p.crossOrigin='';p.href='https://fonts.gstatic.com';document.head.appendChild(p);
+  }
+
+  // ── 2) Tokens (espelha app.min.js p/ tornar extras autossuficiente) ──
+  if(!document.getElementById('gdi-ferreto-tokens')){
+    const t=document.createElement('style');t.id='gdi-ferreto-tokens';t.textContent=`
+:root{
+  --ferreto-primary:#ff8b9f;--ferreto-primary-600:#f5697f;--ferreto-secondary:#5ddeda;
+  --ferreto-accent:#c026d3;--ferreto-radius:16px;--ferreto-radius-sm:10px;
+  --ferreto-font-display:'Poppins','Rubik',system-ui,sans-serif;
+  --ferreto-font-body:'Rubik','Inter',system-ui,sans-serif;
+  --ferreto-grad:linear-gradient(135deg,#ff8b9f 0%,#c026d3 55%,#5ddeda 130%);
+  --ferreto-grad-soft:linear-gradient(135deg,rgba(255,139,159,.16),rgba(93,222,218,.12));
+  --ferreto-glow:rgba(255,139,159,.35);
+}
+[data-bs-theme="dark"]{
+  --ferreto-bg:#070910;--ferreto-bg-2:#0d1119;
+  --ferreto-surface:rgba(22,27,38,.72);--ferreto-surface-2:rgba(255,255,255,.045);--ferreto-surface-3:rgba(255,255,255,.08);
+  --ferreto-border:rgba(255,255,255,.09);--ferreto-border-strong:rgba(255,255,255,.16);
+  --ferreto-text:#f3f5fa;--ferreto-text-muted:#9aa4b8;--ferreto-text-faint:#6b7488;
+}
+[data-bs-theme="light"]{
+  --ferreto-bg:#f4f5fb;--ferreto-bg-2:#e9ebf5;
+  --ferreto-surface:rgba(255,255,255,.78);--ferreto-surface-2:rgba(255,255,255,.6);--ferreto-surface-3:rgba(15,23,42,.05);
+  --ferreto-border:rgba(15,23,42,.1);--ferreto-border-strong:rgba(15,23,42,.18);
+  --ferreto-text:#1f2540;--ferreto-text-muted:#5a6478;--ferreto-text-faint:#9aa1b4;
+  --ferreto-glow:rgba(255,139,159,.28);
+}
+`;document.head.appendChild(t);
+  }
+
+  // ── 3) Estilização Ferreto dos componentes extras ──
+  if(!document.getElementById('gdi-ferreto-extras-style')){
+    const s=document.createElement('style');s.id='gdi-ferreto-extras-style';s.textContent=`
+
+/* Debug panel */
+.gdi-debug-wrap{background:var(--ferreto-bg-2)!important;border-top:2px solid var(--ferreto-primary)!important;border-radius:0!important;}
+.gdi-debug-head{background:var(--ferreto-surface)!important;color:var(--ferreto-text-muted)!important;}
+.gdi-debug-head:hover{background:var(--ferreto-surface-3)!important;}
+.gdi-debug-head strong{color:var(--ferreto-text)!important;font-family:var(--ferreto-font-display)!important;}
+.gdi-dbg-count{background:var(--ferreto-grad)!important;color:#fff!important;}
+.gdi-debug-actions button{background:var(--ferreto-surface-2)!important;border-color:var(--ferreto-border)!important;color:var(--ferreto-text-muted)!important;border-radius:999px!important;padding:3px 12px!important;font-size:11px!important;}
+.gdi-debug-actions button:hover{background:var(--ferreto-primary)!important;color:#fff!important;border-color:var(--ferreto-primary)!important;}
+#gdi-debug-log{background:var(--ferreto-bg-2)!important;color:var(--ferreto-text)!important;}
+.gdi-dbg-entry{border-bottom-color:var(--ferreto-border)!important;}
+.gdi-dbg-pre{background:var(--ferreto-surface)!important;border-left-color:var(--ferreto-primary)!important;color:var(--ferreto-text-muted)!important;}
+
+/* Materiais (tabs + body) */
+.gdi-mat-head strong{color:var(--ferreto-text)!important;font-family:var(--ferreto-font-display)!important;}
+#gdi-mat-status{color:var(--ferreto-text-muted)!important;}
+.gdi-mat-tab{background:var(--ferreto-surface-2)!important;border-color:var(--ferreto-border)!important;color:var(--ferreto-text-muted)!important;border-radius:12px!important;transition:all .15s!important;}
+.gdi-mat-tab i{color:var(--ferreto-secondary)!important;}
+.gdi-mat-tab span{font-family:var(--ferreto-font-body)!important;}
+.gdi-mat-tab:hover{background:var(--ferreto-surface-3)!important;color:var(--ferreto-text)!important;transform:translateY(-1px);}
+.gdi-mat-tab.active{background:var(--ferreto-grad)!important;border:0!important;color:#fff!important;box-shadow:0 6px 16px -8px var(--ferreto-glow);}
+.gdi-mat-tab.active i{color:#fff!important;}
+.gdi-mat-body{background:var(--ferreto-surface)!important;border-color:var(--ferreto-border)!important;border-radius:var(--ferreto-radius)!important;}
+.gdi-mat-empty{color:var(--ferreto-text-muted)!important;}
+.gdi-mat-loading{color:var(--ferreto-text-muted)!important;}
+
+/* Notas */
+.gdi-notes{background:var(--ferreto-surface-2)!important;border-color:var(--ferreto-border)!important;border-radius:var(--ferreto-radius-sm)!important;}
+.gdi-notes-head{color:var(--ferreto-text)!important;font-family:var(--ferreto-font-display)!important;}
+#gdi-note-input{background:var(--ferreto-surface-2)!important;border-color:var(--ferreto-border)!important;color:var(--ferreto-text)!important;border-radius:10px!important;font-family:var(--ferreto-font-body)!important;}
+#gdi-note-input:focus{border-color:var(--ferreto-primary)!important;box-shadow:0 0 0 4px var(--ferreto-glow)!important;outline:none!important;}
+#gdi-note-time{color:var(--ferreto-primary)!important;}
+#gdi-note-save{background:var(--ferreto-grad)!important;color:#fff!important;border:0!important;border-radius:999px!important;font-family:var(--ferreto-font-body)!important;font-weight:600!important;box-shadow:0 6px 16px -8px var(--ferreto-glow);}
+#gdi-note-save:hover{filter:brightness(1.08);}
+#gdi-notes-list{scrollbar-width:thin;}
+.gdi-note{background:var(--ferreto-surface-3)!important;border-radius:10px!important;}
+.gdi-note-time{color:var(--ferreto-primary)!important;}
+.gdi-note-text{color:var(--ferreto-text)!important;}
+.gdi-note-del{color:var(--ferreto-text-muted)!important;}
+.gdi-note-del:hover{color:#ff6b6b!important;}
+.gdi-note-mark{background:var(--ferreto-primary)!important;}
+.gdi-note-mark:hover{background:#ffd43b!important;}
+
+/* Pomodoro FAB + painel */
+#gdi-pom-fab{background:conic-gradient(var(--ferreto-primary) calc(var(--pom-p,0)*1%),var(--ferreto-surface-3) 0)!important;box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 0 1px var(--ferreto-border-strong)!important;}
+#gdi-pom-fab::after{background:var(--ferreto-bg-2)!important;border-color:var(--ferreto-border)!important;}
+#gdi-pom-fab>span{color:var(--ferreto-text)!important;}
+#gdi-pom-fab.warning{animation:gdi-pom-pulse .8s ease-in-out infinite;}
+@keyframes gdi-pom-pulse{0%,100%{box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 0 1px var(--ferreto-border-strong);}50%{box-shadow:0 0 0 12px rgba(255,139,159,.25),0 6px 22px rgba(0,0,0,.5);}}
+#gdi-pom-panel{background:var(--ferreto-surface)!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;border-color:var(--ferreto-border-strong)!important;border-radius:var(--ferreto-radius)!important;box-shadow:0 20px 56px rgba(0,0,0,.6)!important;color:var(--ferreto-text)!important;}
+
+/* Sleep button */
+#gdi-sleep-btn{color:var(--ferreto-text-muted)!important;background:var(--ferreto-surface-2)!important;border:1px solid var(--ferreto-border)!important;border-radius:999px!important;}
+#gdi-sleep-btn:hover{color:var(--ferreto-primary)!important;background:var(--ferreto-surface-3)!important;}
+
+/* Skip intro */
+#gdi-skip-intro{background:var(--ferreto-surface)!important;border:1px solid var(--ferreto-border-strong)!important;color:var(--ferreto-text)!important;border-radius:999px!important;font-family:var(--ferreto-font-body)!important;font-weight:600!important;box-shadow:0 8px 24px rgba(0,0,0,.5)!important;}
+#gdi-skip-intro:hover{background:var(--ferreto-grad)!important;color:#fff!important;border:0!important;}
+
+/* Progress / module prog chips */
+#gdi-progress-line{color:var(--ferreto-text-muted)!important;}
+.gdi-modprog{background:var(--ferreto-surface-2)!important;color:var(--ferreto-text-muted)!important;border-radius:999px!important;border:1px solid var(--ferreto-border)!important;}
+.gdi-modprog b{color:var(--ferreto-secondary)!important;}
+
+/* Continue card + Home card */
+#gdi-home-card,.gdi-continue-card{background:var(--ferreto-surface)!important;border:1px solid var(--ferreto-border)!important;border-radius:var(--ferreto-radius)!important;box-shadow:0 6px 22px -10px rgba(0,0,0,.4)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;}
+
+/* Playlist count badge */
+#gdi-playlist-count{color:var(--ferreto-text-muted)!important;}
+
+/* Player nav buttons (Anterior/Próxima) */
+#gdi-player-nav .gdi-mode-btn{justify-content:center;}
+
+/* Nota: marks sobre o player */
+#gdi-note-marks .gdi-note-mark{border-color:var(--ferreto-bg-2)!important;}
+
+/* Scrollbar dos painéis internos */
+#gdi-notes-list::-webkit-scrollbar,#gdi-debug-log::-webkit-scrollbar{width:8px;}
+#gdi-notes-list::-webkit-scrollbar-thumb,#gdi-debug-log::-webkit-scrollbar-thumb{background:var(--ferreto-surface-3);border-radius:20px;}
+
+`;document.head.appendChild(s);
+  }
+
+  // ── 4) Garante data-bs-theme em <html> p/ os tokens casarem ──
+  if(!document.documentElement.getAttribute('data-bs-theme')){
+    document.documentElement.setAttribute('data-bs-theme',localStorage.getItem('gdi-theme')||'dark');
+  }
+})();
