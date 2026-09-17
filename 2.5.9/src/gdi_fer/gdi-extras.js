@@ -3554,9 +3554,14 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   // ★ Central de Estudos agora é uma ABA na navbar (não mais flutuante).
   // Injeta um .gdi-nav-btn em .gdi-nav-actions a cada render da navbar.
   function injectNavButton(){
+    // 1) remove qualquer fab antigo (versão em cache pode ter criado)
+    const oldFab=document.getElementById('gdi-central-fab');
+    if(oldFab)oldFab.remove();
+
+    // 2) injeta botão na navbar
     const actions=document.querySelector('.gdi-nav-actions');
-    if(!actions)return;
-    if(actions.querySelector('#gdi-central-nav'))return; // já injetou
+    if(!actions)return false;
+    if(actions.querySelector('#gdi-central-nav'))return true; // já injetou
     const btn=document.createElement('button');
     btn.id='gdi-central-nav';
     btn.className='gdi-nav-btn';
@@ -3567,18 +3572,24 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const themeBtn=document.getElementById('theme-toggle');
     if(themeBtn)actions.insertBefore(btn,themeBtn);
     else actions.appendChild(btn);
+    return true;
   }
-  // tenta injetar imediatamente + a cada troca de página
+  // tenta injetar imediatamente + retries agressivos (navbar pode demorar)
   injectNavButton();
-  setTimeout(injectNavButton,500);
-  setTimeout(injectNavButton,1500);
+  for(let i=1;i<=10;i++)setTimeout(injectNavButton,i*300);
   Bus.onGlobal('page:change',()=>setTimeout(injectNavButton,100));
+  Bus.onGlobal('page:change',()=>setTimeout(injectNavButton,500));
   Bus.onGlobal('rows:appended',()=>setTimeout(injectNavButton,50));
-  // observer como fallback (navbar pode ser reconstruída async)
-  const navObs=new MutationObserver(()=>injectNavButton());
-  const navEl=document.querySelector('.gdi-nav');
-  if(navEl)navObs.observe(navEl,{childList:true,subtree:true});
-  else setTimeout(()=>{const n=document.querySelector('.gdi-nav');if(n)navObs.observe(n,{childList:true,subtree:true});},1000);
+  // também registra como GDI_MODULE — o loader roda após a navbar estar pronta
+  window.GDI_MODULES=window.GDI_MODULES||[];
+  window.GDI_MODULES.push({name:'central-nav',init:function(){injectNavButton();}});
+  // observer como fallback (navbar é reconstruída async pelo app.min.js)
+  function setupNavObserver(){
+    const navEl=document.querySelector('.gdi-nav')||document.getElementById('nav');
+    if(!navEl){setTimeout(setupNavObserver,500);return;}
+    new MutationObserver(()=>injectNavButton()).observe(navEl,{childList:true,subtree:true});
+  }
+  setupNavObserver();
 
   document.addEventListener('keydown',e=>{
     const t=e.target;
