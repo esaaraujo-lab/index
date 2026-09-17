@@ -511,143 +511,146 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }});
 })();
 
-
-// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO ═══
+// ═══ M9: MATERIAIS (PDFs por aula) ═══
 (function(){
-  if(!document.getElementById('gdi-focus-style')){
-    const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
-body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
-body.gdi-fv .gdi-study-right{display:none!important;}
-body.gdi-fm .gdi-study-left{display:none!important;}
-body.gdi-fv .gdi-study-left{width:100%!important;max-width:100%!important;}
-body.gdi-fv .gdi-player-wrap{width:100%!important;max-width:100%!important;}
-body.gdi-fv .gdi-player-wrap video,
-body.gdi-fv .gdi-player-wrap .plyr,
-body.gdi-fv .gdi-player-wrap .plyr__video-wrapper,
-body.gdi-fv .gdi-player-wrap .video-js,
-body.gdi-fv .gdi-player-wrap .dplayer,
-body.gdi-fv .gdi-player-wrap .dplayer-video-wrap,
-body.gdi-fv .gdi-player-wrap .dplayer-video,
-body.gdi-fv .gdi-player-wrap .jwplayer,
-body.gdi-fv .gdi-player-wrap #player,
-body.gdi-fv .gdi-player-wrap #vplayer,
-body.gdi-fv .gdi-player-wrap #player-container,
-body.gdi-fv .gdi-player-wrap iframe{
-  width:100%!important;max-width:100%!important;max-height:none!important;
-  margin-left:auto!important;margin-right:auto!important;display:block!important;}`;
-    document.head.appendChild(s);
+  const frames=new Map();let gen=0;
+  function classify(name){
+    const n2=name.toLowerCase();
+    if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
+    if(/simulado/.test(n2))                   return{l:'Minissimulado',i:'bi-stopwatch',             ord:2};
+    if(/quest|exerc|prova/.test(n2))          return{l:'Exerc\u00edcios',  i:'bi-ui-checks',              ord:1};
+    if(/resumo|iara|\bia\b|intelig/.test(n2)) return{l:'Resumo IA',   i:'bi-stars',                  ord:3};
+    return                                    {l:'Material',    i:'bi-file-earmark-text-fill',ord:0};
   }
-  function isDone(){
-    const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
-    let done=false;
+  function courseBase(){
+    let nm='';
+    try{nm=window.playlistVideos[window.currentIndex]?.origName||''}catch(_){}
+    if(!nm){try{nm=decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop()||'')}catch(_){nm=''}}
+    return nm.replace(/\.[a-z0-9]+$/i,'').toLowerCase().trim();
+  }
+  function ensurePanel(){
+    const right=document.getElementById('gdi-slot-right');
+    if(!right)return null;
+    if(!right.dataset.m9){
+      right.dataset.m9='1';
+      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#7aa2ff;"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
+      <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span></div>
+      <div class="gdi-mat-body" id="gdi-mat-body"></div>`;
+    }
+    return{
+      tabsEl:document.getElementById('gdi-mat-tabs'),
+      bodyEl:document.getElementById('gdi-mat-body'),
+      statusEl:document.getElementById('gdi-mat-status')
+    };
+  }
+  async function build(){
+    const myGen=++gen;
+    const p=window.location.pathname;
+    if(p.endsWith('/')||p.includes('/fallback'))return;
+    let panel=null;
+    for(let i=0;i<40;i++){
+      panel=ensurePanel();
+      if(panel&&panel.tabsEl&&panel.bodyEl)break;
+      if(myGen!==gen)return;
+      await sleep(200);
+    }
+    if(!panel||!panel.tabsEl||!panel.bodyEl)return;
+    const{tabsEl,bodyEl,statusEl}=panel;
+    const UI=window.UI||{};
+    const curPath=window.location.pathname;
+    const fPath=curPath.split("/").slice(0,-1).join("/")+"/";
+    const pPath=curPath.split("/").slice(0,-2).join("/")+"/";
+    tabsEl.innerHTML='<span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span>';
+    if(statusEl)statusEl.textContent='';
+    bodyEl.innerHTML='';
+    const isPdf=x=>(x.fileExtension||'').toLowerCase()==='pdf'||/pdf/i.test(x.mimeType||'');
     try{
-      done=GDIUser.isWatched(key);
-      if(!done&&window.gdiNormKey)done=GDIUser.isWatched(gdiNormKey(key));
-      if(!done)done=GDIUser.isWatched(window.location.pathname);
-    }catch(_){}
-    return done;
-  }
-  function updBtn(){
-    const wb=document.getElementById('gdi-watched-btn');
-    if(!wb)return;
-    const done=isDone();
-    wb.classList.toggle('done',done);
-    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
-  }
-  function findLayout(){
-    const study=document.getElementById('gdi-study');
-    const wrap=document.querySelector('.gdi-player-wrap');
-    if(study){
-      const grid=study.querySelector('.gdi-study-grid');
-      const left=(grid||study).querySelector('.gdi-study-left');
-      const right=(grid||study).querySelector('.gdi-study-right');
-      if(grid&&(left||right))return{grid,left,right};
-    }
-    const rightEl=document.getElementById('gdi-slot-right')||document.getElementById('gdi-mat-body');
-    if(wrap&&rightEl&&rightEl!==wrap){
-      let p=wrap.parentElement;
-      while(p&&p!==document.body&&!p.contains(rightEl))p=p.parentElement;
-      if(p&&p!==document.body&&p.contains(wrap)){
-        const col=el=>{let n=el;while(n&&n.parentElement&&n.parentElement!==p)n=n.parentElement;return n;};
-        return{grid:p,left:col(wrap),right:col(rightEl)};
+      let found=[];
+      const here=await gdiListAllFiles(fPath,gdiGetPw(fPath));
+      found=here.filter(isPdf);
+      if(!found.length){
+        const subs=here.filter(x=>x.mimeType==='application/vnd.google-apps.folder').slice(0,20);
+        for(const sf of subs){
+          const fp=fPath+encodeURIComponent(sf.name)+'/';
+          found=found.concat((await gdiListAllFiles(fp,gdiGetPw(fp))).filter(isPdf));
+          if(found.length)break;
+        }
       }
-    }
-    return{grid:null,left:null,right:null};
-  }
-  window.GDI_MODULES.push({name:'focus-modes',init:function(){
-    const study=document.getElementById('gdi-study');
-    const wrap=document.querySelector('.gdi-player-wrap');
-    if(!study&&!wrap)return;
-    let slot=document.getElementById('gdi-slot-modes');
-    let created=false;
-    if(!slot){
-      const host=study?study.querySelector('.gdi-study-left'):null;
-      slot=document.createElement('div');
-      slot.id='gdi-slot-modes';
-      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px 0;';
-      if(host)host.insertBefore(slot,host.firstChild);
-      else if(wrap&&wrap.parentElement)wrap.parentElement.insertBefore(slot,wrap);
-      else if(study)study.insertBefore(slot,study.firstChild);
-      else return;
-      created=true;
-    }
-    if(slot.dataset.m10)return;
-    slot.dataset.m10='1';
-    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
-    slot.innerHTML=`
-      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
-      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
-      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
-      <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
-    function zoom(){
-      const z=document.body.classList.contains('gdi-fm')?'150':'100';
-      const ifr=document.querySelector('#gdi-mat-body iframe');
-      if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
-    }
-    function applyLayout(m){
-      const{grid,left,right}=findLayout();
-      if(grid){
-        if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
-        else grid.style.removeProperty('grid-template-columns');
+      if(!found.length)found=(await gdiListAllFiles(pPath,gdiGetPw(pPath))).filter(isPdf);
+      const seen=new Set();const uniq=[];
+      found.forEach(x=>{if(!seen.has(x.name)){seen.add(x.name);uniq.push(x)}});
+      const pdfs=uniq.slice(0,12);
+      if(myGen!==gen)return;
+      if(!pdfs.length){
+        if(tabsEl.isConnected){
+          tabsEl.innerHTML='';
+          if(statusEl)statusEl.textContent='sem PDF';
+          if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+        }
+        return;
       }
-      if(right){
-        if(m==='fv')right.style.setProperty('display','none','important');
-        else right.style.removeProperty('display');
-      }
-      if(left){
-        if(m==='fm')left.style.setProperty('display','none','important');
-        else left.style.removeProperty('display');
-      }
-    }
-    function setMode(m){
-      document.body.classList.toggle('gdi-fv',m==='fv');
-      document.body.classList.toggle('gdi-fm',m==='fm');
-      try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
-      slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
-      applyLayout(m);
-      if(m!=='fv')setTimeout(zoom,60);
-    }
-    slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
-      b.addEventListener('click',()=>setMode(b.dataset.mode));
-    });
-    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
-    setMode(['fv','fm','split'].includes(saved)?saved:'split');
-    const wb=document.getElementById('gdi-watched-btn');
-    if(wb&&!wb.dataset.b){
-      wb.dataset.b='1';
-      wb.addEventListener('click',()=>{
-        const done=isDone();
-        if(done){window.gdiUnmarkVideo?gdiUnmarkVideo():GDIUser.unmarkWatched(window.location.pathname);}
-        else{window.gdiMarkVideo?gdiMarkVideo():GDIUser.markWatched(window.location.pathname);}
-        showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
+      const base=courseBase();
+      const items=pdfs.map(x=>{
+        const cls=classify(x.name);
+        const b2=UI.second_domain_for_dl?UI.downloaddomain+x.link:window.location.origin+x.link;
+        const url=b2+(x.link.includes('?')?'&':'?')+'inline=true';
+        const match=base&&x.name.toLowerCase().includes(base)?0:1;
+        return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
       });
+      items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
+      const used={};
+      items.forEach((it,idx)=>{
+        used[it.label]=(used[it.label]||0)+1;
+        it.tabLabel=used[it.label]>1?it.label+' '+used[it.label]:it.label;
+        it.idx=idx;
+      });
+      if(!tabsEl.isConnected)return;
+      tabsEl.innerHTML=items.map(it=>`
+        <div class="gdi-mat-tab" data-mat="${it.idx}" title="${escHtml(it.name)}">
+          <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
+        </div>`).join('');
+      if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
+      const isMobile=Os.isMobile;
+      function show(idx){
+        if(!tabsEl.isConnected||!bodyEl.isConnected)return;
+        tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
+        if(isMobile){
+          bodyEl.innerHTML=`<div class="gdi-mat-empty">
+            <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:#7aa2ff;"></i>
+            <div style="text-align:center;padding:0 16px;">
+              <div style="font-weight:600;margin-bottom:4px;">${escHtml(items[idx].name)}</div>
+              <div style="font-size:11px;color:#8b949e;margin-bottom:14px;">Toque para abrir o PDF</div>
+            </div>
+            <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;justify-content:center;min-width:200px;">
+              <i class="bi bi-box-arrow-up-right"></i> Abrir material
+            </a>
+          </div>`;
+          return;
+        }
+        let ifr=frames.get(items[idx].url);
+        if(!ifr){
+          ifr=document.createElement('iframe');
+          ifr.src=items[idx].url;ifr.loading='lazy';
+          ifr.title=items[idx].name;
+          frames.set(items[idx].url,ifr);
+        }
+        bodyEl.innerHTML='';bodyEl.appendChild(ifr);
+      }
+      tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>{
+        t.addEventListener('click',()=>show(+t.dataset.mat));
+      });
+      show(0);
+      console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
+    }catch(err){
+      if(myGen!==gen)return;
+      if(statusEl)statusEl.textContent='sem PDF';
+      if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-wifi-off" style="font-size:34px;"></i><div>N\u00e3o foi poss\u00edvel carregar os materiais.</div></div>`;
     }
-    updBtn();
-    Bus.onGlobal('watched:changed',updBtn);
-    Bus.onGlobal('user:ready',updBtn);
-    Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
-  }});
+  }
+  Bus.onGlobal('video:switched',()=>{setTimeout(build,80);});
+  window.GDI_MODULES.push({name:'materials',init:build});
 })();
+
 
 // ═══ M11 v3.2: MODO DESCANSO — UI fora do body (não é apagada pelo core) ═══
 (function(){
