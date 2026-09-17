@@ -1786,8 +1786,17 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
   }
   function ensureUI(){
-    const wrap=document.getElementById('gdi-playlist-wrap');
-    if(!wrap||wrap.dataset.m20)return;
+    let wrap=document.getElementById('gdi-playlist-wrap');
+    if(!wrap){
+      // ★FIX: app.min.js modular usa slots vazios (#gdi-slot-left) sem o
+      // markup da playlist. Cria o wrap dentro do slot se não existir.
+      const slot=document.getElementById('gdi-slot-left')||document.querySelector('.gdi-study-left');
+      if(!slot)return null;
+      wrap=document.createElement('div');
+      wrap.id='gdi-playlist-wrap';
+      slot.appendChild(wrap);
+    }
+    if(wrap.dataset.m20)return wrap;
     wrap.dataset.m20='1';
     wrap.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
@@ -1828,9 +1837,14 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       setTimeout(()=>location.reload(),600);
     });
     wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
+    return wrap;
   }
   window.GDI_MODULES.push({name:'playlist-ui',init:function(){
-    if(!document.getElementById('gdi-playlist-wrap'))return;
+    // ★FIX: roda em qualquer página de vídeo (tem #gdi-slot-left ou
+    // #gdi-study), não exige #gdi-playlist-wrap pré-existente.
+    const slot=document.getElementById('gdi-slot-left')||document.querySelector('.gdi-study-left');
+    const existing=document.getElementById('gdi-playlist-wrap');
+    if(!slot&&!existing)return;
     ensureUI();
     const list=document.getElementById('gdi-playlist-list');
     // ★FIX: UM listener delegado no container (era 1 por aula + observer infinito)
@@ -1845,6 +1859,19 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     }
     refreshAll();
   }});
+  // ★FIX: polling — buildPlaylist() no app.min.js é assíncrono; quando
+  // ele popula window.playlistVideos, o init já rodou. Re-renderiza
+  // quando detecta mudança no tamanho da playlist.
+  let _plLen=-1,_plPoll=0;
+  function _plPollFn(){
+    const n=items().length;
+    if(n!==_plLen){
+      _plLen=n;
+      if(n>0){ensureUI();refreshAll();}
+    }
+    if(++_plPoll<80&&_plPoll<80)setTimeout(_plPollFn,750); // ~60s
+  }
+  setTimeout(_plPollFn,500);
   Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
   Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
   Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
@@ -2775,7 +2802,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     if(!dot||!st)return;
     if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
     else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
-    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Servidor · online';_providerLabel='servidor <b>(/api/ai)</b>';}
+    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> 智谱AI (Zhipu) · online';_providerLabel='智谱AI <b>(Zhipu GLM · /api/ai)</b>';}
     const pv=panel.querySelector('.gdi-ai-provider');
     if(pv)pv.innerHTML='via '+_providerLabel;
   }
