@@ -2930,12 +2930,41 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   sendBtn.addEventListener('click',send);
   input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 
-  // detecta a IA do navegador ao carregar (1×)
-  detectBrowserAI().then(()=>{updateStatus();console.log('[ISA] IA do navegador:',_browserAIState);});
+  // ── Ativação condicional ──
+  // O botão 💖 só aparece se houver IA disponível: (1) IA do navegador
+  // pronta, OU (2) /api/ai/status retornar enabled=true. Caso contrário
+  // o widget fica oculto (display:none) mas TODO o código permanece
+  // intacto — basta configurar ZHIPU_API_KEY no Cloudflare para ativar.
+  function hideWidget(){fab.style.display='none';panel.style.display='none';}
+  function showWidget(){fab.style.display='';panel.style.display='';}
 
-  // badge de novidade após 8s se nunca abriu
+  let _serverEnabled=null; // null=desconhecido, true/false
+  function checkServerStatus(){
+    return fetch('/api/ai/status',{cache:'no-store'}).then(r=>r.ok?r.json():{enabled:false}).then(d=>{ _serverEnabled=!!(d&&d.enabled); return _serverEnabled; }).catch(()=>{ _serverEnabled=false; return false; });
+  }
+
+  // detecta a IA do navegador ao carregar (1×) + status do servidor
+  Promise.all([
+    detectBrowserAI(),
+    checkServerStatus()
+  ]).then(function(){
+    updateStatus();
+    const browserReady=(_browserAIState==='ready');
+    const serverOk=!!_serverEnabled;
+    console.log('[ISA] IA do navegador:',_browserAIState,'| servidor habilitado:',serverOk);
+    if(browserReady||serverOk){
+      showWidget();
+    }else{
+      // Nenhum backend disponível — esconde o botão mas mantém o código.
+      // Ativa automaticamente quando o usuário configurar ZHIPU_API_KEY.
+      hideWidget();
+      console.log('[ISA] widget oculto — configure ZHIPU_API_KEY no Cloudflare para ativar');
+    }
+  });
+
+  // badge de novidade após 8s se nunca abriu (só se visível)
   if(!sessionStorage.getItem('gdi-ai-seen')){
-    setTimeout(()=>{if(!panel.classList.contains('open'))badge.classList.add('show');},8000);
+    setTimeout(()=>{if(fab.style.display!=='none'&&!panel.classList.contains('open'))badge.classList.add('show');},8000);
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
 
