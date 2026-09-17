@@ -1,17 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════
-   gdi-extras.js v2.3 — COMPLETO
-   • M13 v19.2: card Continuar em cascata + RETOMADO o retry no
-     user:ready (bug dos tiles sumidos em F5), isHome aceita /6:/
-     com barra final, "last" respeita a subárvore da pasta
-   • M11 v2: Modo descanso — botão no canto esquerdo visível SOMENTE
-     em tela cheia (janela grande) na página do player de vídeo;
-     ativado apenas por clique do usuário, sem fade automático
-   • M20: playlist no extras — recolhível (Alfacon), ✓ confiável
-     (chave dupla + auto-cura), filtro, 🔄 cache, 💾 playlist.json
-   • M10 v3: foco força player a 100% (CSS + inline)
-   • M5 v3: auto-assistido grava nas duas chaves
+   gdi-extras.js v2.6-fix — COMPLETO
+   ★FIX PRINCIPAL (o travamento de verdade): o M20 tinha um
+     MutationObserver observando a própria lista que ele reescrevia.
+     Quando o render demorava >150ms (playlists grandes), o observer
+     se auto-disparava INFINITAMENTE: render → mutação → observer →
+     render → … A main thread ficava presa para sempre — por isso o
+     "Aguardar ou fechar" do Chrome nunca resolvia. O observer foi
+     REMOVIDO; a playlist agora re-renderiza só via Bus.
+   Outras correções: teto de 600 itens + 1 listener delegado (M20),
+     listeners globais fora do init (M10/M6), observer do M14
+     desconectado ao trocar de página, M9 não reconstrói na mesma
+     aula, M7 só toca no DOM quando muda, M22 limita cursos.
    ═══════════════════════════════════════════════════════════════ */
-console.log('[GDI Extras Modular] v2.3 carregado');
+console.log('[GDI Extras Modular] v2.6-fix carregado');
+const GDI_ROOT=()=>document.documentElement; // UI flutuante vive aqui (fora do body)
 
 window.GDI_MODULES = window.GDI_MODULES || [];
 
@@ -82,6 +84,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   border-radius:6px;padding:2px 8px;white-space:nowrap;}
 .gdi-modprog b{color:#8ab4ff;font-weight:600;}
 .gdi-pdf-controls{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);flex-wrap:wrap;}
+/* ★FIX: playlist por classes (igual ao core) — sem estilo inline por item */
+.gdi-playlist-item{padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);transition:background .15s;}
+.gdi-playlist-item:hover{background:rgba(255,255,255,0.12);}
+.gdi-playlist-item>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;}
+.gdi-playlist-item.cur{background:var(--bs-primary,#1f6feb);color:#fff;}
+.gdi-playlist-item.watched{opacity:.75;}
+.gdi-playlist-item.watched .bi-check-circle-fill{color:#3fb950;}
+.gdi-pl-size{font-size:11px;opacity:.8;white-space:nowrap;}
 #gdi-pom-root{position:fixed;bottom:76px;right:16px;z-index:10000;font-family:inherit;}
 #gdi-pom-fab{position:relative;width:50px;height:50px;border-radius:50%;cursor:pointer;
   background:conic-gradient(var(--pom-c,#1f6feb) calc(var(--pom-p,0)*1%),rgba(255,255,255,.09) 0);
@@ -123,16 +133,19 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 #gdi-pom-flash{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s;}
 `;document.head.appendChild(s);})();
 
-// ── Loader dos módulos — observa #content (páginas de vídeo montam o DOM async) ──
+// ── Loader dos módulos (anti-tempestade) ──
+// ★FIX: debounce 80→150ms
 (function(){
-  let timer=null;
+  let timer=null,lastRun=0;
   function runAll(){
+    if(Date.now()-lastRun<100){schedule();return;}
+    lastRun=Date.now();
     (window.GDI_MODULES||[]).forEach(m=>{
       try{ if(m&&typeof m.init==='function') m.init(); }
       catch(e){ console.error('[GDI módulo]',m&&m.name,e); }
     });
   }
-  function schedule(){clearTimeout(timer);timer=setTimeout(runAll,80);}
+  function schedule(){clearTimeout(timer);timer=setTimeout(runAll,150);}
   function bindContent(){
     const c=document.getElementById('content');
     if(c&&!c.__gdiModObs){c.__gdiModObs=true;
@@ -195,7 +208,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   document.addEventListener('loadedmetadata',e=>{const v=e.target;if(v&&v.tagName==='VIDEO')apply(v)},true);
 })();
 
-// ═══ M4: ATALHOS (N/P, J = próxima não assistida, ]/[ trechos) ═══
+// ═══ M4: ATALHOS (N/P, J, ]/[ trechos) ═══
 (function(){
   let marksVideo=null;
   Bus.onGlobal('media:ready',({type,el})=>{if(type==='video')marksVideo=el;});
@@ -229,7 +242,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% (chave dupla via M20) ═══
+// ═══ M5 v3: CRONÔMETRO + AUTO-ASSISTIDO 90% ═══
 (function(){
   Bus.onGlobal('media:ready',({type,el})=>{
     if(type!=='video'||!el||el.__m5v3)return;
@@ -266,7 +279,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   });
 })();
 
-// ═══ M6: MARCAS NA TIMELINE + NOTAS + REVISÃO + EXPORT (md/anki) + DUPLO-TOQUE ═══
+// ═══ M6: MARCAS + NOTAS + REVISÃO + EXPORT + DUPLO-TOQUE ═══
 (function(){
   let mv=null,reviewOn=false;
   const SPAN=20;
@@ -317,7 +330,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     m.style.cssText='position:fixed;z-index:10001;background:rgba(15,16,24,.97);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);left:'+Math.max(8,r.left-60)+'px;top:'+(r.bottom+6)+'px;';
     m.innerHTML=`<button class="gdi-mode-btn" id="gdi-exp-md" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-markdown"></i> Markdown (.md)</button>
     <button class="gdi-mode-btn" id="gdi-exp-anki" style="justify-content:flex-start;font-size:12px;"><i class="bi bi-collection"></i> Anki / texto (.txt)</button>`;
-    document.body.appendChild(m);
+    GDI_ROOT().appendChild(m);
     document.getElementById('gdi-exp-md').onclick=()=>{m.remove();doExport('md');};
     document.getElementById('gdi-exp-anki').onclick=()=>{m.remove();doExport('anki');};
     setTimeout(()=>document.addEventListener('click',function h(e2){
@@ -339,11 +352,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }
     const blob=new Blob([content],{type});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=base+'.'+ext;
-    document.body.appendChild(a);a.click();a.remove();
+    GDI_ROOT().appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     showToast(notes.length+' anota\u00e7\u00e3o'+(notes.length>1?'\u00f5es':'')+' exportada'+(notes.length>1?'s':''));
   }
   window.GDI_REVIEW_SPAN=SPAN;
+  // ★FIX: user:ready registrado UMA vez (dispatcher), não 1× por página de vídeo
+  if(!window.__gdiM6UR){window.__gdiM6UR=true;
+    Bus.onGlobal('user:ready',()=>{try{window.__gdiM6Render&&window.__gdiM6Render()}catch(_){}});}
   window.GDI_MODULES.push({name:'marks-ui',init:function(){
     const wrap=document.querySelector('.gdi-player-wrap');
     if(wrap&&!document.getElementById('gdi-note-marks')){
@@ -429,7 +445,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         render();
       });
       GDIUser.ready().then(render).catch(()=>{});
-      Bus.onGlobal('user:ready',render);
+      window.__gdiM6Render=render; // ★FIX: dispatcher global único
     }
     function render(){
       const listEl=document.getElementById('gdi-notes-list');
@@ -479,10 +495,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       let show=false;
       if(S&&S>0)show=tm>0.4&&tm<S-0.3&&tm<180;
       else show=tm>1&&tm<120;
-      skipBtn.innerHTML=S
+      // ★FIX: só toca no DOM quando muda (era reescrito a cada timeupdate)
+      const html=S
         ?'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o ('+gdiFmtTime(S)+')'
         :'<i class="bi bi-skip-forward-fill"></i> Pular introdu\u00e7\u00e3o';
-      skipBtn.style.display=show?'block':'none';
+      if(skipBtn.innerHTML!==html)skipBtn.innerHTML=html;
+      const disp=show?'block':'none';
+      if(skipBtn.style.display!==disp)skipBtn.style.display=disp;
     };
     el.addEventListener('timeupdate',upd);
     el.addEventListener('seeked',()=>setTimeout(upd,80));
@@ -512,7 +531,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
 // ═══ M9: MATERIAIS (PDFs por aula) ═══
 (function(){
-  const frames=new Map();let gen=0;
+  const frames=new Map();let gen=0,lastKey='';
   function classify(name){
     const n2=name.toLowerCase();
     if(/mapa/.test(n2))                       return{l:'Mapa Mental', i:'bi-diagram-3',              ord:4};
@@ -546,6 +565,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const myGen=++gen;
     const p=window.location.pathname;
     if(p.endsWith('/')||p.includes('/fallback'))return;
+    // ★FIX: loader re-roda os módulos várias vezes na MESMA aula — não reconstruir
+    if(p===lastKey){
+      const tabs=document.getElementById('gdi-mat-tabs');
+      const body=document.getElementById('gdi-mat-body');
+      if(tabs&&body&&(tabs.querySelector('.gdi-mat-tab')||body.querySelector('.gdi-mat-empty')))return;
+    }
     let panel=null;
     for(let i=0;i<40;i++){
       panel=ensurePanel();
@@ -585,6 +610,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           tabsEl.innerHTML='';
           if(statusEl)statusEl.textContent='sem PDF';
           if(bodyEl)bodyEl.innerHTML=`<div class="gdi-mat-empty"><i class="bi bi-file-earmark-x" style="font-size:34px;"></i><div>Nenhum material PDF encontrado para esta aula.</div></div>`;
+          lastKey=p;
         }
         return;
       }
@@ -639,6 +665,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         t.addEventListener('click',()=>show(+t.dataset.mat));
       });
       show(0);
+      lastKey=p;
       console.log('[GDI Materiais] aula:',base||'(sem nome)','\u2192',items.length,'PDFs:',items.map(x=>x.tabLabel).join(' | '));
     }catch(err){
       if(myGen!==gen)return;
@@ -650,10 +677,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
-// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO (chave dupla) ═══
-// v5: independe do core — cria a própria barra se #gdi-slot-modes não
-//     existir, e descobre as colunas do layout por âncoras (player +
-//     painel de materiais) mesmo se as classes do core mudarem.
+// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO ═══
 (function(){
   if(!document.getElementById('gdi-focus-style')){
     const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
@@ -695,7 +719,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     wb.classList.toggle('done',done);
     wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
   }
-  // Colunas do layout: pelas classes padrão OU por âncoras (player + materiais)
   function findLayout(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
@@ -716,10 +739,15 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return{grid:null,left:null,right:null};
   }
+  // ★FIX: registrados UMA vez no escopo do IIFE (antes: +3 handlers
+  //       globais por página de vídeo, acumulando para sempre)
+  Bus.onGlobal('watched:changed',updBtn);
+  Bus.onGlobal('user:ready',updBtn);
+  Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
   window.GDI_MODULES.push({name:'focus-modes',init:function(){
     const study=document.getElementById('gdi-study');
     const wrap=document.querySelector('.gdi-player-wrap');
-    if(!study&&!wrap)return; // ainda não é página de aula
+    if(!study&&!wrap)return;
     let slot=document.getElementById('gdi-slot-modes');
     let created=false;
     if(!slot){
@@ -785,42 +813,41 @@ body.gdi-fv .gdi-player-wrap iframe{
       });
     }
     updBtn();
-    Bus.onGlobal('watched:changed',updBtn);
-    Bus.onGlobal('user:ready',updBtn);
-    Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
   }});
 })();
 
-// ═══ M11 v2: MODO DESCANSO — botão no canto esquerdo, visível SOMENTE em
-//     tela cheia (janela grande) na página do player; ativado só por clique ═══
-// Por que não funcionava antes: o botão ficava em document.body, e elementos
-// FORA do elemento em tela cheia não são exibidos — ao entrar na janela grande
-// ele sumia. Agora botão e overlay são movidos PARA DENTRO do fullscreen.
+// ═══ M11 v3.2: MODO DESCANSO — UI fora do body ═══
 (function(){
   let btn=null,overlay=null,sleeping=false,bound=false,wakeGuard=0;
   const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
-  const onVideoPage=()=>!!document.querySelector('.gdi-player-wrap');
+  const wrapEl=()=>document.querySelector('.gdi-player-wrap');
   const onAudioPage=()=>!!document.getElementById('aplayer-container');
   function ensureEls(){
-    if(btn&&btn.isConnected)return;
-    overlay=document.createElement('div');
-    overlay.id='gdi-sleep-overlay';
-    overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
-    overlay.title='Clique para sair do modo descanso';
-    overlay.addEventListener('click',()=>exitSleep());
-    btn=document.createElement('button');
-    btn.id='gdi-sleep-btn';
-    btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
-    btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
-    btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
-    btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
-    document.body.appendChild(overlay);
-    document.body.appendChild(btn);
+    const needOv=!overlay||!overlay.isConnected;
+    const needBt=!btn||!btn.isConnected;
+    if(!needOv&&!needBt)return;
+    if(needOv){
+      overlay=document.createElement('div');
+      overlay.id='gdi-sleep-overlay';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#000;opacity:0;pointer-events:none;transition:opacity 2.5s ease;cursor:pointer;';
+      overlay.title='Clique para sair do modo descanso';
+      overlay.addEventListener('click',()=>exitSleep());
+    }
+    if(needBt){
+      btn=document.createElement('button');
+      btn.id='gdi-sleep-btn';
+      btn.innerHTML='<i class="bi bi-moon-stars-fill"></i>';
+      btn.title='Modo descanso (apenas \u00e1udio) \u2014 clique para ligar';
+      btn.style.cssText='position:fixed;bottom:76px;left:16px;z-index:2147483001;background:rgba(18,18,28,0.92);border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;width:40px;height:40px;color:#74c0fc;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.5);';
+      btn.addEventListener('click',e=>{e.stopPropagation();sleeping?exitSleep():enterSleep();});
+    }
+    if(!overlay.parentElement)GDI_ROOT().appendChild(overlay);
+    if(!btn.parentElement)GDI_ROOT().appendChild(btn);
   }
   function enterSleep(){
     if(sleeping)return;
     sleeping=true;
-    wakeGuard=Date.now()+2500; // carência: o clique que ativou não desperta na hora
+    wakeGuard=Date.now()+2500;
     overlay.style.transition='opacity 2.5s ease';
     overlay.style.pointerEvents='all';
     overlay.style.opacity='0.97';
@@ -841,26 +868,24 @@ body.gdi-fv .gdi-player-wrap iframe{
   function syncFs(){
     ensureEls();
     const fs=fsEl();
-    const video=onVideoPage(),audio=onAudioPage();
+    const wrap=wrapEl();
+    const video=!!wrap,audio=onAudioPage();
     if(!video&&!audio){btn.style.display='none';if(sleeping)exitSleep();return;}
     let fsOk=false;
     if(fs&&fs.tagName!=='VIDEO'){
-      if(!video)fsOk=true; // página de áudio: qualquer tela cheia serve
-      else fsOk=fs.contains(document.querySelector('.gdi-player-wrap'))||fs===document.documentElement||fs===document.body;
+      if(!video)fsOk=true;
+      else fsOk=fs===document.documentElement||fs===document.body||fs===wrap||fs.contains(wrap)||wrap.contains(fs);
     }
-    const host=fsOk?fs:document.body;
+    const host=fsOk?fs:GDI_ROOT();
     if(btn.parentElement!==host)host.appendChild(btn);
     if(overlay.parentElement!==host)host.appendChild(overlay);
-    // Página de vídeo: botão visível APENAS em tela cheia (janela grande).
     btn.style.display=(video&&!fsOk)?'none':'flex';
-    if(sleeping&&video&&!fsOk)exitSleep(); // saiu da tela cheia → sai do descanso
+    if(sleeping&&video&&!fsOk)exitSleep();
   }
   function bindOnce(){
     if(bound)return;bound=true;
     document.addEventListener('fullscreenchange',syncFs);
     document.addEventListener('webkitfullscreenchange',syncFs);
-    // Despertar: clique, tecla, toque ou movimento (após a carência). O clique
-    // no próprio botão é ignorado aqui para não cancelar o toggle do clique.
     ['mousemove','mousedown','keydown','touchstart'].forEach(ev=>{
       document.addEventListener(ev,e=>{
         if(!sleeping||Date.now()<wakeGuard)return;
@@ -876,13 +901,12 @@ body.gdi-fv .gdi-player-wrap iframe{
     });
   }
   window.GDI_MODULES.push({name:'sleep-mode',init:function(){
-    ensureEls();
-    bindOnce();
-    syncFs();
+    ensureEls();bindOnce();syncFs();
   }});
+  console.log('[GDI M11] v3.2 descanso registrado');
 })();
 
-// ═══ M12: POMODORO v2.4 ═══
+// ═══ M12: POMODORO v2.5 (UI fora do body) ═══
 (function(){
   window.GDI_MODULES.push({name:'pomodoro',init:function(){
     if(window.__gdiPomodoroBooted)return;
@@ -891,7 +915,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
     const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
     const safeParse=s=>{try{return JSON.parse(s)}catch(e){return null}};
-    const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';document.body.appendChild(flashEl);
+    const flashEl=document.createElement('div');flashEl.id='gdi-pom-flash';
     const root=document.createElement('div');root.id='gdi-pom-root';
     root.innerHTML=`
     <div id="gdi-pom-fab" title="Pomodoro"><span>🍅</span></div>
@@ -914,7 +938,8 @@ body.gdi-fv .gdi-player-wrap iframe{
         <label class="gdi-pom-switch"><span>▶ Auto-iniciar próxima fase</span><input id="gdi-pom-c-auto" type="checkbox" checked></label>
       </div>
     </div>`;
-    document.body.appendChild(root);
+    GDI_ROOT().appendChild(flashEl);
+    GDI_ROOT().appendChild(root);
     if(!document.querySelector('video,audio')&&!window._gdiAPlayer)root.style.display='none';
     const CKEY='gdi-pom-cfg-v2',SKEY='gdi-pom-state-v2';
     let cfg=Object.assign({work:25,short:5,long:15,sessions:4,autoStart:true},safeParse(localStorage.getItem(CKEY))||{});
@@ -1005,7 +1030,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       if(cfg.autoStart){st.endAt=Date.now()+st.total*1000;persist();startLoop();}
       else{persist();updateUI();}}
     $id('gdi-pom-fab').addEventListener('click',()=>{panelOpen=!panelOpen;$id('gdi-pom-panel').classList.toggle('open',panelOpen);if(panelOpen)updateUI();});
-    document.addEventListener('click',e=>{if(panelOpen&&!root.contains(e.target)){panelOpen=false;$id('gdi-pom-panel').classList.remove('open');}},{capture:true});
+    document.addEventListener('click',e=>{if(panelOpen&&!root.contains(e.target)){panelOpen=false;$id('gdi-pom-panel')?.classList.remove('open');}},{capture:true});
     $id('gdi-pom-start').addEventListener('click',()=>st.running?pause():start());
     $id('gdi-pom-skip').addEventListener('click',next);
     $id('gdi-pom-reset').addEventListener('click',reset);
@@ -1021,24 +1046,18 @@ body.gdi-fv .gdi-player-wrap iframe{
         loadCfg();
         if(!st.running){st.phase='work';st.dots=0;dotsCache='';st.total=cfg.work*60;st.remain=st.total;persist();updateUI();}});});
     $id('gdi-pom-c-auto').addEventListener('change',e=>{cfg.autoStart=e.target.checked;localStorage.setItem(CKEY,JSON.stringify(cfg));});
-    new MutationObserver(()=>{if(!document.body.contains(root))document.body.appendChild(root);
-      if(!document.body.contains(flashEl))document.body.appendChild(flashEl);}).observe(document.body,{childList:true});
     updateUI();
-    console.log('[GDI Pomodoro] v2.4 pronto');
-  }}); 
+    console.log('[GDI Pomodoro] v2.5 pronto');
+  }});
 })();
 
-// ═══ M13: CARD "CONTINUAR" EM CASCATA (v19.6 — nomes reais) ═══
-// v19.6: nomes genéricos ("video.mp4", "aula", "001 - aula", "Parte 1"…)
-//        são trocados pelo nome da PASTA da aula (tile e Recentes);
-//        cabeçalho "Continuar em {contexto}" (sem "Continuar em Continuar").
-// v19.5: alvo VERIFICADO no servidor (fantasmas ignorados, cai pro próximo).
-// v19.4: fonte de dados própria (/userstate) quando o GDIUser não carrega.
+// ═══ M13 v19.6: CARD "CONTINUAR" EM CASCATA ═══
 (function(){
+  // ★FIX: guarda contra registro duplo caso o script seja reexecutado
+  if(window.__GDI_M13__)return;
+  window.__GDI_M13__=true;
   const DBG=true;
   const log=(...a)=>{if(DBG)try{console.log('[GDI M13]',...a)}catch(_){}};
-
-  // ── nomes reais ──
   function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()}
   const GENERIC_WORDS=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|lesson|lessons|class|classes|modulo|m\u00f3dulo|module|modulos|m\u00f3dulos|modules|parte|partes|pt|cap|caps|capitulo|cap\u00edtulo|ext|ep|eps|episodio|epis\u00f3dio|live|revisao|revis\u00e3o|arquivo|file)$/i;
   function isGenericName(raw){
@@ -1049,7 +1068,6 @@ body.gdi-fv .gdi-player-wrap iframe{
       .join('');
     return reduced.length===0;
   }
-  // nome de exibição: o do arquivo; se genérico, sobe pastas até achar nome com conteúdo
   function realNameOf(path){
     const seg=normPath(path).split('/').filter(Boolean);
     let name=stripExt(seg[seg.length-1]||'');
@@ -1061,8 +1079,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return name||'Aula';
   }
-
-  // ── camada de dados: GDIUser → fallback /userstate direto ──
   let rescue=null,rescueAt=0;
   function ensureRescue(force){
     if(!force&&rescue&&Date.now()-rescueAt<60000)return;
@@ -1148,7 +1164,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }catch(_){}
     location.href=href;
   }
-  // nome + contexto do alvo (com nomes reais: genérico sobe para a pasta)
   function nameInfo(target){
     const cur=normPath(window.location.pathname);
     const isDriveRoot=/^\/\d+:$/.test(cur);
@@ -1204,7 +1219,7 @@ body.gdi-fv .gdi-player-wrap iframe{
     due.sort((a,b)=>a.due-b.due);
     const ov=document.createElement('div');ov.id='gdi-srs-panel';
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
-    document.body.appendChild(ov);
+    GDI_ROOT().appendChild(ov);
     let idx=0;
     function render(){
       if(idx>=due.length){
@@ -1233,8 +1248,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     render();
   }
-
-  // fantasma? arquivo cujo nome começa com "pasta - "
   function ghostScore(path){
     const seg=normPath(path).split('/').filter(Boolean);
     if(seg.length<2)return 0;
@@ -1257,7 +1270,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     out.sort((a,b)=>(ghostScore(a.path)-ghostScore(b.path))||(b.at-a.at));
     return out;
   }
-  // o caminho existe de verdade? (mesmo check que a página da aula faz)
   const vCache=new Map();
   function verify(path){
     if(vCache.has(path))return Promise.resolve(vCache.get(path));
@@ -1274,7 +1286,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     return null;
   }
-
   function dbg(){
     const d=stateD();
     return{
@@ -1287,7 +1298,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     };
   }
   window.gdiM13Debug=function(){const x=dbg();console.log('[GDI M13] diagnóstico:',x);return x;};
-
   let rendering=false;
   async function continueCardInit(){
     if(rendering)return;
@@ -1326,7 +1336,6 @@ body.gdi-fv .gdi-player-wrap iframe{
     for(const k in d.resume){const r=d.resume[k]||{};hours+=Math.min(r.t||0,(r.d>0?r.d:r.t)||0)}
     hours/=3600;
     const due=srsDueCount();
-    // ── recentes: dedup por caminho + NOME REAL (genérico → pasta) ──
     const hMap=new Map();
     (Array.isArray(d.history)?d.history:[]).forEach(h=>{
       if(!h||!h.path||h.path===p||!inSubtree(h.path)||!okPath(h.path))return;
@@ -1387,18 +1396,24 @@ body.gdi-fv .gdi-player-wrap iframe{
     }
     html+='</div>';
     host.insertAdjacentHTML('afterbegin',html);
-    host.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
-    document.getElementById('gdi-srs-open')?.addEventListener('click',srsOpen);
+    // ★FIX: listeners presos ao CARD (antes pegava todos [data-gdi-go] do wrapper)
+    const card=document.getElementById('gdi-home-card');
+    if(card){
+      card.querySelectorAll('[data-gdi-go]').forEach(a=>a.addEventListener('click',safeGo));
+      card.querySelector('#gdi-srs-open')?.addEventListener('click',srsOpen);
+    }
     log('card renderizado \u2014 alvo verificado:',target||'(nenhum)','| nome:',lbl?lbl.name:'-');
   }
-
   window.GDI_MODULES.push({name:'continue-card',init:continueCardInit});
   Bus.onGlobal('user:ready',()=>setTimeout(continueCardInit,50));
-  Bus.onGlobal('video:switched',()=>{if(!(window.GDIUser&&GDIUser.loaded()))ensureRescue(true);setTimeout(continueCardInit,250);});
-  log('v19.6 registrado (alvo verificado + nomes reais)');
+  Bus.onGlobal('video:switched',()=>{
+    if(!(window.GDIUser&&GDIUser.loaded())&&Date.now()-rescueAt>15000)ensureRescue(true);
+    setTimeout(continueCardInit,250);
+  });
+  log('v19.6-fix registrado');
 })();
 
-// ═══ M14: PROGRESSOS (pasta, 1ª não assistida, curso, por módulo) ═══
+// ═══ M14: PROGRESSOS ═══
 (function(){
   let busy=false;
   function modProgress(){
@@ -1503,242 +1518,14 @@ body.gdi-fv .gdi-player-wrap iframe{
   window.GDI_MODULES.push({name:'progress',init:function(){
     const c=document.getElementById('count');
     if(c&&!c.__m14){c.__m14=true;
-      new MutationObserver(()=>line()).observe(c,{childList:true,characterData:true,subtree:true});}
+      // ★FIX: desconecta o observer da página anterior (vazamento por página)
+      if(window.__gdiM14obs){try{window.__gdiM14obs.disconnect()}catch(_){}}
+      const obs=new MutationObserver(()=>line());
+      obs.observe(c,{childList:true,characterData:true,subtree:true});
+      window.__gdiM14obs=obs;}
     line();modProgress();
   }});
   Bus.onGlobal('user:ready',()=>{try{line()}catch(_){}});
-})();
-// ═══ M19: TÍTULO LIMPO DA ABA ═══
-// O nome imenso (caminho inteiro da aula) vira curto e legível:
-//   "pasta pai · nome da aula"  →  "12. 8 em cada 10 profissionais · aula"
-// • decodifica (%20 → espaço), remove extensão, colapsa espaços duplos
-// • raiz do drive → nome do drive | truncado em 64 caracteres
-// • NÃO mexe quando o Pomodoro (M12) está com o cronômetro no título
-// • NÃO altera a URL (a rota é real — encurtar quebraria o refresh)
-(function(){
-  const MAX=64;
-  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/; // prefixo do pomodoro — deixar quieto
-  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
-  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
-  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
-  function build(name,parent){
-    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
-    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
-    let t=parent?parent+' \u00b7 '+name:name;
-    if(t.length>MAX)t=(name||'').slice(0,MAX);
-    return t;
-  }
-  // na página de aula: usa a entrada atual da playlist (vale também quando
-  // troca de aula sem recarregar a página)
-  function fromPlaylist(){
-    try{
-      const pv=window.playlistVideos,ci=window.currentIndex;
-      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
-        const m=pv[ci];
-        const ps=segs(m.pageUrl||'');
-        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
-      }
-    }catch(_){}
-    return null;
-  }
-  // demais páginas: deriva do próprio caminho da URL
-  function fromUrl(){
-    const seg=segs(window.location.pathname);
-    if(!seg.length)return null;
-    const first=seg[0]||'';
-    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null; // /0:search etc. — não mexe
-    if(/^\d+:$/.test(first)){
-      if(seg.length===1){
-        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
-        return dn||null;
-      }
-      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
-    }
-    return null; // /fallback e afins — deixa o título do core
-  }
-  function apply(){
-    try{
-      const cur=document.title||'';
-      if(POMO.test(cur))return; // pomodoro rodando: M12 manda no título
-      const next=fromPlaylist()||fromUrl();
-      if(!next||next===cur)return;
-      document.title=next;
-    }catch(_){}
-  }
-  function bindTitle(){
-    const el=document.querySelector('title');
-    if(!el){setTimeout(bindTitle,400);return;}
-    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
-  }
-  bindTitle();
-  setInterval(apply,1500); // rede de segurança
-  Bus.onGlobal('page:change',apply);
-  Bus.onGlobal('title:change',apply);
-  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
-  Bus.onGlobal('media:ready',apply);
-  window.GDI_MODULES.push({name:'clean-title',init:apply});
-  apply();
-  console.log('[GDI M19] t\u00edtulo limpo ativo');
-})();
-
-// ═══ M20: PLAYLIST — recolhível (Alfacon) + ✓ confiável + 💾 playlist.json ═══
-// ★ Correção do bug "nome vira tamanho": o span do tamanho é pego por
-//   el.lastElementChild (filho DIRETO), nunca por span:last-child que
-//   casava com o span do nome dentro do div interno.
-(function(){
-  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched';
-  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
-  window.gdiNormKey=norm;
-  window.gdiVideoKey=function(){
-    try{const pv=window.playlistVideos,ci=window.currentIndex;
-      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
-    }catch(_){}
-    return window.location.pathname;
-  };
-  window.gdiMarkVideo=function(){
-    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
-    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
-    Bus.emit('watched:changed');
-  };
-  window.gdiUnmarkVideo=function(){
-    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
-      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
-    });
-    Bus.emit('watched:changed');
-  };
-  function isW(m){
-    const raw=(m.pageUrl||'').split('?')[0];
-    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
-  }
-  function items(){return window.playlistVideos||[]}
-  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
-  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
-  function healKeys(){
-    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
-    const raw=(m.pageUrl||'').split('?')[0];
-    let a=false,b=false,c=false;
-    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
-    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
-        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
-  }
-  let writing=false; // evita loop do MutationObserver
-  function renderItems(){
-    const list=document.getElementById('gdi-playlist-list');
-    if(!list)return;
-    const pv=items(),ci=cur();
-    if(!pv.length){writing=true;list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';writing=false;return;}
-    const hide=localStorage.getItem(LS_HIDE)==='1';
-    let h='';
-    pv.forEach((m,idx)=>{
-      const w=isW(m),c=idx===ci;
-      if(hide&&w&&!c)return;
-      const nm=m.name||m.origName||'(sem nome)';
-      h+=`<div class="gdi-playlist-item" data-idx="${idx}" style="padding:8px 12px;margin:3px 0;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;${c?'background:var(--bs-primary,#1f6feb);color:#fff;':'background:rgba(255,255,255,0.05);color:var(--gdi-text,#e6edf3);'}">
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;">
-          <i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2" ${w&&!c?'style="color:#3fb950;"':''}></i>
-          <span style="font-weight:${c?'600':'400'};${w&&!c?'opacity:.75;':''}">${escHtml(nm)}</span>
-        </div>
-        <span style="font-size:11px;opacity:0.8;white-space:nowrap;">${w?'\u2713 ':''}${m.size||''}</span>
-      </div>`;
-    });
-    writing=true;
-    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
-    writing=false;
-    list.querySelectorAll('.gdi-playlist-item').forEach(el=>{
-      el.addEventListener('click',()=>{
-        const k=parseInt(el.dataset.idx,10);
-        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
-      });
-    });
-    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
-      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
-  }
-  function renderMeta(){
-    const pv=items(),ci=cur();
-    const cnt=document.getElementById('gdi-pl-count');
-    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
-  }
-  function syncWatchedBtn(){
-    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
-    let done=false;
-    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
-    wb.classList.toggle('done',done);
-    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
-  }
-  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
-  function downloadJSON(){
-    const pv=items();
-    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
-    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
-      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
-    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
-    document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
-  }
-  function ensureUI(){
-    const wrap=document.getElementById('gdi-playlist-wrap');
-    if(!wrap||wrap.dataset.m20)return;
-    wrap.dataset.m20='1';
-    wrap.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
-      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
-        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
-        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
-        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
-      </button>
-      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
-      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
-      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json \u2014 suba na pasta superior p/ carregar instant\u00e2neo em qualquer dispositivo"><i class="bi bi-filetype-json"></i></button>
-    </div>
-    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
-      <div id="gdi-playlist-list"></div>
-    </div>`;
-    const body=wrap.querySelector('#gdi-playlist-body');
-    const chev=wrap.querySelector('#gdi-pl-chev');
-    const setOpen=v=>{
-      body.style.display=v?'block':'none';
-      chev.className='bi bi-chevron-'+(v?'up':'down');
-      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
-    };
-    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
-    setOpen(open); // padrão: RECOLHIDA, como no Alfacon
-    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
-    const fBtn=wrap.querySelector('#gdi-pl-filter');
-    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
-      fBtn.classList.toggle('active',on);
-      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
-    fBtn.addEventListener('click',()=>{
-      const on=localStorage.getItem(LS_HIDE)==='1';
-      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
-    fSync();
-    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
-      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
-      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
-      showToast('Cache apagado \u2014 reescaneando\u2026');
-      setTimeout(()=>location.reload(),600);
-    });
-    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
-  }
-  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
-    if(!document.getElementById('gdi-playlist-wrap'))return;
-    ensureUI();
-    const list=document.getElementById('gdi-playlist-list');
-    if(list&&!list.__m20obs){
-      list.__m20obs=true;
-      let lastWrite=0;
-      new MutationObserver(()=>{
-        if(writing||Date.now()-lastWrite<150)return; // ignora as próprias reescritas
-        lastWrite=Date.now();
-        setTimeout(()=>{healKeys();renderItems();renderMeta();},30);
-      }).observe(list,{childList:true});
-    }
-    refreshAll();
-  }});
-  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
-  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
-  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
 })();
 
 // ═══ M16: PWA best-effort ═══
@@ -1825,7 +1612,7 @@ body.gdi-fv .gdi-player-wrap iframe{
   };
 })();
 
-// ═══ M18: PAINEL DE DEBUG (GDIDebug) ═══
+// ═══ M18: PAINEL DE DEBUG ═══
 const GDIDebug=(()=>{const i=[];let e=null;function t(){return new Date().toISOString().slice(11,23)}function n(){if(e||(e=document.getElementById("gdi-debug-log")),!e)return;const d={req:"#da77f2",api:"#69db7c",error:"#ff6b6b",warn:"#ffa94d",info:"#74c0fc"},o=i.map(r=>{const p=d[r.type]||"#aaa",g=r.data!=null?typeof r.data=="string"?r.data:JSON.stringify(r.data,null,2):"";return`<div class="gdi-dbg-entry"><span class="gdi-dbg-ts">${r.ts}</span><span class="gdi-dbg-badge" style="color:${p}">[${r.type.toUpperCase()}]</span><span class="gdi-dbg-msg">${escHtml(r.label)}</span>`+(g?`<pre class="gdi-dbg-pre">${escHtml(g)}</pre>`:"")+"</div>"}).join("");e.innerHTML=o||'<span class="gdi-dbg-empty">No entries yet.</span>',e.scrollTop=e.scrollHeight;const s=document.getElementById("gdi-dbg-count");s&&(s.textContent=i.length)}function a(d,o,s){window.UI?.debug_mode&&(i.push({ts:t(),type:d,label:o,data:s!==void 0?s:null}),n())}function c(){e=document.getElementById("gdi-debug-log"),i.length>0&&n(),a("info","Debug attached",{path:window.location.pathname,search:window.location.search,drive:window.current_drive_order,version:window.UI?.version,model_type:window.MODEL?.root_type})}function l(){i.length=0,e&&(e.innerHTML='<span class="gdi-dbg-empty">Cleared.</span>');const d=document.getElementById("gdi-dbg-count");d&&(d.textContent="0")}return{log:a,attach:c,clear:l}})();
 window.GDIDebug=GDIDebug;
 
@@ -1843,17 +1630,699 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       <button onclick="event.stopPropagation();document.getElementById('gdi-debug-log').classList.toggle('collapsed')">Toggle</button>
     </div></div>
   <div id="gdi-debug-log" class="collapsed"></div>`;
-  document.body.appendChild(wrap);
+  GDI_ROOT().appendChild(wrap);
   try{GDIDebug.attach()}catch(_){}
 }});
+
+// ═══ M19: TÍTULO LIMPO DA ABA ═══
+(function(){
+  const MAX=64;
+  const POMO=/^\d\d:\d\d\s+[^\s\u00b7]+\s+\u00b7\s+/;
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const clean=s=>dec(s).replace(/\s+/g,' ').trim();
+  function segs(p){return clean(String(p||'').split('?')[0]).split('/').filter(Boolean)}
+  function build(name,parent){
+    name=(name||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+    parent=(parent&&!/^\d+:$/.test(parent))?parent:'';
+    let t=parent?parent+' \u00b7 '+name:name;
+    if(t.length>MAX)t=(name||'').slice(0,MAX);
+    return t;
+  }
+  function fromPlaylist(){
+    try{
+      const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]){
+        const m=pv[ci];
+        const ps=segs(m.pageUrl||'');
+        return build(clean(m.name||m.origName||''),ps.length>=2?ps[ps.length-2]:'');
+      }
+    }catch(_){}
+    return null;
+  }
+  function fromUrl(){
+    const seg=segs(window.location.pathname);
+    if(!seg.length)return null;
+    const first=seg[0]||'';
+    if(first.indexOf(':')!==-1&&!/^\d+:$/.test(first))return null;
+    if(/^\d+:$/.test(first)){
+      if(seg.length===1){
+        const dn=window.drive_names&&window.drive_names[parseInt(first,10)];
+        return dn||null;
+      }
+      return build(seg[seg.length-1],seg.length>=3?seg[seg.length-2]:'');
+    }
+    return null;
+  }
+  function apply(){
+    try{
+      const cur=document.title||'';
+      if(POMO.test(cur))return;
+      const next=fromPlaylist()||fromUrl();
+      if(!next||next===cur)return;
+      document.title=next;
+    }catch(_){}
+  }
+  function bindTitle(){
+    const el=document.querySelector('title');
+    if(!el){setTimeout(bindTitle,400);return;}
+    new MutationObserver(apply).observe(el,{childList:true,characterData:true,subtree:true});
+  }
+  bindTitle();
+  setInterval(apply,1500);
+  Bus.onGlobal('page:change',apply);
+  Bus.onGlobal('title:change',apply);
+  Bus.onGlobal('video:switched',()=>setTimeout(apply,150));
+  Bus.onGlobal('media:ready',apply);
+  window.GDI_MODULES.push({name:'clean-title',init:apply});
+  apply();
+  console.log('[GDI M19] t\u00edtulo limpo ativo');
+})();
+
+// ═══ M20: PLAYLIST — SEM OBSERVER (★ o fix do congelamento) ═══
+// O MutationObserver que vivia aqui se auto-disparava infinitamente
+// quando o render demorava >150ms (playlists grandes) — era o loop
+// que travava a aba para sempre. Removido. Re-render só via Bus.
+// Também: teto de 600 itens no DOM e UM listener delegado.
+(function(){
+  const LS_OPEN='gdi-playlist-open',LS_HIDE='gdi-hide-watched',PL_CAP=600;
+  const norm=p=>{try{return decodeURIComponent(String(p||'').split('?')[0])}catch(_){return String(p||'').split('?')[0]}};
+  window.gdiNormKey=norm;
+  window.gdiVideoKey=function(){
+    try{const pv=window.playlistVideos,ci=window.currentIndex;
+      if(pv&&typeof ci==='number'&&ci>=0&&pv[ci]&&pv[ci].pageUrl)return pv[ci].pageUrl.split('?')[0];
+    }catch(_){}
+    return window.location.pathname;
+  };
+  window.gdiMarkVideo=function(){
+    try{GDIUser.markWatched(norm(window.gdiVideoKey()))}catch(_){}
+    try{GDIUser.markWatched(window.location.pathname)}catch(_){}
+    Bus.emit('watched:changed');
+  };
+  window.gdiUnmarkVideo=function(){
+    [window.gdiVideoKey(),window.location.pathname].forEach(k=>{
+      try{GDIUser.unmarkWatched(k);GDIUser.unmarkWatched(norm(k))}catch(_){}
+    });
+    Bus.emit('watched:changed');
+  };
+  function isW(m){
+    const raw=(m.pageUrl||'').split('?')[0];
+    try{return GDIUser.isWatched(raw)||GDIUser.isWatched(norm(raw))}catch(_){return false}
+  }
+  function items(){return window.playlistVideos||[]}
+  function cur(){const i=window.currentIndex;return(typeof i==='number'&&i>=0)?i:-1}
+  function parentPath(){return window.location.pathname.split('/').slice(0,-2).join('/')+'/'}
+  function healKeys(){
+    const i=cur();if(i<0)return;const m=items()[i];if(!m)return;
+    const raw=(m.pageUrl||'').split('?')[0];
+    let a=false,b=false,c=false;
+    try{a=GDIUser.isWatched(raw);b=GDIUser.isWatched(norm(raw));c=GDIUser.isWatched(window.location.pathname)}catch(_){}
+    try{if((a||b)&&!c)GDIUser.markWatched(window.location.pathname);
+        if(c&&!(a||b))GDIUser.markWatched(norm(raw));}catch(_){}
+  }
+  function renderItems(){
+    const list=document.getElementById('gdi-playlist-list');
+    if(!list)return;
+    const pv=items(),ci=cur();
+    if(!pv.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma aula encontrada.</div>';return;}
+    const hide=localStorage.getItem(LS_HIDE)==='1';
+    const shown=pv.length>PL_CAP?pv.slice(0,PL_CAP):pv;
+    let h='';
+    shown.forEach((m,idx)=>{
+      const w=isW(m),c=idx===ci;
+      if(hide&&w&&!c)return;
+      const nm=m.name||m.origName||'(sem nome)';
+      h+=`<div class="gdi-playlist-item${c?' cur':''}${w&&!c?' watched':''}" data-idx="${idx}" title="${escHtml(nm)}">
+        <div><i class="bi bi-${c?'play-fill':w?'check-circle-fill':'film'} me-2"></i><span style="font-weight:${c?'600':'400'};">${escHtml(nm)}</span></div>
+        <span class="gdi-pl-size">${w?'\u2713 ':''}${escHtml(m.size||'')}</span>
+      </div>`;
+    });
+    if(pv.length>shown.length)h+=`<div style="padding:6px 12px;font-size:11px;color:#8b949e;">\u2026 +${pv.length-shown.length} aulas (Pr\u00f3xima/Anterior e a tecla J alcan\u00e7am todas)</div>`;
+    list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
+    if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
+      if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
+  }
+  function renderMeta(){
+    const pv=items(),ci=cur();
+    const cnt=document.getElementById('gdi-pl-count')||document.getElementById('gdi-playlist-count');
+    if(cnt)cnt.textContent=pv.length?`${ci+1} / ${pv.length}`:'';
+  }
+  function syncWatchedBtn(){
+    const wb=document.getElementById('gdi-watched-btn');if(!wb)return;
+    let done=false;
+    try{done=GDIUser.isWatched(window.gdiVideoKey())||GDIUser.isWatched(norm(window.gdiVideoKey()))||GDIUser.isWatched(window.location.pathname)}catch(_){}
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  function refreshAll(){healKeys();renderItems();renderMeta();syncWatchedBtn();}
+  function downloadJSON(){
+    const pv=items();
+    if(pv.length<2){showToast('Playlist muito curta para exportar');return;}
+    const data=pv.map(v=>({n:v.origName||v.name,f:v.folderLabel||null,
+      s:v.sizeBytes||0,l:v.rawLink||'',m:v.mimeType||'',fd:v.folder||'',t:v.thumbRaw||''}));
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='playlist.json';
+    GDI_ROOT().appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    showToast('playlist.json baixado \u2014 suba na pasta SUPERIOR do curso');
+  }
+  function ensureUI(){
+    const wrap=document.getElementById('gdi-playlist-wrap');
+    if(!wrap||wrap.dataset.m20)return;
+    wrap.dataset.m20='1';
+    wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+      <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
+        <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
+        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
+        <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
+      </button>
+      <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
+      <button id="gdi-pl-reload" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Descartar o cache e reescanear as pastas"><i class="bi bi-arrow-clockwise"></i></button>
+      <button id="gdi-pl-json" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Baixar playlist.json"><i class="bi bi-filetype-json"></i></button>
+    </div>
+    <div id="gdi-playlist-body" style="overflow-y:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;background:rgba(0,0,0,.2);max-height:240px;">
+      <div id="gdi-playlist-list"></div>
+    </div>`;
+    const body=wrap.querySelector('#gdi-playlist-body');
+    const chev=wrap.querySelector('#gdi-pl-chev');
+    const setOpen=v=>{
+      body.style.display=v?'block':'none';
+      chev.className='bi bi-chevron-'+(v?'up':'down');
+      try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
+    };
+    let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
+    setOpen(open);
+    wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
+    const fBtn=wrap.querySelector('#gdi-pl-filter');
+    const fSync=()=>{const on=localStorage.getItem(LS_HIDE)==='1';
+      fBtn.classList.toggle('active',on);
+      fBtn.innerHTML='<i class="bi bi-funnel'+(on?'-fill':'')+'"></i>';};
+    fBtn.addEventListener('click',()=>{
+      const on=localStorage.getItem(LS_HIDE)==='1';
+      localStorage.setItem(LS_HIDE,on?'0':'1');fSync();renderItems();});
+    fSync();
+    wrap.querySelector('#gdi-pl-reload').addEventListener('click',()=>{
+      try{localStorage.removeItem('gdi-xpl::'+(window.location.host||'')+'::'+parentPath())}catch(_){}
+      try{Object.keys(sessionStorage).forEach(k=>{if(k.indexOf('gdi-pljson-probe')===0)sessionStorage.removeItem(k)})}catch(_){}
+      showToast('Cache apagado \u2014 reescaneando\u2026');
+      setTimeout(()=>location.reload(),600);
+    });
+    wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
+  }
+  window.GDI_MODULES.push({name:'playlist-ui',init:function(){
+    if(!document.getElementById('gdi-playlist-wrap'))return;
+    ensureUI();
+    const list=document.getElementById('gdi-playlist-list');
+    // ★FIX: UM listener delegado no container (era 1 por aula + observer infinito)
+    if(list&&!list.__m20deleg){
+      list.__m20deleg=true;
+      list.addEventListener('click',e=>{
+        const it=e.target.closest('.gdi-playlist-item');
+        if(!it)return;
+        const k=parseInt(it.dataset.idx,10);
+        if(!isNaN(k)&&items()[k]&&window.switchVideo)window.switchVideo(k);
+      });
+    }
+    refreshAll();
+  }});
+  Bus.onGlobal('watched:changed',()=>setTimeout(refreshAll,30));
+  Bus.onGlobal('video:switched',()=>setTimeout(refreshAll,120));
+  Bus.onGlobal('user:ready',()=>setTimeout(refreshAll,60));
+})();
+
+// ═══ M22 v2: CENTRAL DE ESTUDOS — painel + botão FORA do body ═══
+(function(){
+  const LS_CARDS='gdi-cards-v1',LS_GOAL='gdi-goal-min',LS_WATCH='gdi-watch-v1',LS_MAR='gdi-marathon',LS_MARINTRO='gdi-marathon-intro';
+  const log=(...a)=>{try{console.log('[GDI M22]',...a)}catch(_){}};
+  const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
+  const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
+  const low=p=>norm(p).toLowerCase();
+  const stripExt=s=>String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim();
+  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const fmtMin=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'):m+'min'};
+  const dayKey=t=>{const d=new Date(t||Date.now());return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+  const dateBr=t=>new Date(t).toLocaleDateString('pt-BR');
+  let rescue=null,rescueAt=0;
+  function ensureState(){
+    if(rescue&&Date.now()-rescueAt<60000)return Promise.resolve(rescue);
+    return fetch('/userstate',{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(j=>{
+      if(j&&typeof j==='object'){rescue=j;rescueAt=Date.now();}
+      return rescue;
+    }).catch(()=>rescue);
+  }
+  function stateD(){
+    try{if(window.GDIUser&&GDIUser.loaded()){const d=GDIUser.dump();if(d)return d;}}catch(_){}
+    return rescue;
+  }
+  function watchedLow(d){
+    const s=new Set();const w=(d&&d.watched)||{};
+    for(const k in w)s.add(low(k));
+    return s;
+  }
+  function courseKeyOf(p){
+    const seg=norm(p).split('/').filter(Boolean);
+    if(!seg.length||!/^\d+:$/.test(seg[0]))return null;
+    if(seg.length<=2)return seg[0];
+    return [seg[0],...seg.slice(1,-1).slice(0,2)].join('/');
+  }
+  const courseName=ck=>ck.split('/').filter(Boolean).slice(1).join(' / ')||ck;
+  function driveNameOf(ck){
+    const m=/^\/(\d+):/.exec(ck||'');
+    return(window.drive_names&&m&&window.drive_names[+m[1]])||'';
+  }
+  function collectCourses(){
+    const d=stateD()||{};
+    const map=new Map();
+    const add=(p,at,wd)=>{
+      const ck=courseKeyOf(p);if(!ck)return;
+      let c=map.get(ck);
+      if(!c){c={key:ck,lastAt:0,lessons:new Set(),watched:0};map.set(ck,c);}
+      c.lessons.add(low(p));
+      if(wd)c.watched++;
+      const a=Number(at)||0;if(a>c.lastAt)c.lastAt=a;
+    };
+    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
+    for(const k in w)add(k,w[k]&&w[k].at,true);
+    for(const k in r)add(k,r[k]&&r[k].at,false);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at,false)});
+    return [...map.values()].filter(c=>c.lessons.size).sort((a,b)=>b.lastAt-a.lastAt);
+  }
+  const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
+  function isGeneric(n){
+    n=stripExt(n).toLowerCase();if(!n)return true;
+    return n.replace(/[\s\-_.:,;|()/\\]+/g,' ').split(' ')
+      .filter(w2=>w2&&!/^\d+$/.test(w2)&&!GW.test(w2)&&!GW.test(w2.replace(/\d+$/,''))).join('')==='';
+  }
+  function realName(p){
+    const seg=norm(p).split('/').filter(Boolean);
+    let nm=stripExt(seg[seg.length-1]||'');
+    if(isGeneric(nm))for(let j=seg.length-2;j>=0;j--){
+      if(/^\d+:$/.test(seg[j]))break;
+      if(!isGeneric(seg[j])){nm=stripExt(seg[j]);break;}
+    }
+    return nm||'Aula';
+  }
+  const vCache=new Map();
+  function exists(p){
+    if(vCache.has(p))return Promise.resolve(vCache.get(p));
+    const pr=fetch(String(p).split('?')[0],{method:'POST',credentials:'same-origin'})
+      .then(r2=>{vCache.set(p,r2.ok);return r2.ok})
+      .catch(()=>{vCache.set(p,true);return true});
+    vCache.set(p,pr);return pr;
+  }
+  const ghost=p=>{const s=norm(p).split('/').filter(Boolean);return s.length>=2&&s[s.length-1].indexOf(s[s.length-2]+' - ')===0;};
+  function bestIn(courseKey){
+    const d=stateD();
+    if(!d)return Promise.resolve(null);
+    const pre=low(courseKey);
+    const inC=p=>{const l=low(p);return l===pre||l.indexOf(pre+'/')===0;};
+    const cands=[],seen=new Set();
+    const add=(k,at)=>{
+      if(!k)return;const key=low(k);
+      if(seen.has(key)||!inC(k))return;seen.add(key);
+      cands.push({path:String(k).split('?')[0],at:Number(at)||0});
+    };
+    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
+    for(const k in w)add(k,w[k]&&w[k].at);
+    for(const k in r)add(k,r[k]&&r[k].at);
+    if(d.last&&d.last.path)add(d.last.path,d.last.at);
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at)});
+    cands.sort((a,b)=>(ghost(a.path)-ghost(b.path))||(b.at-a.at));
+    return (async()=>{
+      for(const c of cands.slice(0,3)){if(await exists(c.path))return c.path;}
+      return null;
+    })();
+  }
+  let playing=false,mark=0;
+  document.addEventListener('play',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=true;mark=Date.now();}},true);
+  document.addEventListener('pause',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=false;flushWatch();}},true);
+  document.addEventListener('ended',e=>{if(e.target&&e.target.tagName==='VIDEO'){playing=false;flushWatch();}},true);
+  function flushWatch(){
+    if(!mark)return;
+    const sec=(Date.now()-mark)/1000;
+    mark=playing?Date.now():0;
+    if(sec>0&&sec<300){const w=lsGet(LS_WATCH,{});const k=dayKey();w[k]=(w[k]||0)+sec;lsSet(LS_WATCH,w);}
+  }
+  setInterval(flushWatch,30000);
+  const todayMin=()=>Math.round((lsGet(LS_WATCH,{})[dayKey()]||0)/60);
+  const goalMin=()=>Math.max(10,Math.min(480,parseInt(lsGet(LS_GOAL,60),10)||60));
+  setInterval(()=>{
+    const card=document.getElementById('gdi-home-card');
+    if(!card)return;
+    let chip=document.getElementById('gdi-goal-chip');
+    if(!chip){
+      chip=document.createElement('div');chip.id='gdi-goal-chip';
+      chip.style.cssText='flex-basis:100%;margin-top:2px;font-size:12px;color:#8b949e;display:flex;align-items:center;gap:8px;';
+      card.appendChild(chip);
+    }
+    const t=todayMin(),g=goalMin();
+    chip.innerHTML=`<span>\ud83c\udfaf Meta hoje: ${fmtMin(t)} / ${fmtMin(g)}</span>
+      <div style="flex:1;max-width:220px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
+        <div style="height:5px;width:${Math.min(100,Math.round(t/g*100))}%;background:${t>=g?'#2f9e44':'#1f6feb'};transition:width .4s;"></div>
+      </div>${t>=g?'<span style="color:#2f9e44;">\u2713 meta batida!</span>':''}`;
+  },20000);
+  const marOn=()=>lsGet(LS_MAR,false)===true;
+  const marIntro=()=>lsGet(LS_MARINTRO,true)!==false;
+  function marCourseKey(){
+    try{
+      const m=window.playlistVideos&&window.playlistVideos[window.currentIndex];
+      if(m&&m.folder){const f=norm(m.folder);return f.endsWith('/')?f:f+'/';}
+    }catch(_){}
+    return window.location.pathname.split('/').slice(0,-1).join('/')+'/';
+  }
+  Bus.onGlobal('media:ready',({type,el})=>{
+    if(type!=='video'||!el||el.__m22mar)return;
+    el.__m22mar=true;
+    el.addEventListener('ended',()=>{
+      if(!marOn())return;
+      const pv=window.playlistVideos;
+      if(!pv||!pv.length)return;
+      const wl=watchedLow(stateD());
+      const isW=i=>{
+        const raw=String(pv[i].pageUrl||'').split('?')[0];
+        if(wl.has(low(raw)))return true;
+        try{return !!(window.GDIUser&&GDIUser.isWatched&&GDIUser.isWatched(raw));}catch(_){return false;}
+      };
+      const ci=typeof window.currentIndex==='number'?window.currentIndex:-1;
+      for(let i=ci+1;i<pv.length;i++){
+        if(!isW(i)){
+          showToast('\u25b6 Maratona: '+stripExt(pv[i].name||pv[i].origName||''));
+          setTimeout(()=>{try{window.switchVideo(i);}catch(_){}},1800);
+          return;
+        }
+      }
+      showToast('Maratona: todas as aulas \u00e0 frente j\u00e1 foram assistidas \u2713');
+    });
+    const tryIntro=()=>{
+      if(!marOn()||!marIntro())return;
+      try{
+        const S=window.GDIUser&&GDIUser.getIntro&&GDIUser.getIntro(marCourseKey());
+        if(S&&S>0&&el.currentTime<S-1&&el.currentTime<300)el.currentTime=S;
+      }catch(_){}
+    };
+    el.addEventListener('loadedmetadata',()=>setTimeout(tryIntro,300));
+    el.addEventListener('play',tryIntro);
+  });
+  const cards=()=>lsGet(LS_CARDS,[]);
+  const saveCards=c=>lsSet(LS_CARDS,c);
+  const dueCards=()=>cards().filter(c=>(c.due||0)<=Date.now());
+  let FC={active:false,flip:null,grade:null};
+  let panel=null,tab='cursos';
+  function openPanel(t){
+    if(t)tab=t;
+    if(!panel){
+      panel=document.createElement('div');panel.id='gdi-central';
+      panel.addEventListener('click',e=>{if(e.target===panel)closePanel();});
+      GDI_ROOT().appendChild(panel);
+    }
+    panel.style.display='flex';
+    renderPanel();
+    ensureState().then(()=>{if(panel&&panel.style.display!=='none')renderPanel();});
+  }
+  function closePanel(){FC.active=false;if(panel)panel.style.display='none';}
+  function renderPanel(){
+    if(!panel)return;
+    const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
+    panel.innerHTML=`<div class="gdi-central-box">
+      <div class="gdi-central-head">
+        <b style="color:#f0f6fc;font-size:16px;">\ud83d\udcda Central de Estudos</b>
+        <span style="color:#8b949e;font-size:12px;">Meta hoje: ${fmtMin(t)}/${fmtMin(g)}</span>
+        <div style="flex:1;max-width:160px;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${pct}%;background:${t>=g?'#2f9e44':'#1f6feb'};"></div></div>
+        <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta di\u00e1ria (minutos)" style="width:56px;background:rgba(255,255,255,.07);border:1px solid #30363d;border-radius:6px;color:#f0f6fc;text-align:center;padding:3px 5px;font-size:12px;">
+        <button class="gdi-mode-btn" id="gdi-central-x" style="padding:4px 10px;">\u2715</button>
+      </div>
+      <div class="gdi-central-tabs">
+        <button class="gdi-central-tab ${tab==='cursos'?'active':''}" data-t="cursos">\ud83d\udccd Meus Cursos</button>
+        <button class="gdi-central-tab ${tab==='stats'?'active':''}" data-t="stats">\ud83d\udcca Estat\u00edsticas</button>
+        <button class="gdi-central-tab ${tab==='fc'?'active':''}" data-t="fc">\ud83e\uddf0 Flashcards</button>
+        <button class="gdi-central-tab ${tab==='mar'?'active':''}" data-t="mar">\ud83d\ude80 Maratona</button>
+      </div>
+      <div class="gdi-central-body" id="gdi-central-body"></div>
+    </div>`;
+    panel.querySelector('#gdi-central-x').onclick=closePanel;
+    panel.querySelector('#gdi-goal-set').addEventListener('change',e=>{
+      const v=Math.max(10,Math.min(480,parseInt(e.target.value,10)||60));
+      lsSet(LS_GOAL,v);renderPanel();
+    });
+    panel.querySelectorAll('.gdi-central-tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t;FC.active=false;renderPanel();});
+    const body=panel.querySelector('#gdi-central-body');
+    if(tab==='cursos')renderCursos(body);
+    else if(tab==='stats')renderStats(body);
+    else if(tab==='fc')renderFlash(body);
+    else renderMarathon(body);
+  }
+  async function renderCursos(box){
+    const cs=collectCourses();
+    if(!cs.length){box.innerHTML='<div class="gdi-notes-empty">Nenhum estudo registrado ainda.</div>';return;}
+    box.innerHTML='<div class="gdi-courses"></div>';
+    const grid=box.firstChild;
+    // ★FIX: 12 cursos (era 24) — cada um dispara até 3 POSTs de verificação
+    cs.slice(0,12).forEach(c=>{
+      const el=document.createElement('div');el.className='gdi-course';
+      el.innerHTML=`<b title="${escHtml(courseName(c.key))}">${escHtml(courseName(c.key))}</b>
+        <small>${escHtml(driveNameOf(c.key))||'\u2014'} \u00b7 ${c.lessons.size} aula${c.lessons.size>1?'s':''}${c.watched?` \u00b7 ${c.watched} conclu\u00edda${c.watched>1?'s':''}`:''} \u00b7 \u00faltima: ${c.lastAt?dateBr(c.lastAt):'\u2014'}</small>
+        <button class="gdi-mode-btn" style="font-size:12px;" disabled><i class="bi bi-hourglass-split"></i> Verificando\u2026</button>`;
+      grid.appendChild(el);
+      const btn=el.querySelector('button');
+      bestIn(c.key).then(target=>{
+        if(target){
+          btn.disabled=false;
+          btn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,28))}`;
+          btn.onclick=()=>{location.href=target+(target.includes('?')?'&':'?')+'a=view';};
+        }else{
+          btn.disabled=true;
+          btn.innerHTML='<i class="bi bi-check2"></i> Nada pendente encontrado';
+        }
+      });
+    });
+  }
+  function renderStats(box){
+    const d=stateD()||{};
+    const chip=(ic,tx)=>`<span style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:6px 10px;font-size:12px;color:#e6edf3;">${ic} ${tx}</span>`;
+    const acts={};
+    const addA=t=>{if(!t)return;const k=dayKey(t);acts[k]=(acts[k]||0)+1;};
+    const w=(d.watched)||{},r=(d.resume)||{};
+    for(const k in w)addA(w[k]&&w[k].at);
+    for(const k in r)addA(r[k]&&r[k].at);
+    if(d.last&&d.last.at)addA(d.last.at);
+    for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(n=>addA(n.at));
+    (Array.isArray(d.history)?d.history:[]).forEach(h=>addA(h&&h.at));
+    const days=new Set(Object.keys(acts));
+    let streak=0;const dd=new Date();
+    const hasD=t=>days.has(dayKey(t));
+    if(!hasD(dd))dd.setDate(dd.getDate()-1);
+    while(hasD(dd)){streak++;dd.setDate(dd.getDate()-1);}
+    const today=new Date();today.setHours(12,0,0,0);
+    const begin=new Date(today);begin.setDate(begin.getDate()-91);begin.setDate(begin.getDate()-begin.getDay());
+    const n=Math.round((today-begin)/86400000)+1;
+    let heat='';
+    for(let i=0;i<n;i++){
+      const t=new Date(begin.getTime()+i*86400000);
+      const a=acts[dayKey(t)]||0;
+      const lvl=a===0?0:a===1?1:a<=3?2:a<=6?3:4;
+      heat+=`<i class="${lvl?'l'+lvl:''}" title="${dateBr(t)} \u00b7 ${a} atividade${a===1?'':'s'}"></i>`;
+    }
+    const ws=new Date();ws.setHours(0,0,0,0);ws.setDate(ws.getDate()-ws.getDay());
+    let wkMin=0;
+    const watch=lsGet(LS_WATCH,{});
+    for(const k in watch){const p=k.split('-').map(Number);const t=new Date(p[0],p[1]-1,p[2],12);if(t>=ws)wkMin+=watch[k];}
+    wkMin=Math.round(wkMin/60);
+    const per={};
+    for(const k in r){const ck=courseKeyOf(k);if(!ck)continue;const x=r[k]||{};per[ck]=(per[ck]||0)+Math.min(x.t||0,(x.d>0?x.d:x.t)||0);}
+    const top=Object.entries(per).map(([ck,s])=>({ck,h:s/3600})).sort((a,b)=>b.h-a.h).slice(0,8);
+    const maxH=top.length?Math.max(top[0].h,.1):1;
+    let notesN=0;for(const k in(d.notes||{}))notesN+=(d.notes[k]||[]).length;
+    let srsDue=0;const now=Date.now();
+    for(const k in(d.notes||{}))(d.notes[k]||[]).forEach(x=>{const e=d.srs&&d.srs[k+'|'+x.at];if((e?e.due:(x.at+86400000))<=now)srsDue++;});
+    const totalH=Object.values(per).reduce((a,b)=>a+b,0)/3600;
+    box.innerHTML=`
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        ${chip('\ud83d\udd25',streak+' dia'+(streak===1?'':'s')+' seguidos')}
+        ${chip('\u23f1\ufe0f',fmtMin(todayMin())+' hoje')}
+        ${chip('\ud83d\udcca',fmtMin(wkMin)+' na semana')}
+        ${chip('\u2753','\u2248'+totalH.toFixed(1).replace('.',',')+'h no total')}
+        ${chip('\u2705',Object.keys(w).length+' conclu\u00eddas')}
+        ${chip('\u25b6',Object.keys(r).length+' em andamento')}
+        ${chip('\ud83d\udcdd',notesN+' anota\u00e7\u00f5es')}
+        ${srsDue?chip('\ud83c\udf93',srsDue+' revis\u00f5es vencidas'):''}
+      </div>
+      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
+      <div class="heat" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">${heat}</div>
+      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
+      ${top.map(t2=>`<div style="margin-bottom:8px;min-width:260px;max-width:640px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#e6edf3;margin-bottom:3px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78%;">${escHtml(courseName(t2.ck))}</span>
+          <span style="color:#8b949e;">${t2.h.toFixed(1).replace('.',',')}h</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:#1f6feb;"></div></div>
+      </div>`).join('')||'<div class="gdi-notes-empty">Sem dados ainda.</div>'}`;
+  }
+  function renderFlash(box){
+    const cs=cards(),due=dueCards();
+    const currentAula=(document.querySelector('.gdi-player-wrap')&&window.gdiVideoKey)?norm(window.gdiVideoKey()):'';
+    const inp='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e6edf3;padding:8px;font-size:13px;';
+    box.innerHTML=`
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+        <b style="color:#f0f6fc;">${cs.length} cart\u00e3o${cs.length===1?'':'\u00f5es'}</b>
+        <span style="color:#8b949e;font-size:12px;">${due.length} vencido${due.length===1?'':'s'}</span>
+        <button id="gdi-fc-study" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${due.length?'':'disabled'}><i class="bi bi-play-fill"></i> Estudar (${due.length})</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-width:640px;">
+        <input id="gdi-fc-f" placeholder="Frente (pergunta)" style="${inp}">
+        <input id="gdi-fc-b" placeholder="Verso (resposta)" style="${inp}">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button id="gdi-fc-add" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
+          ${currentAula?`<span style="font-size:11px;color:#8b949e;">aula atual: ${escHtml(realName(currentAula).slice(0,30))}</span>`:''}
+        </div>
+      </div>
+      <div id="gdi-fc-list" style="display:flex;flex-direction:column;gap:6px;max-width:640px;"></div>`;
+    const list=box.querySelector('#gdi-fc-list');
+    function drawList(){
+      const all=cards();
+      list.innerHTML=all.length?'':'<div class="gdi-notes-empty">Nenhum cart\u00e3o ainda \u2014 crie o primeiro acima.</div>';
+      all.slice().reverse().forEach(c=>{
+        const row=document.createElement('div');row.className='gdi-note';
+        row.innerHTML=`<span style="flex:1;word-break:break-word;"><b style="color:#f0f6fc;">${escHtml(String(c.f).slice(0,70))}</b><br><span style="color:#8b949e;">${escHtml(String(c.b).slice(0,90))}</span></span>
+          <span style="font-size:10px;color:#8b949e;white-space:nowrap;">${(c.due||0)<=Date.now()?'<b style="color:#ffd43b;">hoje</b>':dateBr(c.due)}</span>
+          <button class="gdi-note-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
+        row.querySelector('button').onclick=()=>{saveCards(cards().filter(x=>x.id!==c.id));drawList();};
+        list.appendChild(row);
+      });
+    }
+    drawList();
+    box.querySelector('#gdi-fc-add').onclick=()=>{
+      const f=box.querySelector('#gdi-fc-f').value.trim();
+      const b=box.querySelector('#gdi-fc-b').value.trim();
+      if(!f||!b){showToast('Preencha frente e verso');return;}
+      const all=cards();
+      all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',at:Date.now(),box:0,due:Date.now()+86400000});
+      saveCards(all);
+      box.querySelector('#gdi-fc-f').value='';box.querySelector('#gdi-fc-b').value='';
+      drawList();showToast('Cart\u00e3o adicionado');
+    };
+    box.querySelector('#gdi-fc-study').onclick=()=>studyFlash(box);
+  }
+  function studyFlash(box){
+    const queue=dueCards();
+    if(!queue.length){renderFlash(box);return;}
+    let i=0,ok=0;
+    function draw(){
+      if(i>=queue.length){
+        FC.active=false;
+        box.innerHTML=`<div style="text-align:center;padding:30px;">
+          <div style="font-size:40px;">\ud83c\udf89</div>
+          <h3 style="color:#f0f6fc;">Revis\u00e3o conclu\u00edda!</h3>
+          <p style="color:#8b949e;font-size:13px;">${ok}/${queue.length} lembradas de primeira.</p>
+          <button class="gdi-mode-btn" id="gdi-fc-back" style="margin-top:8px;">Voltar aos cart\u00f5es</button>
+        </div>`;
+        box.querySelector('#gdi-fc-back').onclick=()=>renderFlash(box);
+        return;
+      }
+      const c=queue[i];
+      box.innerHTML=`
+        <div style="text-align:center;color:#8b949e;font-size:12px;margin-bottom:10px;">Cart\u00e3o ${i+1}/${queue.length} \u00b7 [espa\u00e7o] vira \u00b7 [1] esqueci \u00b7 [2] quase \u00b7 [3] lembrei</div>
+        <div class="gdi-fc" id="gdi-fc-card" title="Clique para virar">
+          <div style="font-size:18px;color:#f0f6fc;text-align:center;">${escHtml(c.f)}</div>
+          <div id="gdi-fc-back2" style="display:none;font-size:15px;color:#7aa2ff;border-top:1px solid #21262d;padding-top:12px;text-align:center;">${escHtml(c.b)}</div>
+        </div>
+        <div id="gdi-fc-btns" style="display:none;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+          <button class="gdi-mode-btn" data-g="1">1 \u00b7 Esqueci</button>
+          <button class="gdi-mode-btn" data-g="2">2 \u00b7 Quase</button>
+          <button class="gdi-btn gdi-btn-primary" data-g="3">3 \u00b7 Lembrei</button>
+        </div>`;
+      const card=box.querySelector('#gdi-fc-card'),bk=box.querySelector('#gdi-fc-back2'),btns=box.querySelector('#gdi-fc-btns');
+      const flip=()=>{bk.style.display='';btns.style.display='flex';};
+      card.onclick=flip;
+      box.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>grade(+b.dataset.g));
+      FC.flip=flip;
+      FC.grade=grade;
+      FC.active=true;
+    }
+    function grade(g){
+      const c=queue[i];
+      const all=cards();
+      const ix=all.findIndex(x=>x.id===c.id);
+      if(ix>=0){
+        const day=86400000,steps=[1,7,30,90];
+        if(g===1){all[ix].box=0;all[ix].due=Date.now()+day;}
+        else if(g===2){all[ix].due=Date.now()+3*day;}
+        else{all[ix].box=Math.min((all[ix].box||0)+1,3);all[ix].due=Date.now()+steps[all[ix].box]*day;}
+        saveCards(all);
+      }
+      if(g===3)ok++;
+      i++;draw();
+    }
+    draw();
+  }
+  function renderMarathon(box){
+    const on=marOn(),intro=marIntro();
+    const sw=(id,chk,tit,sub)=>`<label style="display:flex;justify-content:space-between;align-items:center;gap:14px;background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px;cursor:pointer;">
+      <span><b style="color:#f0f6fc;">${tit}</b><br><small style="color:#8b949e;">${sub}</small></span>
+      <input type="checkbox" id="${id}" ${chk?'checked':''} style="accent-color:#1f6feb;width:20px;height:20px;cursor:pointer;flex-shrink:0;"></label>`;
+    box.innerHTML=`<div style="max-width:560px;display:flex;flex-direction:column;gap:12px;">
+      ${sw('gdi-mar-on',on,'\ud83d\ude80 Modo Maratona','Ao terminar uma aula, abre sozinho a pr\u00f3xima n\u00e3o assistida da playlist')}
+      ${sw('gdi-mar-intro',intro,'\u23e9 Pular introdu\u00e7\u00e3o autom\u00e1tico','Usa o tempo memorizado pelo bot\u00e3o "Pular introdu\u00e7\u00e3o" (M7)')}
+      <p style="color:#8b949e;font-size:12px;">Vale nas p\u00e1ginas de aula com playlist. O check \u2713 da aula continua sendo dado pelo auto-assistido (90%).</p>
+    </div>`;
+    box.querySelector('#gdi-mar-on').addEventListener('change',e=>{
+      lsSet(LS_MAR,e.target.checked);
+      showToast('Modo Maratona '+(e.target.checked?'LIGADO \ud83d\ude80':'desligado'));
+    });
+    box.querySelector('#gdi-mar-intro').addEventListener('change',e=>lsSet(LS_MARINTRO,e.target.checked));
+  }
+  if(!document.getElementById('gdi-central-style')){
+    const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
+#gdi-central-fab{position:fixed;bottom:76px;right:76px;z-index:9999;width:44px;height:44px;border-radius:50%;cursor:pointer;background:rgba(18,18,28,.92);border:1.5px solid rgba(255,255,255,.15);color:#7aa2ff;font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);opacity:.45;transition:opacity .25s;}
+#gdi-central-fab:hover{opacity:1;}
+#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(5,7,10,.85);display:none;align-items:center;justify-content:center;padding:16px;}
+.gdi-central-box{background:#0f1218;border:1px solid #21262d;border-radius:16px;max-width:980px;width:100%;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;overflow:hidden;}
+.gdi-central-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #21262d;flex-wrap:wrap;}
+.gdi-central-tabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid #21262d;flex-wrap:wrap;}
+.gdi-central-tab{background:none;border:0;color:#8b949e;padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;}
+.gdi-central-tab.active{color:#f0f6fc;border-bottom-color:#1f6feb;}
+.gdi-central-body{overflow-y:auto;padding:16px 18px;}
+.gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+.gdi-course{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:12px;}
+.gdi-course b{color:#f0f6fc;font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gdi-course small{color:#8b949e;font-size:11px;display:block;margin:4px 0 10px;}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,10px);gap:3px;width:max-content;}
+.heat i{width:10px;height:10px;border-radius:2px;background:#161b22;display:block;}
+.heat i.l1{background:#0e4429}.heat i.l2{background:#006d32}.heat i.l3{background:#26a641}.heat i.l4{background:#39d353}
+.gdi-fc{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:26px 20px;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;max-width:560px;margin:0 auto;}
+`;document.head.appendChild(s);
+  }
+  if(!document.getElementById('gdi-central-fab')){
+    const b=document.createElement('button');
+    b.id='gdi-central-fab';b.title='Central de Estudos (tecla C)';b.textContent='\ud83d\udcda';
+    b.onclick=()=>openPanel('cursos');
+    GDI_ROOT().appendChild(b);
+  }
+  document.addEventListener('keydown',e=>{
+    const t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    if(e.key==='Escape'){closePanel();return;}
+    const k=e.key.toLowerCase();
+    if(k==='c'){
+      if(panel&&panel.style.display!=='none')closePanel();
+      else openPanel();
+      return;
+    }
+    if(!FC.active||!panel||panel.style.display==='none')return;
+    if(e.code==='Space'){e.preventDefault();FC.flip&&FC.flip();}
+    else if(e.key==='1'||e.key==='2'||e.key==='3'){FC.grade&&FC.grade(+e.key);}
+  });
+  log('central de estudos ativa (v2.6 \u2014 sem observer, sem loop)');
+})();
 
 // ═══════════════════════════════════════════════════════════════
 // M-FERRETO: TEMA VISUAL FERRETO PARA OS MÓDULOS EXTRAS
 // Carrega fontes (Poppins/Rubik/Inter), fixa tokens e reaplica a
 // linguagem visual Ferreto (coral #ff8b9f / teal #5ddeda) sobre os
 // componentes próprios deste extras (debug, pomodoro, notas,
-// materiais, playlist, sleep, skip-intro, continue-card, progress).
-// Roda 1× e observa trocas de tema. Não altera lógica dos módulos.
+// materiais, playlist, sleep, skip-intro, continue-card, progress,
+// central de estudos). Não altera lógica dos módulos.
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiFerretoExtras)return;window.__gdiFerretoExtras=true;
@@ -1977,6 +2446,9 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 /* Nota: marks sobre o player */
 #gdi-note-marks .gdi-note-mark{border-color:var(--ferreto-bg-2)!important;}
 
+/* Central de estudos (M22) — painel flutuante */
+.gdi-fc-panel,.gdi-fc-root,[class*="gdi-fc"]{background:var(--ferreto-surface)!important;border-color:var(--ferreto-border-strong)!important;border-radius:var(--ferreto-radius)!important;-webkit-backdrop-filter:blur(18px)!important;backdrop-filter:blur(18px)!important;color:var(--ferreto-text)!important;}
+
 /* Scrollbar dos painéis internos */
 #gdi-notes-list::-webkit-scrollbar,#gdi-debug-log::-webkit-scrollbar{width:8px;}
 #gdi-notes-list::-webkit-scrollbar-thumb,#gdi-debug-log::-webkit-scrollbar-thumb{background:var(--ferreto-surface-3);border-radius:20px;}
@@ -1996,7 +2468,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const dlg=ev.target&&ev.target.querySelector&&ev.target.querySelector('.modal-dialog');
     if(!dlg)return;
     dlg.style.transform='translateZ(0)';
-    // força reflow
     void dlg.offsetHeight;
     setTimeout(function(){dlg.style.transform='';},0);
   },true);
@@ -2004,19 +2475,18 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 
 // ═══════════════════════════════════════════════════════════════
 // M-PLAYER-GUARD: WATCHDOG CONTRA VÍDEOS TRAVADOS
-// Problema relatado: "alguns vídeos travam a janela e ficam pedindo
-// p/ aguardar" — o stream do Drive expira/fica lento e o player
-// entra em buffering infinito sem evento de erro, travando a aba.
-// Solução: monitora o <video>; se ficar STALL_MS sem progresso de
-// currentTime, faz 1 retry silencioso (v.load); se travar de novo,
-// mostra overlay com [Recarregar] [Continuar aguardando]. Também
-// captura o evento 'error' e desbloqueia o autoplay bloqueado.
+// Camada de segurança extra além do fix v2.6 (que removeu o loop do
+// MutationObserver). Mesmo sem o loop, alguns streams do Drive
+// expiram/ficam lentos e o player entra em buffering infinito sem
+// evento de erro — a aba trava. Este watchdog monitora o <video>:
+// se 15s sem progresso, faz retry silencioso (v.load); se travar de
+// novo, mostra overlay [Recarregar][Continuar aguardando]. Também
+// resolve autoplay bloqueado (hint de ▶).
 // ═══════════════════════════════════════════════════════════════
 (function(){
-  const STALL_MS=15000;        // 15s sem progresso = travado
-  const FIRST_PLAY_HINT_MS=3500; // se não tocar em 3.5s, mostra ▶
+  const STALL_MS=15000;
+  const FIRST_PLAY_HINT_MS=3500;
 
-  // CSS do overlay (1×)
   if(!document.getElementById('gdi-stall-style')){
     const s=document.createElement('style');s.id='gdi-stall-style';s.textContent=`
 .gdi-stall-overlay{position:absolute;inset:0;background:rgba(7,9,16,.82);
@@ -2029,8 +2499,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 .gdi-stall-title{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;font-weight:600;color:#fff;}
 .gdi-stall-sub{font-size:12px;color:#9aa4b8;margin-bottom:8px;line-height:1.4;}
 .gdi-stall-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
-.gdi-stall-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(255,255,255,.18);
-  border-top-color:var(--ferreto-primary,#ff8b9f);animation:ferreto-spin .7s linear infinite;margin-bottom:4px;}
 .gdi-play-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;cursor:pointer;
   background:rgba(0,0,0,.28);opacity:0;transition:opacity .2s;pointer-events:none;}
 .gdi-play-hint.show{opacity:1;pointer-events:auto;}
@@ -2045,31 +2513,24 @@ window.GDI_MODULES.push({name:'debug',init:function(){
               overlay:null,hint:null,hintTimer:null};
 
     function clearTimer(){if(st.timer){clearTimeout(st.timer);st.timer=null;}}
-    function clearOverlay(){
-      if(st.overlay){st.overlay.remove();st.overlay=null;}
-    }
+    function clearOverlay(){if(st.overlay){st.overlay.remove();st.overlay=null;}}
     function arm(){clearTimer();st.timer=setTimeout(check,STALL_MS);}
 
     function check(){
       if(!v.parentNode){clearOverlay();clearTimer();return;}
-      // pausado pelo usuário → não reclama, só rearma quando voltar a tocar
       if(v.paused){arm();return;}
       const dt=(v.currentTime||0)-st.lastT;
       if(dt>0.1){
-        // houve progresso real
         st.lastT=v.currentTime||0;st.lastAt=Date.now();clearOverlay();arm();return;
       }
-      // sem progresso
       if(Date.now()-st.lastAt>=STALL_MS){
         if(!st.retryUsed){
-          // 1º travamento: retry silencioso (recarrega o source)
           st.retryUsed=true;
           console.warn('[GDI Player-Guard] vídeo parou — retry silencioso');
           try{
             const cur=v.currentTime;
             v.load();
             v.play().catch(function(){});
-            // tenta restaurar a posição após reload
             const onCanPlay=function(){try{if(cur>0)v.currentTime=cur;}catch(_){}v.removeEventListener('loadedmetadata',onCanPlay);};
             v.addEventListener('loadedmetadata',onCanPlay,{once:true});
           }catch(_){}
@@ -2108,7 +2569,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       });
     }
 
-    // ── Hint de play (autoplay bloqueado) ──
     function showHint(){
       if(st.hint)return;
       const wrap=v.closest('.gdi-player-wrap')||v.parentNode;
@@ -2129,7 +2589,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       if(v.paused&&v.readyState<3)showHint();
     },FIRST_PLAY_HINT_MS);}
 
-    // ── Listeners ──
     v.addEventListener('timeupdate',function(){
       st.lastT=v.currentTime||0;st.lastAt=Date.now();if(st.overlay)clearOverlay();hideHint();
     });
@@ -2146,21 +2605,14 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     });
     v.addEventListener('ended',function(){clearTimer();clearOverlay();});
 
-    // inicializa
     arm();armHint();
     console.log('[GDI Player-Guard] monitorando vídeo');
   }
 
-  // escuta mídias anunciadas pelo core (video/audio)
   Bus.onGlobal('media:ready',function(d){
     if(d&&d.type==='video'&&d.el)attach(d.el);
   });
-  // limpeza em trocas de vídeo/página
-  Bus.onGlobal('video:switched',function(){});
-  Bus.onGlobal('page:change',function(){});
 
-  // tenta pegar vídeos que já existiam no DOM antes do media:ready
-  // (ex.: fallback <video> sem player configurado)
   window.GDI_MODULES.push({name:'player-guard',init:function(){
     try{
       const v=document.querySelector('.gdi-player-wrap video');
