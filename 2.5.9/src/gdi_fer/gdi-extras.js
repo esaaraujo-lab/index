@@ -20,24 +20,24 @@ window.GDI_MODULES = window.GDI_MODULES || [];
 // ── CSS dos módulos (injetado 1×) ──
 (function(){if(document.getElementById('gdi-extras-style'))return;const s=document.createElement('style');s.id='gdi-extras-style';s.textContent=`
 .gdi-debug-wrap{width:100%;background:#0d1117;border-top:2px solid #f0883e;font-family:monospace;font-size:12px;}
-.gdi-debug-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#161b22;cursor:pointer;user-select:none;color:#8b949e;}
+.gdi-debug-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#161b22;cursor:pointer;user-select:none;color:var(--ferreto-text-muted,#8b949e);}
 .gdi-debug-head:hover{background:#1c2128;}
 .gdi-debug-head strong{color:#f0f6fc;display:flex;align-items:center;gap:6px;}
 .gdi-dbg-count{background:#1f6feb;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
 .gdi-debug-actions{display:flex;gap:8px;}
-.gdi-debug-actions button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:2px 9px;cursor:pointer;font-size:11px;}
+.gdi-debug-actions button{background:none;border:1px solid #30363d;color:var(--ferreto-text-muted,#8b949e);border-radius:4px;padding:2px 9px;cursor:pointer;font-size:11px;}
 .gdi-debug-actions button:hover{background:#1c2128;color:#f0f6fc;}
-#gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:#e6edf3;}
+#gdi-debug-log{max-height:300px;overflow-y:auto;padding:10px 14px;background:#0d1117;color:var(--ferreto-text,#e6edf3);}
 #gdi-debug-log.collapsed{display:none;}
 .gdi-dbg-entry{padding:3px 0;border-bottom:1px solid #21262d;line-height:1.6;}
 .gdi-dbg-ts{color:#484f58;margin-right:6px;}
 .gdi-dbg-badge{font-weight:bold;margin-right:6px;}
-.gdi-dbg-msg{color:#e6edf3;}
-.gdi-dbg-pre{margin:2px 0 2px 20px;padding:4px 8px;background:#161b22;border-left:2px solid #30363d;white-space:pre-wrap;word-break:break-all;color:#8b949e;font-size:11px;}
+.gdi-dbg-msg{color:var(--ferreto-text,#e6edf3);}
+.gdi-dbg-pre{margin:2px 0 2px 20px;padding:4px 8px;background:#161b22;border-left:2px solid #30363d;white-space:pre-wrap;word-break:break-all;color:var(--ferreto-text-muted,#8b949e);font-size:11px;}
 .gdi-dbg-empty{color:#484f58;}
-.gdi-mat-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#e6edf3;}
+.gdi-mat-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ferreto-text,#e6edf3);}
 .gdi-mat-head strong{display:flex;align-items:center;gap:6px;}
-#gdi-mat-status{font-size:11px;color:#8b949e;}
+#gdi-mat-status{font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
 .gdi-mat-tabs{display:flex;flex-wrap:wrap;gap:6px;}
 .gdi-mat-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   min-width:74px;padding:7px 8px;border-radius:10px;cursor:pointer;user-select:none;
@@ -50,20 +50,20 @@ window.GDI_MODULES = window.GDI_MODULES || [];
   border-radius:12px;overflow:hidden;background:#161b22;position:relative;}
 body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-notes{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(0,0,0,.18);}
-.gdi-notes-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#e6edf3;margin-bottom:6px;flex-wrap:wrap;gap:6px;}
+.gdi-notes-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ferreto-text,#e6edf3);margin-bottom:6px;flex-wrap:wrap;gap:6px;}
 #gdi-note-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;
-  color:#e6edf3;padding:8px;font-size:13px;resize:vertical;min-height:44px;}
+  color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;resize:vertical;min-height:44px;}
 .gdi-notes-actions{display:flex;align-items:center;gap:8px;margin-top:6px;}
-#gdi-note-time{font-size:11px;color:#7aa2ff;font-variant-numeric:tabular-nums;cursor:pointer;}
+#gdi-note-time{font-size:11px;color:var(--ferreto-primary,#7aa2ff);font-variant-numeric:tabular-nums;cursor:pointer;}
 #gdi-note-save{margin-left:auto;background:var(--bs-primary,#1f6feb);border:0;color:#fff;border-radius:7px;
   padding:5px 12px;font-size:12px;cursor:pointer;}
 #gdi-notes-list{margin-top:8px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
 .gdi-note{display:flex;gap:8px;align-items:flex-start;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 8px;font-size:12px;}
-.gdi-note-time{color:#7aa2ff;cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;margin-top:2px;}
-.gdi-note-text{flex:1;color:#e6edf3;word-break:break-word;}
-.gdi-note-del{background:none;border:0;color:#8b949e;cursor:pointer;font-size:13px;padding:0 2px;}
+.gdi-note-time{color:var(--ferreto-primary,#7aa2ff);cursor:pointer;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;margin-top:2px;}
+.gdi-note-text{flex:1;color:var(--ferreto-text,#e6edf3);word-break:break-word;}
+.gdi-note-del{background:none;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:13px;padding:0 2px;}
 .gdi-note-del:hover{color:#ff6b6b;}
-.gdi-notes-empty{color:#8b949e;font-size:12px;text-align:center;padding:6px;}
+.gdi-notes-empty{color:var(--ferreto-text-muted,#8b949e);font-size:12px;text-align:center;padding:6px;}
 #gdi-pom-root{opacity:.30;transition:opacity .25s ease;}
 #gdi-pom-root:hover{opacity:.95;}
 #gdi-sleep-btn{opacity:.8;transition:opacity .25s ease;}
@@ -72,7 +72,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-note-mark{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7aa2ff;
   border:2px solid #0b0e14;transform:translateX(-50%);transition:transform .12s,background .12s;}
 .gdi-note-mark:hover{background:#ffd43b;transform:translateX(-50%) scale(1.35);}
-#gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#8b949e;flex-wrap:wrap;}
+#gdi-progress-line{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);flex-wrap:wrap;}
 #gdi-home-card{animation:gdi-card-in .3s ease;}
 @keyframes gdi-card-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .gdi-player-wrap{position:relative;}
@@ -80,7 +80,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;
   cursor:pointer;display:none;box-shadow:0 6px 20px rgba(0,0,0,.5);}
 #gdi-skip-intro:hover{background:rgba(45,50,62,.95);}
-.gdi-modprog{margin-left:8px;font-size:11px;color:#8b949e;background:rgba(255,255,255,.06);
+.gdi-modprog{margin-left:8px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);background:rgba(255,255,255,.06);
   border-radius:6px;padding:2px 8px;white-space:nowrap;}
 .gdi-modprog b{color:#8ab4ff;font-weight:600;}
 .gdi-pdf-controls{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,.12);flex-wrap:wrap;}
@@ -111,21 +111,21 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   opacity:0;pointer-events:none;transition:transform .22s cubic-bezier(.34,1.45,.64,1),opacity .18s;}
 #gdi-pom-panel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:all;}
 .gdi-pom-phase-label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  margin-bottom:6px;text-align:center;color:#8b949e;}
+  margin-bottom:6px;text-align:center;color:var(--ferreto-text-muted,#8b949e);}
 #gdi-pom-display{font-size:46px;font-weight:800;text-align:center;color:#f0f6fc;
   letter-spacing:.04em;font-variant-numeric:tabular-nums;line-height:1;}
-#gdi-pom-progress{height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px 0 10px;overflow:hidden;}
+#gdi-pom-progress{height:4px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:2px;margin:12px 0 10px;overflow:hidden;}
 #gdi-pom-progress-bar{height:4px;border-radius:2px;width:100%;transition:width .3s linear,background .4s;}
 #gdi-pom-sessions-dots{display:flex;gap:5px;justify-content:center;margin-bottom:10px;}
 .gdi-pom-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.14);transition:background .3s,transform .3s;}
 .gdi-pom-dot.done{background:#1f6feb;transform:scale(1.15);}
 #gdi-pom-btns{display:flex;gap:6px;justify-content:center;margin-bottom:6px;}
-.gdi-pom-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);color:#e6edf3;
+.gdi-pom-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);color:var(--ferreto-text,#e6edf3);
   border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;transition:background .15s;white-space:nowrap;}
 .gdi-pom-btn:hover{background:rgba(255,255,255,.18);}
 #gdi-pom-divider{height:1px;background:rgba(255,255,255,.08);margin:10px 0 8px;}
 #gdi-pom-cfg{display:flex;flex-direction:column;gap:6px;}
-.gdi-pom-cfg-row,.gdi-pom-switch{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#8b949e;}
+.gdi-pom-cfg-row,.gdi-pom-switch{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--ferreto-text-muted,#8b949e);}
 .gdi-pom-switch{cursor:pointer;}
 .gdi-pom-switch input{accent-color:#1f6feb;cursor:pointer;}
 .gdi-pom-cfg-row input{width:44px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);
@@ -409,7 +409,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(slot&&!document.getElementById('gdi-notes')){
       slot.insertAdjacentHTML('beforeend',`
       <div class="gdi-notes" id="gdi-notes">
-        <div class="gdi-notes-head"><strong>\ud83d\udcdd Minhas anota\u00e7\u00f5es</strong><span id="gdi-notes-count" style="font-size:11px;color:#8b949e;"></span></div>
+        <div class="gdi-notes-head"><strong>\ud83d\udcdd Minhas anota\u00e7\u00f5es</strong><span id="gdi-notes-count" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);"></span></div>
         <textarea id="gdi-note-input" rows="2" placeholder="Digite sua anota\u00e7\u00e3o para esta aula\u2026"></textarea>
         <div class="gdi-notes-actions">
           <span id="gdi-note-time" title="Clique para ir a este momento do v\u00eddeo">00:00</span>
@@ -551,7 +551,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(!right)return null;
     if(!right.dataset.m9){
       right.dataset.m9='1';
-      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:#7aa2ff;"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
+      right.innerHTML=`<div class="gdi-mat-head"><strong><i class="bi bi-journal-bookmark-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i> Materiais da aula</strong><span id="gdi-mat-status"></span></div>
       <div class="gdi-mat-tabs" id="gdi-mat-tabs"><span class="gdi-mat-loading">Buscando PDFs da aula\u2026</span></div>
       <div class="gdi-mat-body" id="gdi-mat-body"></div>`;
     }
@@ -641,10 +641,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
         if(isMobile){
           bodyEl.innerHTML=`<div class="gdi-mat-empty">
-            <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:#7aa2ff;"></i>
+            <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:var(--ferreto-primary,#7aa2ff);"></i>
             <div style="text-align:center;padding:0 16px;">
               <div style="font-weight:600;margin-bottom:4px;">${escHtml(items[idx].name)}</div>
-              <div style="font-size:11px;color:#8b949e;margin-bottom:14px;">Toque para abrir o PDF</div>
+              <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:14px;">Toque para abrir o PDF</div>
             </div>
             <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;justify-content:center;min-width:200px;">
               <i class="bi bi-box-arrow-up-right"></i> Abrir material
@@ -1223,18 +1223,18 @@ body.gdi-fv .gdi-player-wrap iframe{
     let idx=0;
     function render(){
       if(idx>=due.length){
-        ov.innerHTML='<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:34px;max-width:480px;text-align:center;color:#e6edf3;font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:#8b949e;font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
+        ov.innerHTML='<div style="background:var(--ferreto-surface,#161b22);border:1px solid var(--ferreto-border,#30363d);border-radius:16px;padding:34px;max-width:480px;text-align:center;color:var(--ferreto-text,#e6edf3);font-family:system-ui;"><div style="font-size:40px;">\ud83c\udf89</div><h3 style="margin:8px 0">Revis\u00e3o conclu\u00edda!</h3><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px">As anota\u00e7\u00f5es voltam em 1, 7 e 30 dias at\u00e9 ficarem graduadas.</p><br><button class="gdi-mode-btn" id="gdi-srs-close">Fechar</button></div>';
         document.getElementById('gdi-srs-close').addEventListener('click',()=>ov.remove());
         return;
       }
       const n=due[idx];
       let lbl='Aula';try{lbl=decodeURIComponent(String(n.key).split('?')[0].split('/').filter(Boolean).pop()||'Aula').replace(/\.[a-z0-9]+$/i,'')}catch(_){}
-      ov.innerHTML=`<div style="background:#161b22;border:1px solid #30363d;border-radius:16px;padding:22px;max-width:540px;width:100%;color:#e6edf3;font-family:system-ui;">
+      ov.innerHTML=`<div style="background:var(--ferreto-surface,#161b22);border:1px solid var(--ferreto-border,#30363d);border-radius:16px;padding:22px;max-width:540px;width:100%;color:var(--ferreto-text,#e6edf3);font-family:system-ui;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;color:#8b949e;text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
+          <span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;">\ud83e\uddd0 Revis\u00e3o ${idx+1} de ${due.length}</span>
           <button class="gdi-mode-btn" id="gdi-srs-close" style="padding:2px 8px;font-size:11px;">\u2715</button>
         </div>
-        <div style="font-size:12px;color:#7aa2ff;margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
+        <div style="font-size:12px;color:var(--ferreto-secondary,#7aa2ff);margin-bottom:4px;">${escHtml(realNameOf(n.key))}${n.t!=null?' \u00b7 '+gdiFmtTime(n.t):''}</div>
         <div style="font-size:15px;line-height:1.5;margin-bottom:16px;">${escHtml(n.text)}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button id="gdi-srs-good" class="gdi-btn gdi-btn-primary"><i class="bi bi-check2"></i> Lembrei</button>
@@ -1372,25 +1372,25 @@ body.gdi-fv .gdi-player-wrap iframe{
       else head='Continuar';
       const sub=r?('parou em '+gdiFmtTime(r.t)):'sem posi\u00e7\u00e3o salva';
       html+=`<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-        <i class="bi bi-play-circle-fill" style="font-size:30px;color:#7aa2ff;"></i>
+        <i class="bi bi-play-circle-fill" style="font-size:30px;color:var(--ferreto-primary,#7aa2ff);"></i>
         <div style="min-width:0;">
-          <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
-          <div style="font-weight:600;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
-          <div style="font-size:12px;color:#8b949e;">${escHtml(sub)}</div>
+          <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.06em;">${escHtml(head)}</div>
+          <div style="font-weight:600;color:var(--ferreto-text,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl.name)}</div>
+          <div style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">${escHtml(sub)}</div>
         </div></div>${btn}`;
     }
     if(isHome){
-      html+=`<div style="display:flex;gap:16px;font-size:12px;color:#8b949e;flex-wrap:wrap;">
+      html+=`<div style="display:flex;gap:16px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);flex-wrap:wrap;">
         ${streak>0?`<span><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''} seguidos</span>`:''}
         ${hours>0?`<span><i class="bi bi-clock-history"></i> \u2248 ${String(hours.toFixed(1)).replace('.',',')}h assistidas</span>`:''}
       </div>`;
       if(due>0&&canSrs)html+=`<div style="flex-basis:100%;margin-top:2px;"><button id="gdi-srs-open" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-mortarboard-fill" style="color:#ffd43b;"></i> Revisar ${due} anota\u00e7\u00e3${due>1?'\u00f5es':'o'} de hoje</button></div>`;
     }else if(streak>0){
-      html+=`<span style="font-size:12px;color:#8b949e;"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
+      html+=`<span style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);"><i class="bi bi-fire" style="color:#ff922b;"></i> ${streak} dia${streak>1?'s':''}</span>`;
     }
     if(chips.length){
       html+=`<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px;">
-        <span style="font-size:11px;color:#8b949e;">Recentes aqui:</span>
+        <span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">Recentes aqui:</span>
         ${chips.map(c=>`<a class="gdi-mode-btn" data-gdi-go style="padding:2px 8px;font-size:11px;" href="${escHtml(playerHref(c.h.path))}" title="${escHtml(normPath(c.h.path))}">${escHtml(c.label.slice(0,26))}</a>`).join('')}
       </div>`;
     }
@@ -1471,9 +1471,9 @@ body.gdi-fv .gdi-player-wrap iframe{
     let html='';
     if(total){
       const pct=Math.round(done/total*100);
-      html+=`<i class="bi bi-bar-chart-fill" style="color:#7aa2ff;"></i>
+      html+=`<i class="bi bi-bar-chart-fill" style="color:var(--ferreto-primary,#7aa2ff);"></i>
         <span>${done}/${total} assistido${done===1?'':'s'} (${pct}%)</span>
-        <div style="flex:1;max-width:160px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
+        <div style="flex:1;max-width:160px;height:5px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:3px;overflow:hidden;">
           <div style="height:5px;width:${pct}%;background:${pct>=100?'#1a7f37':'#1f6feb'};transition:width .4s;"></div>
         </div>`;
       if(firstTodo)html+=`<button id="gdi-next-lesson" class="gdi-mode-btn" style="padding:2px 8px;font-size:11px;" data-href="${escHtml(firstTodo)}" title="Abrir a primeira aula ainda n\u00e3o assistida"><i class="bi bi-play-fill"></i> N\u00e3o assistida</button>`;
@@ -1509,7 +1509,7 @@ body.gdi-fv .gdi-player-wrap iframe{
       const line=document.getElementById('gdi-progress-line');
       if(line){
         const pct=total?Math.round(done/total*100):0;
-        line.insertAdjacentHTML('beforeend',`<span style="color:#e6edf3;"><i class="bi bi-mortarboard-fill" style="color:#3fb950;"></i> Curso: <b>${done}/${total}</b> aulas (${pct}%)</span>`);
+        line.insertAdjacentHTML('beforeend',`<span style="color:var(--ferreto-text,#e6edf3);"><i class="bi bi-mortarboard-fill" style="color:#3fb950;"></i> Curso: <b>${done}/${total}</b> aulas (${pct}%)</span>`);
         if(btn)btn.remove();
       }
     }catch(_){showToast('N\u00e3o foi poss\u00edvel calcular o progresso do curso');}
@@ -1756,7 +1756,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         <span class="gdi-pl-size">${w?'\u2713 ':''}${escHtml(m.size||'')}</span>
       </div>`;
     });
-    if(pv.length>shown.length)h+=`<div style="padding:6px 12px;font-size:11px;color:#8b949e;">\u2026 +${pv.length-shown.length} aulas (Pr\u00f3xima/Anterior e a tecla J alcan\u00e7am todas)</div>`;
+    if(pv.length>shown.length)h+=`<div style="padding:6px 12px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);">\u2026 +${pv.length-shown.length} aulas (Pr\u00f3xima/Anterior e a tecla J alcan\u00e7am todas)</div>`;
     list.innerHTML=h||'<div class="gdi-notes-empty">Todas assistidas (filtro ativo).</div>';
     if(pv[ci]){const el=list.querySelector('.gdi-playlist-item[data-idx="'+ci+'"]');
       if(el)try{el.scrollIntoView({block:'nearest'})}catch(_){}}
@@ -1802,7 +1802,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
       <button id="gdi-pl-toggle" class="gdi-mode-btn" style="padding:4px 10px;font-size:12px;flex:1;justify-content:flex-start;min-width:0;" title="Mostrar/ocultar a playlist">
         <i class="bi bi-collection-play me-2"></i><strong style="font-size:13px;">Playlist</strong>
-        <span id="gdi-pl-count" style="font-size:11px;color:#8b949e;margin-left:6px;"></span>
+        <span id="gdi-pl-count" style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-left:6px;"></span>
         <i id="gdi-pl-chev" class="bi bi-chevron-down" style="margin-left:auto;"></i>
       </button>
       <button id="gdi-pl-filter" class="gdi-mode-btn" style="padding:4px 9px;font-size:11px;" title="Esconder aulas j\u00e1 assistidas"><i class="bi bi-funnel"></i></button>
@@ -1819,6 +1819,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       chev.className='bi bi-chevron-'+(v?'up':'down');
       try{localStorage.setItem(LS_OPEN,v?'1':'0')}catch(_){}
     };
+    // ★FIX: por padrão a playlist fica RECOLHIDA (só o header visível),
+    // como no bloco único. Usuário expande clicando no header.
     let open=false;try{open=localStorage.getItem(LS_OPEN)==='1'}catch(_){}
     setOpen(open);
     wrap.querySelector('#gdi-pl-toggle').addEventListener('click',()=>setOpen(body.style.display==='none'));
@@ -1839,6 +1841,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     wrap.querySelector('#gdi-pl-json').addEventListener('click',downloadJSON);
     return wrap;
   }
+  // expõe para o core (app.min.js renderPlaylistUI) poder garantir o wrap
+  window.gdiEnsurePlaylist=function(){return ensureUI();};
   window.GDI_MODULES.push({name:'playlist-ui',init:function(){
     // ★FIX: roda em qualquer página de vídeo (tem #gdi-slot-left ou
     // #gdi-study), não exige #gdi-playlist-wrap pré-existente.
@@ -2000,13 +2004,13 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     let chip=document.getElementById('gdi-goal-chip');
     if(!chip){
       chip=document.createElement('div');chip.id='gdi-goal-chip';
-      chip.style.cssText='flex-basis:100%;margin-top:2px;font-size:12px;color:#8b949e;display:flex;align-items:center;gap:8px;';
+      chip.style.cssText='flex-basis:100%;margin-top:2px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);display:flex;align-items:center;gap:8px;';
       card.appendChild(chip);
     }
     const t=todayMin(),g=goalMin();
     chip.innerHTML=`<span>\ud83c\udfaf Meta hoje: ${fmtMin(t)} / ${fmtMin(g)}</span>
-      <div style="flex:1;max-width:220px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;">
-        <div style="height:5px;width:${Math.min(100,Math.round(t/g*100))}%;background:${t>=g?'#2f9e44':'#1f6feb'};transition:width .4s;"></div>
+      <div style="flex:1;max-width:220px;height:5px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:3px;overflow:hidden;">
+        <div style="height:5px;width:${Math.min(100,Math.round(t/g*100))}%;background:${t>=g?'#2f9e44':'var(--ferreto-grad)'};transition:width .4s;"></div>
       </div>${t>=g?'<span style="color:#2f9e44;">\u2713 meta batida!</span>':''}`;
   },20000);
   const marOn=()=>lsGet(LS_MAR,false)===true;
@@ -2073,10 +2077,10 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
     panel.innerHTML=`<div class="gdi-central-box">
       <div class="gdi-central-head">
-        <b style="color:#f0f6fc;font-size:16px;">\ud83d\udcda Central de Estudos</b>
-        <span style="color:#8b949e;font-size:12px;">Meta hoje: ${fmtMin(t)}/${fmtMin(g)}</span>
-        <div style="flex:1;max-width:160px;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${pct}%;background:${t>=g?'#2f9e44':'#1f6feb'};"></div></div>
-        <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta di\u00e1ria (minutos)" style="width:56px;background:rgba(255,255,255,.07);border:1px solid #30363d;border-radius:6px;color:#f0f6fc;text-align:center;padding:3px 5px;font-size:12px;">
+        <b style="color:var(--ferreto-text,#f0f6fc);font-size:16px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">\ud83d\udcda Central de Estudos</b>
+        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Meta hoje: ${fmtMin(t)}/${fmtMin(g)}</span>
+        <div style="flex:1;max-width:160px;height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.1));border-radius:3px;overflow:hidden;"><div style="height:6px;width:${pct}%;background:${t>=g?'#2f9e44':'var(--ferreto-grad)'};"></div></div>
+        <input id="gdi-goal-set" type="number" min="10" max="480" value="${g}" title="Meta di\u00e1ria (minutos)" style="width:56px;background:var(--ferreto-surface-2,rgba(255,255,255,.07));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#f0f6fc);text-align:center;padding:3px 5px;font-size:12px;">
         <button class="gdi-mode-btn" id="gdi-central-x" style="padding:4px 10px;">\u2715</button>
       </div>
       <div class="gdi-central-tabs">
@@ -2126,7 +2130,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function renderStats(box){
     const d=stateD()||{};
-    const chip=(ic,tx)=>`<span style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:6px 10px;font-size:12px;color:#e6edf3;">${ic} ${tx}</span>`;
+    const chip=(ic,tx)=>`<span style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--ferreto-text,#e6edf3);">${ic} ${tx}</span>`;
     const acts={};
     const addA=t=>{if(!t)return;const k=dayKey(t);acts[k]=(acts[k]||0)+1;};
     const w=(d.watched)||{},r=(d.resume)||{};
@@ -2174,25 +2178,25 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         ${chip('\ud83d\udcdd',notesN+' anota\u00e7\u00f5es')}
         ${srsDue?chip('\ud83c\udf93',srsDue+' revis\u00f5es vencidas'):''}
       </div>
-      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
+      <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">\u00daltimos 3 meses \u00b7 atividades por dia</h4>
       <div class="heat" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">${heat}</div>
-      <h4 style="color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
+      <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;">Horas por curso (estimativa)</h4>
       ${top.map(t2=>`<div style="margin-bottom:8px;min-width:260px;max-width:640px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#e6edf3;margin-bottom:3px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ferreto-text,#e6edf3);margin-bottom:3px;">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78%;">${escHtml(courseName(t2.ck))}</span>
-          <span style="color:#8b949e;">${t2.h.toFixed(1).replace('.',',')}h</span>
+          <span style="color:var(--ferreto-text-muted,#8b949e);">${t2.h.toFixed(1).replace('.',',')}h</span>
         </div>
-        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:#1f6feb;"></div></div>
+        <div style="height:6px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;"><div style="height:6px;width:${Math.max(3,Math.round(t2.h/maxH*100))}%;background:var(--ferreto-grad);"></div></div>
       </div>`).join('')||'<div class="gdi-notes-empty">Sem dados ainda.</div>'}`;
   }
   function renderFlash(box){
     const cs=cards(),due=dueCards();
     const currentAula=(document.querySelector('.gdi-player-wrap')&&window.gdiVideoKey)?norm(window.gdiVideoKey()):'';
-    const inp='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e6edf3;padding:8px;font-size:13px;';
+    const inp='background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,rgba(255,255,255,.14));border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;';
     box.innerHTML=`
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
-        <b style="color:#f0f6fc;">${cs.length} cart\u00e3o${cs.length===1?'':'\u00f5es'}</b>
-        <span style="color:#8b949e;font-size:12px;">${due.length} vencido${due.length===1?'':'s'}</span>
+        <b style="color:var(--ferreto-text,#f0f6fc);">${cs.length} cart\u00e3o${cs.length===1?'':'\u00f5es'}</b>
+        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${due.length} vencido${due.length===1?'':'s'}</span>
         <button id="gdi-fc-study" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${due.length?'':'disabled'}><i class="bi bi-play-fill"></i> Estudar (${due.length})</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-width:640px;">
@@ -2200,7 +2204,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         <input id="gdi-fc-b" placeholder="Verso (resposta)" style="${inp}">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button id="gdi-fc-add" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
-          ${currentAula?`<span style="font-size:11px;color:#8b949e;">aula atual: ${escHtml(realName(currentAula).slice(0,30))}</span>`:''}
+          ${currentAula?`<span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">aula atual: ${escHtml(realName(currentAula).slice(0,30))}</span>`:''}
         </div>
       </div>
       <div id="gdi-fc-list" style="display:flex;flex-direction:column;gap:6px;max-width:640px;"></div>`;
@@ -2210,8 +2214,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       list.innerHTML=all.length?'':'<div class="gdi-notes-empty">Nenhum cart\u00e3o ainda \u2014 crie o primeiro acima.</div>';
       all.slice().reverse().forEach(c=>{
         const row=document.createElement('div');row.className='gdi-note';
-        row.innerHTML=`<span style="flex:1;word-break:break-word;"><b style="color:#f0f6fc;">${escHtml(String(c.f).slice(0,70))}</b><br><span style="color:#8b949e;">${escHtml(String(c.b).slice(0,90))}</span></span>
-          <span style="font-size:10px;color:#8b949e;white-space:nowrap;">${(c.due||0)<=Date.now()?'<b style="color:#ffd43b;">hoje</b>':dateBr(c.due)}</span>
+        row.innerHTML=`<span style="flex:1;word-break:break-word;"><b style="color:var(--ferreto-text,#f0f6fc);">${escHtml(String(c.f).slice(0,70))}</b><br><span style="color:var(--ferreto-text-muted,#8b949e);">${escHtml(String(c.b).slice(0,90))}</span></span>
+          <span style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);white-space:nowrap;">${(c.due||0)<=Date.now()?'<b style="color:#ffd43b;">hoje</b>':dateBr(c.due)}</span>
           <button class="gdi-note-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
         row.querySelector('button').onclick=()=>{saveCards(cards().filter(x=>x.id!==c.id));drawList();};
         list.appendChild(row);
@@ -2239,8 +2243,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         FC.active=false;
         box.innerHTML=`<div style="text-align:center;padding:30px;">
           <div style="font-size:40px;">\ud83c\udf89</div>
-          <h3 style="color:#f0f6fc;">Revis\u00e3o conclu\u00edda!</h3>
-          <p style="color:#8b949e;font-size:13px;">${ok}/${queue.length} lembradas de primeira.</p>
+          <h3 style="color:var(--ferreto-text,#f0f6fc);">Revis\u00e3o conclu\u00edda!</h3>
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;">${ok}/${queue.length} lembradas de primeira.</p>
           <button class="gdi-mode-btn" id="gdi-fc-back" style="margin-top:8px;">Voltar aos cart\u00f5es</button>
         </div>`;
         box.querySelector('#gdi-fc-back').onclick=()=>renderFlash(box);
@@ -2248,10 +2252,10 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       }
       const c=queue[i];
       box.innerHTML=`
-        <div style="text-align:center;color:#8b949e;font-size:12px;margin-bottom:10px;">Cart\u00e3o ${i+1}/${queue.length} \u00b7 [espa\u00e7o] vira \u00b7 [1] esqueci \u00b7 [2] quase \u00b7 [3] lembrei</div>
+        <div style="text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-bottom:10px;">Cart\u00e3o ${i+1}/${queue.length} \u00b7 [espa\u00e7o] vira \u00b7 [1] esqueci \u00b7 [2] quase \u00b7 [3] lembrei</div>
         <div class="gdi-fc" id="gdi-fc-card" title="Clique para virar">
-          <div style="font-size:18px;color:#f0f6fc;text-align:center;">${escHtml(c.f)}</div>
-          <div id="gdi-fc-back2" style="display:none;font-size:15px;color:#7aa2ff;border-top:1px solid #21262d;padding-top:12px;text-align:center;">${escHtml(c.b)}</div>
+          <div style="font-size:18px;color:var(--ferreto-text,#f0f6fc);text-align:center;">${escHtml(c.f)}</div>
+          <div id="gdi-fc-back2" style="display:none;font-size:15px;color:var(--ferreto-secondary,#7aa2ff);border-top:1px solid var(--ferreto-border,#21262d);padding-top:12px;text-align:center;">${escHtml(c.b)}</div>
         </div>
         <div id="gdi-fc-btns" style="display:none;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
           <button class="gdi-mode-btn" data-g="1">1 \u00b7 Esqueci</button>
@@ -2284,13 +2288,13 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function renderMarathon(box){
     const on=marOn(),intro=marIntro();
-    const sw=(id,chk,tit,sub)=>`<label style="display:flex;justify-content:space-between;align-items:center;gap:14px;background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px;cursor:pointer;">
-      <span><b style="color:#f0f6fc;">${tit}</b><br><small style="color:#8b949e;">${sub}</small></span>
-      <input type="checkbox" id="${id}" ${chk?'checked':''} style="accent-color:#1f6feb;width:20px;height:20px;cursor:pointer;flex-shrink:0;"></label>`;
+    const sw=(id,chk,tit,sub)=>`<label style="display:flex;justify-content:space-between;align-items:center;gap:14px;background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:12px;padding:14px;cursor:pointer;">
+      <span><b style="color:var(--ferreto-text,#f0f6fc);">${tit}</b><br><small style="color:var(--ferreto-text-muted,#8b949e);">${sub}</small></span>
+      <input type="checkbox" id="${id}" ${chk?'checked':''} style="accent-color:var(--ferreto-primary,#ff8b9f);width:20px;height:20px;cursor:pointer;flex-shrink:0;"></label>`;
     box.innerHTML=`<div style="max-width:560px;display:flex;flex-direction:column;gap:12px;">
       ${sw('gdi-mar-on',on,'\ud83d\ude80 Modo Maratona','Ao terminar uma aula, abre sozinho a pr\u00f3xima n\u00e3o assistida da playlist')}
       ${sw('gdi-mar-intro',intro,'\u23e9 Pular introdu\u00e7\u00e3o autom\u00e1tico','Usa o tempo memorizado pelo bot\u00e3o "Pular introdu\u00e7\u00e3o" (M7)')}
-      <p style="color:#8b949e;font-size:12px;">Vale nas p\u00e1ginas de aula com playlist. O check \u2713 da aula continua sendo dado pelo auto-assistido (90%).</p>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Vale nas p\u00e1ginas de aula com playlist. O check \u2713 da aula continua sendo dado pelo auto-assistido (90%).</p>
     </div>`;
     box.querySelector('#gdi-mar-on').addEventListener('change',e=>{
       lsSet(LS_MAR,e.target.checked);
@@ -2300,23 +2304,25 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   if(!document.getElementById('gdi-central-style')){
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
-#gdi-central-fab{position:fixed;bottom:76px;right:76px;z-index:9999;width:44px;height:44px;border-radius:50%;cursor:pointer;background:rgba(18,18,28,.92);border:1.5px solid rgba(255,255,255,.15);color:#7aa2ff;font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);opacity:.45;transition:opacity .25s;}
-#gdi-central-fab:hover{opacity:1;}
-#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(5,7,10,.85);display:none;align-items:center;justify-content:center;padding:16px;}
-.gdi-central-box{background:#0f1218;border:1px solid #21262d;border-radius:16px;max-width:980px;width:100%;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;overflow:hidden;}
-.gdi-central-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #21262d;flex-wrap:wrap;}
-.gdi-central-tabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid #21262d;flex-wrap:wrap;}
-.gdi-central-tab{background:none;border:0;color:#8b949e;padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;}
-.gdi-central-tab.active{color:#f0f6fc;border-bottom-color:#1f6feb;}
-.gdi-central-body{overflow-y:auto;padding:16px 18px;}
+#gdi-central-fab{position:fixed;bottom:76px;right:76px;z-index:9999;width:44px;height:44px;border-radius:50%;cursor:pointer;background:var(--ferreto-surface,rgba(18,18,28,.92));border:1.5px solid var(--ferreto-border-strong,rgba(255,255,255,.15));color:var(--ferreto-primary,#ff8b9f);font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);opacity:.55;transition:opacity .25s,transform .18s;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+#gdi-central-fab:hover{opacity:1;transform:scale(1.08);}
+#gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(5,7,10,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;}
+.gdi-central-box{background:var(--ferreto-surface,#0f1218);border:1px solid var(--ferreto-border,#21262d);border-radius:18px;max-width:980px;width:100%;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;overflow:hidden;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 20px 60px -12px rgba(0,0,0,.6);}
+.gdi-central-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--ferreto-border,#21262d);flex-wrap:wrap;background:linear-gradient(135deg,rgba(255,139,159,.1),rgba(93,222,218,.06));}
+.gdi-central-tabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid var(--ferreto-border,#21262d);flex-wrap:wrap;}
+.gdi-central-tab{background:none;border:0;color:var(--ferreto-text-muted,#8b949e);padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;font-family:var(--ferreto-font-body,'Rubik',sans-serif);}
+.gdi-central-tab:hover{color:var(--ferreto-text,#f0f6fc);}
+.gdi-central-tab.active{color:var(--ferreto-text,#f0f6fc);border-bottom-color:var(--ferreto-primary,#ff8b9f);}
+.gdi-central-body{overflow-y:auto;padding:16px 18px;color:var(--ferreto-text,#f0f6fc);}
 .gdi-courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
-.gdi-course{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:12px;}
-.gdi-course b{color:#f0f6fc;font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.gdi-course small{color:#8b949e;font-size:11px;display:block;margin:4px 0 10px;}
+.gdi-course{background:var(--ferreto-surface-2,rgba(255,255,255,.045));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;padding:12px;transition:border-color .15s,transform .15s;}
+.gdi-course:hover{border-color:var(--ferreto-border-strong,#30363d);transform:translateY(-1px);}
+.gdi-course b{color:var(--ferreto-text,#f0f6fc);font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--ferreto-font-display,'Poppins',sans-serif);}
+.gdi-course small{color:var(--ferreto-text-muted,#8b949e);font-size:11px;display:block;margin:4px 0 10px;}
 .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,10px);gap:3px;width:max-content;}
-.heat i{width:10px;height:10px;border-radius:2px;background:#161b22;display:block;}
+.heat i{width:10px;height:10px;border-radius:2px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));display:block;}
 .heat i.l1{background:#0e4429}.heat i.l2{background:#006d32}.heat i.l3{background:#26a641}.heat i.l4{background:#39d353}
-.gdi-fc{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:26px 20px;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;max-width:560px;margin:0 auto;}
+.gdi-fc{background:var(--ferreto-surface-2,rgba(255,255,255,.045));border:1px solid var(--ferreto-border-strong,#30363d);border-radius:14px;padding:26px 20px;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;max-width:560px;margin:0 auto;}
 `;document.head.appendChild(s);
   }
   if(!document.getElementById('gdi-central-fab')){
@@ -2475,6 +2481,39 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 
 /* Central de estudos (M22) — painel flutuante */
 .gdi-fc-panel,.gdi-fc-root,[class*="gdi-fc"]{background:var(--ferreto-surface)!important;border-color:var(--ferreto-border-strong)!important;border-radius:var(--ferreto-radius)!important;-webkit-backdrop-filter:blur(18px)!important;backdrop-filter:blur(18px)!important;color:var(--ferreto-text)!important;}
+
+/* ★FIX tema: Continue-card (M13) — override dos estilos inline hardcoded
+   p/ acompanhar claro/escuro. Em tema claro o texto #f0f6fc/#8b949e era
+   ilegível no fundo claro. */
+#gdi-home-card{background:var(--ferreto-surface)!important;border:1px solid var(--ferreto-border)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;color:var(--ferreto-text)!important;}
+#gdi-home-card *{color:inherit;}
+#gdi-home-card [style*="color:#8b949e"],#gdi-home-card [style*="color: #8b949e"]{color:var(--ferreto-text-muted)!important;}
+#gdi-home-card [style*="color:#f0f6fc"],#gdi-home-card [style*="color: #f0f6fc"]{color:var(--ferreto-text)!important;}
+#gdi-home-card [style*="color:#7aa2ff"],#gdi-home-card [style*="color: #7aa2ff"]{color:var(--ferreto-primary)!important;}
+#gdi-home-card .gdi-mode-btn{background:var(--ferreto-surface-2)!important;border:1px solid var(--ferreto-border)!important;color:var(--ferreto-text-muted)!important;}
+#gdi-home-card .gdi-mode-btn:hover{background:var(--ferreto-surface-3)!important;color:var(--ferreto-primary)!important;}
+
+/* ★FIX tema: Central de Estudos (M22) — override dos estilos inline
+   hardcoded em renderPanel/renderStats/renderFlash. */
+.gdi-central-box [style*="color:#8b949e"],.gdi-central-box [style*="color: #8b949e"]{color:var(--ferreto-text-muted)!important;}
+.gdi-central-box [style*="color:#f0f6fc"],.gdi-central-box [style*="color: #f0f6fc"]{color:var(--ferreto-text)!important;}
+.gdi-central-box [style*="color:#e6edf3"],.gdi-central-box [style*="color: #e6edf3"]{color:var(--ferreto-text)!important;}
+.gdi-central-box [style*="color:#7aa2ff"],.gdi-central-box [style*="color: #7aa2ff"]{color:var(--ferreto-secondary)!important;}
+.gdi-central-box [style*="background:rgba(255,255,255,.06)"],.gdi-central-box [style*="background: rgba(255, 255, 255, .06)"]{background:var(--ferreto-surface-2)!important;}
+.gdi-central-box [style*="background:rgba(255,255,255,.07)"],.gdi-central-box [style*="background: rgba(255, 255, 255, .07)"]{background:var(--ferreto-surface-2)!important;}
+.gdi-central-box [style*="background:rgba(255,255,255,.08)"],.gdi-central-box [style*="background: rgba(255, 255, 255, .08)"]{background:var(--ferreto-surface-3)!important;}
+.gdi-central-box [style*="background:var(--ferreto-surface-3,rgba(255,255,255,.1))"],.gdi-central-box [style*="background: rgba(255, 255, 255, .1)"]{background:var(--ferreto-surface-3)!important;}
+.gdi-central-box [style*="background:#1f6feb"]{background:var(--ferreto-grad)!important;}
+.gdi-central-box [style*="border:1px solid #30363d"]{border-color:var(--ferreto-border)!important;}
+.gdi-central-box [style*="border:1px solid rgba(255,255,255,.14)"]{border-color:var(--ferreto-border)!important;}
+.gdi-central-box [style*="border-top:1px solid #21262d"]{border-top-color:var(--ferreto-border)!important;}
+.gdi-central-box input{background:var(--ferreto-surface-2)!important;border:1px solid var(--ferreto-border)!important;color:var(--ferreto-text)!important;}
+.gdi-central-box input:focus{border-color:var(--ferreto-primary)!important;box-shadow:0 0 0 3px var(--ferreto-glow)!important;outline:none!important;}
+.gdi-central-box input::placeholder{color:var(--ferreto-text-faint)!important;}
+.gdi-central-box .gdi-note{background:var(--ferreto-surface-3)!important;}
+.gdi-central-box .gdi-note-del{color:var(--ferreto-text-muted)!important;}
+.gdi-central-box .gdi-note-del:hover{color:#ff6b6b!important;}
+.gdi-central-box .gdi-notes-empty{color:var(--ferreto-text-muted)!important;}
 
 /* Scrollbar dos painéis internos */
 #gdi-notes-list::-webkit-scrollbar,#gdi-debug-log::-webkit-scrollbar{width:8px;}
