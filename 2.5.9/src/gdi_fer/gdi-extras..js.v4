@@ -634,14 +634,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab" data-mat="${it.idx}" title="${escHtml(it.name)}">
           <i class="bi ${it.icon}"></i><span>${escHtml(it.tabLabel)}</span>
         </div>`).join('')+
-        `<div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-summary" title="Gerar resumo com a Meggy (IA)">
-          <i class="bi bi-stars"></i><span>Resumo Meggy</span>
+        `<div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-summary" title="Gerar resumo com a ISA (IA)">
+          <i class="bi bi-stars"></i><span>Resumo ISA</span>
         </div>
-        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-questions" title="Gerar questões com a Meggy (IA)">
-          <i class="bi bi-patch-question"></i><span>Questões Meggy</span>
-        </div>
-        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-mindmap" title="Gerar mapa mental com a Meggy (IA)">
-          <i class="bi bi-diagram-3"></i><span>Mapa Mental</span>
+        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-questions" title="Gerar questões com a ISA (IA)">
+          <i class="bi bi-patch-question"></i><span>Questões ISA</span>
         </div>`;
       if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
       const isMobile=Os.isMobile;
@@ -681,15 +678,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           if(m==='isa-summary'){
             activateOnly(t);
             if(window.gdiIsaPdf)window.gdiIsaPdf.summary(items,bodyEl,base);
-            else showToast('Módulo Meggy indisponível');
+            else showToast('Módulo ISA indisponível');
           }else if(m==='isa-questions'){
             activateOnly(t);
             if(window.gdiIsaPdf)window.gdiIsaPdf.questions(items,bodyEl,base);
-            else showToast('Módulo Meggy indisponível');
-          }else if(m==='isa-mindmap'){
-            activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)window.gdiIsaPdf.mindmap(items,bodyEl,base);
-            else showToast('Módulo Meggy indisponível');
+            else showToast('Módulo ISA indisponível');
           }else{
             show(+m);
           }
@@ -724,66 +717,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
   const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-
-  // ── Robust JSON array parser ──
-  // LLMs frequentemente retornam texto antes/depois do JSON, cercam o
-  // array em ```json ... ```, ou incluem erros de sintaxe (vírgulas
-  // finais, aspas não escapadas). Esta função tenta todas as estratégias
-  // e só lança erro se TODAS falharem (inclui os primeiros 500 chars
-  // da resposta bruta na mensagem para diagnóstico).
-  function parseJsonArray(raw){
-    if(raw==null)throw new Error('Resposta vazia');
-    let txt=String(raw);
-    // 1) strip markdown fences ```json ... ``` (e ``` ... ```)
-    txt=txt.replace(/```(?:json|JSON)?\s*/g,'').replace(/```\s*/g,'');
-    // 2) extrair do PRIMEIRO [ ao ÚLTIMO ]
-    const first=txt.indexOf('[');
-    const last=txt.lastIndexOf(']');
-    if(first>=0&&last>first){
-      txt=txt.slice(first,last+1);
-    }
-    // 3) tenta JSON.parse direto
-    try{
-      const arr=JSON.parse(txt);
-      if(Array.isArray(arr))return arr;
-    }catch(_){}
-    // 4) tenta consertar problemas comuns: vírgulas finais e aspas
-    //    não-escapadas dentro de strings (heurística simples)
-    try{
-      const fixed=txt
-        .replace(/,(\s*[}\]])/g,'$1')          // vírgula final antes de } ou ]
-        .replace(/[\u201C\u201D]/g,'"')          // aspas curvas → retas
-        .replace(/[\u2018\u2019]/g,"'")          // apóstrofos curvos → retos
-        .replace(/\t/g,' ');
-      const arr=JSON.parse(fixed);
-      if(Array.isArray(arr))return arr;
-    }catch(_){}
-    // 5) tenta parsing item-a-item: encontra cada {...} no texto e
-    //    monta o array (LLM às vezes retorna uma lista de objetos sem
-    //    os colchetes externos, ou com comentários no meio)
-    try{
-      const items=[];
-      const re=/\{[\s\S]*?\}(?=\s*[,}\]\n]|\s*$)/g;
-      let m;
-      while((m=re.exec(txt))!==null){
-        let frag=m[0];
-        // remove vírgula final dentro do objeto
-        frag=frag.replace(/,(\s*})/g,'$1');
-        try{
-          const obj=JSON.parse(frag);
-          if(obj&&typeof obj==='object'&&!Array.isArray(obj))items.push(obj);
-        }catch(_){}
-      }
-      if(items.length)return items;
-    }catch(_){}
-    // 6) falhou tudo — inclui os primeiros 500 chars da resposta
-    const preview=String(raw).slice(0,500).replace(/\s+/g,' ');
-    const err=new Error('Resposta não é JSON array válido. Primeiros 500 chars: '+preview);
-    err.raw=String(raw);
-    throw err;
-  }
-  // Exposto no window para ser reutilizado por outros módulos (M23, etc.)
-  window.__gdiParseJsonArray=parseJsonArray;
 
   // ── CSS ──
   if(!document.getElementById('gdi-m9isa-style')){
@@ -927,7 +860,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
     const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
+    if(!data.ok)throw new Error(data.error||'ISA indisponível');
     return data.response||'';
   }
 
@@ -973,7 +906,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const w=window.open('','_blank');
     if(!w){showToast('Permita pop-ups para baixar o PDF');return;}
     w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
-    <title>${esc(lesson)} — Resumo Meggy</title>
+    <title>${esc(lesson)} — Resumo ISA</title>
     <style>
       @page{margin:2cm;size:A4;}
       *{box-sizing:border-box;}
@@ -992,7 +925,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       @media print{body{padding:0;}}
     </style></head><body>
     <h1>${esc(lesson)}</h1>
-    <div class="meta">Resumo gerado pela Meggy 🐩 · ${new Date().toLocaleDateString('pt-BR')}</div>
+    <div class="meta">Resumo gerado por ISA — a mais bela 💖 · ${new Date().toLocaleDateString('pt-BR')}</div>
     ${html}
     <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
     </body></html>`);
@@ -1055,7 +988,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
           <i class="bi bi-stars" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Resumo Meggy 🐩 · ${esc(lesson)}</b>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Resumo ISA · ${esc(lesson)}</b>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           ${cacheBadge}
@@ -1093,12 +1026,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       text=await extractPdfText(items[0].url);
     }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
     if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
-    setLoading(bodyEl,'Meggy está lendo o material e preparando o resumo…');
+    setLoading(bodyEl,'ISA está lendo o material e preparando o resumo…');
     let resp;
     try{
       resp=await callIsa('Leia este material de aula e faça um resumo estruturado em Markdown com os pontos principais. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado:\n\n'+text);
-    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
-    if(!resp||!resp.trim()){setError(bodyEl,'Meggy retornou uma resposta vazia. Tente novamente.');return;}
+    }catch(e){setError(bodyEl,'ISA indisponível: '+e.message);return;}
+    if(!resp||!resp.trim()){setError(bodyEl,'ISA retornou uma resposta vazia. Tente novamente.');return;}
     saveIsaSummary(lesson,resp);
     cacheSave(resp,null,lesson);
     renderSummaryCard(bodyEl,lesson,resp,false);
@@ -1140,24 +1073,26 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       text=await extractPdfText(items[0].url);
     }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
     if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
-    setLoading(bodyEl,'Meggy está criando questões no estilo concurso…');
+    setLoading(bodyEl,'ISA está criando questões no estilo concurso…');
     let resp;
     try{
       resp=await callIsa('Baseado neste material de aula, gere 5 questões de múltipla escolha (4 alternativas) em formato JSON array. Cada item: {"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}. correct é o índice 0-3 da alternativa certa. Nível concurso público brasileiro. Sem comentários, só JSON:\n\n'+text);
-    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
+    }catch(e){setError(bodyEl,'ISA indisponível: '+e.message);return;}
     let arr;
     try{
-      arr=parseJsonArray(resp);
-    }catch(e){setError(bodyEl,'Meggy retornou formato inválido (não era JSON): '+e.message);return;}
+      let txt=resp.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+      const m=txt.match(/\[[\s\S]*\]/);
+      if(m)txt=m[0];
+      arr=JSON.parse(txt);
+      if(!Array.isArray(arr))throw new Error('Resposta não é array');
+    }catch(e){setError(bodyEl,'ISA retornou formato inválido (não era JSON): '+e.message);return;}
     let n=0;
     const cleanArr=[];
-    const savedIds=[];
     arr.forEach(q=>{
       if(q&&q.statement&&Array.isArray(q.options)){
         const cleanQ={subject:lesson,statement:String(q.statement),options:q.options.map(String),
           correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-        const saved=addQ(cleanQ);
-        savedIds.push(saved.id);
+        addQ(cleanQ);
         cleanArr.push({statement:cleanQ.statement,options:cleanQ.options,correct:cleanQ.correct,explanation:cleanQ.explanation});
         n++;
       }
@@ -1168,29 +1103,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">${n} questões geradas!</h3>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Salvas no banco com a matéria "<b style="color:var(--ferreto-text,#e6edf3);">${esc(lesson)}</b>".</p>
       <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;"><i class="bi bi-cloud-check" style="color:#3fb950;"></i> Salvo no Drive + Central → <b>Questões</b>.</p>
-      ${n>0?`<button id="gdi-isa-resolve-now" class="gdi-btn gdi-btn-primary" style="margin-top:14px;font-size:13px;"><i class="bi bi-play-fill"></i> Resolver agora →</button>`:''}
     </div>`;
     showToast(n+' questões salvas no Drive e no banco');
-    // Task 3: botão "Resolver agora →" dispara startSession com as
-    // questões recém-criadas (busca pelos ids salvos no banco).
-    const resolveBtn=bodyEl.querySelector('#gdi-isa-resolve-now');
-    if(resolveBtn){
-      resolveBtn.onclick=()=>{
-        // busca as questões recém-salvas pelo id (já vêm com SRS/stats)
-        const all=lsGet(LQ,[]);
-        const justGenerated=all.filter(q=>savedIds.includes(q.id));
-        if(justGenerated.length&&window.__gdiStartSession){
-          // startSession do M23 opera sobre o #gdi-central-body; aqui
-          // operamos sobre o bodyEl da aula (mesma estrutura visual).
-          window.__gdiStartSession(bodyEl,justGenerated,'Questões ISA · '+lesson);
-        }else if(window.__gdiOpenCentral){
-          // fallback: abre a Central na aba Questões
-          window.__gdiOpenCentral('questoes');
-        }else{
-          showToast('Abra a Central de Estudos → Questões para resolver');
-        }
-      };
-    }
   }
 
   // ── Public API ──
@@ -1202,12 +1116,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     box.innerHTML=`
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
         <b style="color:var(--ferreto-text,#f0f6fc);">${all.length} resumo${all.length===1?'':'s'}</b>
-        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">gerados pela Meggy 🐩 a partir dos PDFs das aulas</span>
+        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">gerados pela ISA a partir dos PDFs das aulas</span>
       </div>
       <div id="gdi-rs-list" style="display:flex;flex-direction:column;gap:8px;max-width:760px;"></div>`;
     const list=box.querySelector('#gdi-rs-list');
     if(!all.length){
-      list.innerHTML='<div class="gdi-notes-empty">Nenhum resumo ainda. Abra uma aula com PDF e clique em "Resumo Meggy" na barra de materiais.</div>';
+      list.innerHTML='<div class="gdi-notes-empty">Nenhum resumo ainda. Abra uma aula com PDF e clique em "Resumo ISA" na barra de materiais.</div>';
       return;
     }
     all.forEach(r=>{
@@ -2507,18 +2421,12 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:prompt,messages:[]})});
     const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
-    // ★ parsing robusto: usa o helper compartilhado (window.__gdiParseJsonArray)
-    const parseFn=window.__gdiParseJsonArray||function(raw){
-      let t=String(raw||'').replace(/```(?:json)?\s*/gi,'').replace(/```\s*/g,'');
-      const f=t.indexOf('['),l=t.lastIndexOf(']');
-      if(f>=0&&l>f)t=t.slice(f,l+1);
-      try{return JSON.parse(t);}catch(e){
-        const err=new Error('Resposta não é JSON array válido. Primeiros 500 chars: '+String(raw).slice(0,500));
-        throw err;
-      }
-    };
-    const arr=parseFn(data.response);
+    if(!data.ok)throw new Error(data.error||'ISA indisponível');
+    // extrai JSON da resposta (pode vir com markdown ```json)
+    let txt=data.response.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    const m=txt.match(/\[[\s\S]*\]/);
+    if(m)txt=m[0];
+    const arr=JSON.parse(txt);
     if(!Array.isArray(arr))throw new Error('Resposta não é array');
     return arr.map(q=>({
       subject:tema,
@@ -2531,7 +2439,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
 
   // ── Render: Questões ──
-  let _qFilterSubject=null; // null = todas
   window.renderQuestoes=function(box){
     const qs=questions();
     const due=dueQ().length;
@@ -2545,44 +2452,18 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
         <button id="gdi-q-resolve-due" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${due?'':'disabled'}><i class="bi bi-play-fill"></i> Resolver revisões (${due})</button>
         <button id="gdi-q-resolve-err" class="gdi-mode-btn" style="font-size:12px;" ${err?'':'disabled'}><i class="bi bi-x-circle"></i> Caderno de erros (${err})</button>
-        <button id="gdi-q-gen" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-stars"></i> Gerar com Meggy</button>
+        <button id="gdi-q-gen" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-stars"></i> Gerar com ISA</button>
         <button id="gdi-q-add" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar</button>
         <button id="gdi-q-import" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-upload"></i> Importar JSON</button>
-        <button id="gdi-q-flasherr" class="gdi-mode-btn" style="font-size:12px;" ${err?'':'disabled'} title="Cria flashcards a partir das questões que você errou"><i class="bi bi-card-text"></i> Flashcards das erradas</button>
       </div>
-      <div id="gdi-q-subjects" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;max-width:760px;"></div>
       <div id="gdi-q-list" style="display:flex;flex-direction:column;gap:8px;max-width:760px;"></div>
     `;
-    // ── Subject filter pills (Task 4) ──
-    function drawSubjects(){
-      const el=box.querySelector('#gdi-q-subjects');
-      if(!el)return;
-      const all=questions();
-      if(!all.length){el.innerHTML='';return;}
-      const map={};
-      all.forEach(q=>{const s=q.subject||'—';map[s]=(map[s]||0)+1;});
-      const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-      let html=`<button class="gdi-mode-btn" data-s="" style="font-size:11px;padding:4px 10px;${_qFilterSubject===null?'background:var(--ferreto-grad);color:#fff;border:0;':''}">Todas (${all.length})</button>`;
-      entries.forEach(([s,n])=>{
-        const active=_qFilterSubject===s;
-        html+=`<button class="gdi-mode-btn" data-s="${esc(s)}" style="font-size:11px;padding:4px 10px;${active?'background:var(--ferreto-grad);color:#fff;border:0;':''}">${esc(s)} (${n})</button>`;
-      });
-      el.innerHTML=html;
-      el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
-        _qFilterSubject=b.dataset.s||null;
-        if(!_qFilterSubject)_qFilterSubject=null;
-        drawSubjects();
-        drawList();
-      });
-    }
     function drawList(){
       const list=box.querySelector('#gdi-q-list');
       const all=questions();
-      if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com Meggy" ou "Adicionar".</div>';return;}
-      const filtered=_qFilterSubject?all.filter(q=>(q.subject||'—')===_qFilterSubject):all;
-      if(!filtered.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão nesta matéria.</div>';return;}
+      if(!all.length){list.innerHTML='<div class="gdi-notes-empty">Nenhuma questão. Clique em "Gerar com ISA" ou "Adicionar".</div>';return;}
       list.innerHTML='';
-      filtered.slice().reverse().forEach(q=>{
+      all.slice().reverse().forEach(q=>{
         const s=qSrs()[q.id];
         const dueNow=!s||s.due<=Date.now();
         const row=document.createElement('div');row.className='gdi-note';
@@ -2592,11 +2473,10 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         </span>
         <span style="font-size:10px;color:${dueNow?'var(--ferreto-primary,#ff8b9f)':'var(--ferreto-text-muted,#8b949e)'};white-space:nowrap;">${dueNow?'hoje':fmtDate(new Date(s?s.due:Date.now()).toISOString().slice(0,10))}</span>
         <button class="gdi-note-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
-        row.querySelector('button').onclick=()=>{delQ(q.id);drawSubjects();drawList();};
+        row.querySelector('button').onclick=()=>{delQ(q.id);drawList();};
         list.appendChild(row);
       });
     }
-    drawSubjects();
     drawList();
 
     box.querySelector('#gdi-q-resolve-due').onclick=()=>startSession(box,dueQ(),'Revisões de hoje');
@@ -2604,29 +2484,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     box.querySelector('#gdi-q-gen').onclick=()=>openGen(box,drawList);
     box.querySelector('#gdi-q-add').onclick=()=>openAddForm(box,drawList);
     box.querySelector('#gdi-q-import').onclick=()=>openImport(box,drawList);
-    // Task 8: Gerar flashcards das questões erradas
-    const flashBtn=box.querySelector('#gdi-q-flasherr');
-    if(flashBtn)flashBtn.onclick=()=>{
-      const errIds=lsGet(LS_ERR,[]);
-      const errQs=questions().filter(q=>errIds.includes(q.id));
-      if(!errQs.length){showToast('Nenhuma questão errada ainda');return;}
-      // usa o mesmo LS_CARDS do M22 ('gdi-cards-v1')
-      const LS_FC='gdi-cards-v1';
-      const cards=lsGet(LS_FC,[]);
-      let n=0,dup=0;
-      errQs.forEach(q=>{
-        // evita duplicar: verifica se já existe flashcard com o mesmo enunciado
-        const front='Q: '+q.statement.slice(0,200);
-        const exists=cards.some(c=>c.f===front);
-        if(exists){dup++;return;}
-        const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
-        cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
-        n++;
-      });
-      lsSet(LS_FC,cards);
-      if(n)showToast(n+' flashcards criados'+(dup?' ('+dup+' já existiam)':''));
-      else showToast('Todos os flashcards já existiam ('+dup+')');
-    };
   };
 
   // ── Sessão de resolução ──
@@ -2671,20 +2528,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
           if(acertou)hits++;else misses++;
           gradeQ(q.id,acertou);
           answers.push({id:q.id,picked:i,correct:q.correct,acertou});
-          // Task 8: errou → cria flashcard automaticamente
-          if(!acertou){
-            try{
-              const LS_FC='gdi-cards-v1';
-              const cards=lsGet(LS_FC,[]);
-              const front='Q: '+String(q.statement||'').slice(0,200);
-              // evita duplicar flashcard para a mesma questão
-              if(!cards.some(c=>c.f===front)){
-                const back='R: '+(q.options[q.correct]||'')+(q.explanation?('\n\n'+q.explanation):'');
-                cards.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f:front,b:back,path:q.subject||'',at:Date.now(),box:0,due:Date.now()+86400000});
-                lsSet(LS_FC,cards);
-              }
-            }catch(_){/* não bloqueia o fluxo */}
-          }
           // marca visual
           optsEl.querySelectorAll('button').forEach((bb,bi)=>{
             bb.disabled=true;bb.style.cursor='default';bb.style.opacity='.7';
@@ -2694,7 +2537,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
           const fb=box.querySelector('#gdi-q-feedback');
           fb.innerHTML=`<div class="gdi-course" style="border-left:3px solid ${acertou?'#3fb950':'#ff6b6b'};">
             <b style="color:${acertou?'#3fb950':'#ff6b6b'};">${acertou?'✓ Correto':'✗ Errado'}</b>
-            ${!acertou?'<span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-left:8px;">📦 flashcard criado</span>':''}
             ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${esc(q.explanation)}</div>`:''}
           </div>
           <button class="gdi-btn gdi-btn-primary" id="gdi-q-next" style="margin-top:12px;">${idx+1<queue.length?'Próxima →':'Ver resultado'}</button>`;
@@ -2712,8 +2554,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(5,7,10,.8);display:flex;align-items:center;justify-content:center;padding:16px;';
     ov.innerHTML=`<div class="gdi-central-box" style="max-width:520px;padding:24px;">
-      <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 12px;"><i class="bi bi-stars" style="color:var(--ferreto-primary,#ff8b9f);"></i> Gerar questões com a Meggy 🐩</h3>
-      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">A Meggy cria questões de concurso sobre o tema e salva no banco.</p>
+      <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 12px;"><i class="bi bi-stars" style="color:var(--ferreto-primary,#ff8b9f);"></i> Gerar questões com ISA</h3>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 14px;">A ISA cria questões de concurso sobre o tema e salva no banco.</p>
       <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Tema:</label>
       <input id="gdi-gen-tema" value="${esc(aula)}" placeholder="Ex: Competência da Justiça do Trabalho" style="width:100%;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:10px;font-size:13px;margin-bottom:12px;box-sizing:border-box;">
       <label style="display:block;font-size:12px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:4px;">Quantidade:</label>
@@ -2731,7 +2573,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       if(!tema){showToast('Digite um tema');return;}
       const st=ov.querySelector('#gdi-gen-status');
       ov.querySelector('#gdi-gen-go').disabled=true;
-      st.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy gerando '+n+' questões sobre "'+esc(tema)+'"…';
+      st.innerHTML='<i class="bi bi-hourglass-split"></i> ISA gerando '+n+' questões sobre "'+esc(tema)+'"…';
       try{
         const arr=await gerarViaISA(tema,n);
         arr.forEach(q=>addQ(q));
@@ -2739,7 +2581,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         showToast(arr.length+' questões adicionadas');
         setTimeout(()=>{ov.remove();after();},1200);
       }catch(e){
-        st.innerHTML='<b style="color:#ff6b6b;">Erro: '+esc(e.message)+'</b><br><span style="font-size:11px;">Verifique se a Meggy está ativa (configure ZHIPU_API_KEY no Cloudflare).</span>';
+        st.innerHTML='<b style="color:#ff6b6b;">Erro: '+esc(e.message)+'</b><br><span style="font-size:11px;">Verifique se a ISA está ativa (NVIDIA_API_KEY no Cloudflare).</span>';
         ov.querySelector('#gdi-gen-go').disabled=false;
       }
     };
@@ -2821,7 +2663,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
           <input id="sim-time" type="number" min="5" max="180" value="30" style="width:64px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:6px;color:var(--ferreto-text,#e6edf3);padding:5px;text-align:center;font-size:12px;">
           <button id="sim-go" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${qs.length>=5?'':'disabled'}><i class="bi bi-play-fill"></i> Iniciar simulado</button>
         </div>
-        ${qs.length<5?'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:8px;">Adicione ao menos 5 questões (gerar com a Meggy ou importar).</p>':''}
+        ${qs.length<5?'<p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:8px;">Adicione ao menos 5 questões (gerar com ISA ou importar).</p>':''}
       </div>
       <h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Histórico</h4>
       <div id="sim-hist" style="display:flex;flex-direction:column;gap:6px;max-width:760px;"></div>
@@ -3028,44 +2870,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     document.head.appendChild(s);
   }
 
-  // ★ Expõe startSession no window para que o M9-ISA (botão "Resolver
-  // agora →" após gerar questões) possa chamar a sessão interativa
-  // diretamente sobre o bodyEl da aula, sem precisar abrir a Central.
-  window.__gdiStartSession=startSession;
-  // ★ Expõe gradeQ para outros módulos (ex.: flashcards das erradas)
-  window.__gdiQStats=function(){
-    // retorna {perSubject:[{subject,total,hits,misses,acc}], worst:[...], overall:{...}}
-    const all=questions();
-    const srs=qSrs();
-    const bySbj={};
-    all.forEach(q=>{
-      const s=(q.subject||'—');
-      if(!bySbj[s])bySbj[s]={subject:s,total:0,hits:0,misses:0};
-      bySbj[s].total++;
-      // se a questão tem SRS, contamos como "respondida"
-      const e=srs[q.id];
-      if(e&&e.last){
-        if(e.box>0)bySbj[s].hits++; // simplificação: box>0 = acertou última
-        else bySbj[s].misses++;
-      }
-    });
-    const perSubject=Object.values(bySbj).map(x=>{
-      const answered=x.hits+x.misses;
-      x.answered=answered;
-      x.acc=answered?Math.round(x.hits/answered*100):null;
-      return x;
-    });
-    perSubject.sort((a,b)=>(a.acc==null?101:a.acc)-(b.acc==null?101:b.acc));
-    const overall={
-      total:all.length,
-      answered:perSubject.reduce((s,x)=>s+x.answered,0),
-      hits:perSubject.reduce((s,x)=>s+x.hits,0),
-      misses:perSubject.reduce((s,x)=>s+x.misses,0)
-    };
-    overall.acc=overall.answered?Math.round(overall.hits/overall.answered*100):null;
-    return {perSubject,overall,worst:perSubject.filter(x=>x.acc!=null&&x.acc<60)};
-  };
-
   console.log('[GDI Extras] M23 Estudo Ativo (questões/simulado/cronograma/revisões) ativo');
 })();
 
@@ -3260,9 +3064,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     ensureState().then(()=>{if(panel&&panel.style.display!=='none')renderPanel();});
   }
   function closePanel(){FC.active=false;if(panel)panel.style.display='none';}
-  // ★ Expõe openPanel para outros módulos (ex.: M9-ISA botão "Resolver
-  // agora →" pode abrir a Central na aba Questões como fallback).
-  window.__gdiOpenCentral=openPanel;
   function renderPanel(){
     if(!panel)return;
     const t=todayMin(),g=goalMin(),pct=Math.min(100,Math.round(t/g*100));
@@ -3281,9 +3082,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         <button class="gdi-central-tab ${tab==='cronograma'?'active':''}" data-t="cronograma">\ud83d\udcc5 Cronograma</button>
         <button class="gdi-central-tab ${tab==='revisoes'?'active':''}" data-t="revisoes">\u23f0 Revis\u00f5es</button>
         <button class="gdi-central-tab ${tab==='resumos'?'active':''}" data-t="resumos">\ud83d\udccb Resumos</button>
-        <button class="gdi-central-tab ${tab==='provas'?'active':''}" data-t="provas">\ud83d\udcc4 Provas</button>
-        <button class="gdi-central-tab ${tab==='redacao'?'active':''}" data-t="redacao">\u270d\ufe0f Reda\u00e7\u00e3o</button>
-        <button class="gdi-central-tab ${tab==='radar'?'active':''}" data-t="radar">\ud83c\udfaf Mapa de Fracos</button>
         <button class="gdi-central-tab ${tab==='stats'?'active':''}" data-t="stats">\ud83d\udcca Estat\u00edsticas</button>
         <button class="gdi-central-tab ${tab==='fc'?'active':''}" data-t="fc">\ud83e\uddf0 Flashcards</button>
         <button class="gdi-central-tab ${tab==='mar'?'active':''}" data-t="mar">\ud83d\ude80 Maratona</button>
@@ -3303,9 +3101,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     else if(tab==='cronograma')renderCronograma(body);
     else if(tab==='revisoes')renderRevisoes(body);
     else if(tab==='resumos'){if(window.renderResumos)renderResumos(body);else body.innerHTML='<div class="gdi-notes-empty">M\u00f3dulo de resumos indispon\u00edvel.</div>';}
-    else if(tab==='provas'){if(window.renderProvas)window.renderProvas(body);else body.innerHTML='<div class="gdi-notes-empty">M\u00f3dulo de provas indispon\u00edvel.</div>';}
-    else if(tab==='redacao'){if(window.renderRedacao)window.renderRedacao(body);else body.innerHTML='<div class="gdi-notes-empty">M\u00f3dulo de reda\u00e7\u00e3o indispon\u00edvel.</div>';}
-    else if(tab==='radar'){if(window.renderRadar)window.renderRadar(body);else body.innerHTML='<div class="gdi-notes-empty">M\u00f3dulo de radar indispon\u00edvel.</div>';}
     else if(tab==='stats')renderStats(body);
     else if(tab==='fc')renderFlash(body);
     else renderMarathon(body);
@@ -3573,269 +3368,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     else if(e.key==='1'||e.key==='2'||e.key==='3'){FC.grade&&FC.grade(+e.key);}
   });
   log('central de estudos ativa (v2.6 \u2014 sem observer, sem loop)');
-})();
-
-// ═══════════════════════════════════════════════════════════════
-// M24: ESTUDO AVANÇADO — Provas, Redação, Radar, Adaptativo
-// Fornece renderProvas/renderRedacao/renderRadar para o M22.
-// Integra com /api/ai (Meggy) e extractPdfText (M9-ISA).
-// ═══════════════════════════════════════════════════════════════
-(function(){
-  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
-  const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-
-  async function callMeggy(prompt){
-    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:prompt,messages:[]})});
-    const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
-    return data.response||'';
-  }
-
-  function renderMd(txt){
-    if(window.marked){try{return marked.parse(txt);}catch(_){}}
-    return esc(txt).replace(/\n/g,'<br>');
-  }
-
-  const inp='background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:10px;font-size:13px;width:100%;box-sizing:border-box;font-family:inherit;';
-
-  // ── Render: Provas anteriores → plano de estudos ──
-  window.renderProvas=function(box){
-    const plans=lsGet('gdi-exam-plans-v1',[]);
-    box.innerHTML=`
-      <div style="margin-bottom:18px;">
-        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;">📋 Análise de Provas Anteriores</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0 0 14px;">Faça upload de provas anteriores (PDF). A Meggy analisa os temas mais cobrados e cria um plano de estudos focado.</p>
-        <div style="border:2px dashed var(--ferreto-border,#30363d);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:.15s;" id="gdi-prova-drop">
-          <i class="bi bi-cloud-upload" style="font-size:32px;color:var(--ferreto-primary,#ff8b9f);"></i>
-          <p style="color:var(--ferreto-text,#e6edf3);font-size:14px;margin:8px 0 4px;">Clique para selecionar um PDF de prova</p>
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;margin:0;">ou arraste e solte aqui</p>
-          <input type="file" id="gdi-prova-file" accept="application/pdf" style="display:none;">
-        </div>
-        <div id="gdi-prova-status" style="margin-top:12px;"></div>
-      </div>
-      ${plans.length?`<h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Planos salvos (${plans.length})</h4>
-      <div style="display:flex;flex-direction:column;gap:8px;">${plans.slice().reverse().map(p=>`<div class="gdi-note" style="cursor:pointer;" data-id="${p.id}">
-        <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(p.name)}</b><br><span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(p.date).toLocaleDateString('pt-BR')} · ${p.topics||''} temas</span></span>
-        <i class="bi bi-chevron-right" style="color:var(--ferreto-text-muted,#8b949e);"></i>
-      </div>`).join('')}</div>`:''}
-    `;
-    const drop=box.querySelector('#gdi-prova-drop');
-    const fileInput=box.querySelector('#gdi-prova-file');
-    drop.onclick=()=>fileInput.click();
-    drop.ondragover=e=>{e.preventDefault();drop.style.borderColor='var(--ferreto-primary,#ff8b9f)';};
-    drop.ondragleave=()=>{drop.style.borderColor='var(--ferreto-border,#30363d)';};
-    drop.ondrop=e=>{e.preventDefault();drop.style.borderColor='var(--ferreto-border,#30363d)';if(e.dataTransfer.files[0])analyzeProva(box,e.dataTransfer.files[0]);};
-    fileInput.onchange=()=>{if(fileInput.files[0])analyzeProva(box,fileInput.files[0]);};
-    // clickable saved plans
-    box.querySelectorAll('[data-id]').forEach(el=>{
-      el.onclick=()=>{
-        const p=plans.find(x=>x.id===el.dataset.id);
-        if(p)showPlan(box,p);
-      };
-    });
-  };
-
-  async function analyzeProva(box,file){
-    const status=box.querySelector('#gdi-prova-status');
-    if(!file.name.toLowerCase().endsWith('.pdf')){status.innerHTML='<div class="gdi-ai-err">Apenas arquivos PDF são suportados.</div>';return;}
-    status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Extraindo texto da prova…</p></div>';
-    try{
-      // carrega pdf.js
-      const pdfjsLib=window.pdfjsLib;
-      if(!pdfjsLib){
-        await new Promise((res,rej)=>{
-          const s=document.createElement('script');
-          s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-          s.onload=()=>{window.pdfjsLib=window.pdfjsLib||pdfjsLib;res();};
-          s.onerror=rej;
-          document.head.appendChild(s);
-        });
-      }
-      const lib=window.pdfjsLib;
-      if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-      const buf=await file.arrayBuffer();
-      const doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
-      const n=Math.min(doc.numPages,30);
-      let txt='';
-      for(let i=1;i<=n;i++){
-        const pg=await doc.getPage(i);
-        const tc=await pg.getTextContent({normalizeWhitespace:true,includeMarkedContent:true});
-        let pt='';
-        for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
-        txt+=pt+'\n\n';
-        if(txt.length>10000)break;
-      }
-      try{doc.destroy();}catch(_){}
-      txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
-      if(txt.length<50){status.innerHTML='<div class="gdi-ai-err">Não foi possível extrair texto deste PDF.</div>';return;}
-
-      status.innerHTML='<div class="gdi-ai-loading" style="padding:20px;text-align:center;"><div class="gdi-ai-typing" style="margin:0 auto;"><span></span><span></span><span></span></div><p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:10px;">Meggy está analisando a prova e criando o plano…</p></div>';
-      const resp=await callMeggy('Analise esta prova anterior de concurso/vestibular e crie um plano de estudos focado. Identifique os 5 temas mais cobrados e sugira quantas horas dedicar a cada um (total ~100h). Formato Markdown com ## títulos, lista de temas com horas, e justificativa breve:\n\n'+txt);
-      const plan={id:uid(),name:file.name,date:Date.now(),plan:resp,topics:(resp.match(/##\s+(.+)/g)||[]).length};
-      const plans=lsGet('gdi-exam-plans-v1',[]);
-      plans.push(plan);
-      lsSet('gdi-exam-plans-v1',plans);
-      showPlan(box,plan);
-      showToast('Plano de estudos criado!');
-    }catch(e){
-      status.innerHTML='<div class="gdi-ai-err">Erro: '+esc(e.message)+'</div>';
-    }
-  }
-
-  function showPlan(box,plan){
-    box.innerHTML=`<div style="max-width:760px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <button class="gdi-mode-btn" id="prova-back" style="font-size:12px;"><i class="bi bi-arrow-left"></i> Voltar</button>
-        <b style="color:var(--ferreto-text,#f0f6fc);">${esc(plan.name)}</b>
-        <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(plan.date).toLocaleDateString('pt-BR')}</span>
-      </div>
-      <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
-        ${renderMd(plan.plan)}
-      </div>
-    </div>`;
-    box.querySelector('#prova-back').onclick=()=>window.renderProvas(box);
-  }
-
-  // ── Render: Correção de Redação ──
-  window.renderRedacao=function(box){
-    const corrections=lsGet('gdi-essay-corrections-v1',[]);
-    const BANCAS=['CEBRASPE','FGV','VUNESP','FCC','FUJB','CESGRANRIO','IBFC','Outra'];
-    box.innerHTML=`
-      <div style="margin-bottom:18px;">
-        <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;">✍️ Correção de Redação</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0 0 14px;">A Meggy corrige sua redação seguindo os critérios oficiais da banca escolhida.</p>
-        <div style="margin-bottom:12px;">
-          <label style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);display:block;margin-bottom:4px;">Banca:</label>
-          <select id="red-banca" style="${inp}width:auto;">
-            ${BANCAS.map(b=>`<option value="${b}">${b}</option>`).join('')}
-          </select>
-        </div>
-        <textarea id="red-text" placeholder="Cole sua redação aqui..." style="${inp}min-height:200px;resize:vertical;font-family:Georgia,serif;font-size:14px;line-height:1.6;"></textarea>
-        <div style="margin-top:10px;display:flex;gap:8px;">
-          <button class="gdi-btn gdi-btn-primary" id="red-corrigir"><i class="bi bi-pencil-square"></i> Corrigir com Meggy</button>
-          <span id="red-status" style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;align-self:center;"></span>
-        </div>
-      </div>
-      <div id="red-result"></div>
-      ${corrections.length?`<h4 style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Correções anteriores (${corrections.length})</h4>
-      <div style="display:flex;flex-direction:column;gap:6px;">${corrections.slice().reverse().slice(0,10).map(c=>`<div class="gdi-note" style="cursor:pointer;" data-id="${c.id}">
-        <span style="flex:1;"><b style="color:var(--ferreto-text,#f0f6fc);">${esc(c.banca)}</b> · <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${new Date(c.date).toLocaleDateString('pt-BR')} · Nota: ${c.score||'—'}</span></span>
-      </div>`).join('')}</div>`:''}
-    `;
-    box.querySelector('#red-corrigir').onclick=async()=>{
-      const banca=box.querySelector('#red-banca').value;
-      const text=box.querySelector('#red-text').value.trim();
-      const status=box.querySelector('#red-status');
-      const result=box.querySelector('#red-result');
-      if(!text||text.length<50){showToast('Escreva ou cole sua redação primeiro');return;}
-      status.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy está corrigindo…';
-      result.innerHTML='';
-      try{
-        const resp=await callMeggy('Corrija esta redação de concurso público (banca: '+banca+'). Avalie critérios oficiais: estrutura, coesão, coerência, argumentação, gramática, adequação ao tema. Dê nota de 0 a 10 para cada critério + nota geral + comentários detalhados + sugestões de melhoria. Formato Markdown com ## seções:\n\nREDAÇÃO:\n'+text);
-        // extrai nota geral (procura "Nota geral:" ou "Nota: X")
-        const scoreMatch=resp.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)/i)||resp.match(/nota\s*:?\s*(\d+[,.]?\d*)/i);
-        const score=scoreMatch?scoreMatch[1]:'—';
-        const correction={id:uid(),banca,date:Date.now(),text:text.slice(0,2000),correction:resp,score};
-        const corr=lsGet('gdi-essay-corrections-v1',[]);
-        corr.push(correction);
-        lsSet('gdi-essay-corrections-v1',corr);
-        status.innerHTML='';
-        result.innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">
-          ${renderMd(resp)}
-        </div>`;
-        showToast('Redação corrigida! Nota: '+score);
-      }catch(e){
-        status.innerHTML='<span style="color:#ff6b6b;">Erro: '+esc(e.message)+'</span>';
-      }
-    };
-    box.querySelectorAll('[data-id]').forEach(el=>{
-      el.onclick=()=>{
-        const c=corrections.find(x=>x.id===el.dataset.id);
-        if(c){
-          box.querySelector('#red-banca').value=c.banca;
-          box.querySelector('#red-text').value=c.text;
-          box.querySelector('#red-result').innerHTML=`<div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;margin-top:14px;">${renderMd(c.correction)}</div>`;
-        }
-      };
-    });
-  };
-
-  // ── Render: Radar de fracos (SVG) ──
-  window.renderRadar=function(box){
-    // coleta dados de questões por assunto
-    const qs=lsGet('gdi-questions-v1',[]);
-    const srs=lsGet('gdi-q-srs-v1',{});
-    const bySubject={};
-    qs.forEach(q=>{
-      const s=q.subject||'Geral';
-      if(!bySubject[s])bySubject[s]={total:0,correct:0,wrong:0};
-      bySubject[s].total++;
-      const st=srs[q.id];
-      if(st){
-        if(st.box>0)bySubject[s].correct++;
-        else bySubject[s].wrong++;
-      }
-    });
-    const subjects=Object.entries(bySubject).filter(([,v])=>v.total>=1).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
-    if(!subjects.length){
-      box.innerHTML='<div class="gdi-notes-empty">Resolva algumas questões para ver seu mapa de fracos.</div>';
-      return;
-    }
-    // SVG radar
-    const size=300,cx=150,cy=150,maxR=110;
-    const n=subjects.length;
-    const angle=i=>(-Math.PI/2)+(i*2*Math.PI/n);
-    const pt=(r,i)=>[cx+r*Math.cos(angle(i)),cy+r*Math.sin(angle(i))];
-    // grid (5 anéis)
-    let grid='';
-    for(let r=1;r<=5;r++){
-      const rr=maxR*r/5;
-      const pts=Array.from({length:n},(_,i)=>pt(rr,i).join(',')).join(' ');
-      grid+=`<polygon points="${pts}" fill="none" stroke="var(--ferreto-border,#30363d)" stroke-width="1" opacity="${0.3+r*0.1}"/>`;
-    }
-    // eixos
-    let axes='';
-    subjects.forEach(([,],i)=>{const [x,y]=pt(maxR,i);axes+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--ferreto-border,#30363d)" stroke-width="1" opacity=".3"/>`;});
-    // dados
-    let dataPts='';
-    let labels='';
-    subjects.forEach(([subj,v],i)=>{
-      const acc=v.total>0?(v.correct/v.total):0;
-      const r=maxR*Math.max(0.1,1-acc); // quanto menor acerto, mais pra fora (pior)
-      const [x,y]=pt(r,i);
-      dataPts+=`${x},${y} `;
-      // label
-      const [lx,ly]=pt(maxR+22,i);
-      const short=subj.length>18?subj.slice(0,16)+'…':subj;
-      const color=acc<0.5?'#ff6b6b':acc<0.7?'#ffd43b':'#3fb950';
-      labels+=`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="9" fill="${color}">${esc(short)}</text>`;
-      labels+=`<text x="${lx}" y="${ly+10}" text-anchor="middle" font-size="8" fill="var(--ferreto-text-muted,#8b949e)">${Math.round(acc*100)}%</text>`;
-    });
-    const weakSubjects=subjects.filter(([,v])=>v.total>0&&(v.correct/v.total)<0.6).sort((a,b)=>(a[1].correct/a[1].total)-(b[1].correct/b[1].total));
-    box.innerHTML=`<div style="max-width:760px;">
-      <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 4px;">🎯 Mapa de Fracos</h3>
-      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin:0 0 16px;">Quanto mais pra fora, pior seu desempenho. Foque nas áreas vermelhas.</p>
-      <div style="display:flex;justify-content:center;margin-bottom:20px;">
-        <svg width="${size}" height="${size}" style="max-width:100%;">
-          ${grid}${axes}
-          <polygon points="${dataPts.trim()}" fill="rgba(255,139,159,.2)" stroke="var(--ferreto-primary,#ff8b9f)" stroke-width="2"/>
-          ${dataPts.trim().split(' ').map(p=>{const[x,y]=p.split(',');return `<circle cx="${x}" cy="${y}" r="3" fill="var(--ferreto-primary,#ff8b9f)"/>`;}).join('')}
-          ${labels}
-        </svg>
-      </div>
-      ${weakSubjects.length?`<div style="background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);border-radius:12px;padding:14px;margin-bottom:14px;">
-        <b style="color:#ff8b8b;">⚠️ Foque em:</b>
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
-          ${weakSubjects.map(([s,v])=>`<span style="color:var(--ferreto-text,#e6edf3);font-size:13px;">• ${esc(s)} — ${Math.round(v.correct/v.total*100)}% de acerto (${v.correct}/${v.total})</span>`).join('')}
-        </div>
-      </div>`:'<div style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:12px;padding:14px;"><b style="color:#3fb950;">✓ Bom desempenho geral!</b> Nenhuma matéria com taxa de acerto abaixo de 60%.</div>'}
-    </div>`;
-  };
-
-  console.log('[GDI Extras] M24 Estudo Avançado (provas/redação/radar) ativo');
 })();
 
 // ═══════════════════════════════════════════════════════════════
@@ -4177,7 +3709,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 })();
 
 // ═══════════════════════════════════════════════════════════════
-// M-AI: WIDGET DA MEGGY 🐩 — poodle tutora de estudos
+// M-AI: WIDGET DA ISA — A MAIS BELA (tutora de estudos)
 // Botão flutuante + painel de chat. PRIORIDADE de backend:
 //   1) IA do navegador (Chrome Prompt API / Gemini Nano via
 //      ai.languageModel — ativada por extensões Chrome). 100% local,
@@ -4189,15 +3721,13 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 (function(){
   if(window.__gdiAiWidget)return;window.__gdiAiWidget=true;
 
-  const MEGGY_NAME='Meggy';
-  const MEGGY_AVATAR='🐩';
-  const MEGGY_TAG='— a poodle tutora';
-  const ISA_SYS='Você é a Meggy — uma poodle tutora de estudos brasileira, ' +
-    'amigável, calorosa e didática (mascote do projeto, sempre acompanhada do emoji 🐩). ' +
-    'Acompanha alunos em uma plataforma de videoaulas (Google Drive Index). Responda em ' +
-    'português, de forma clara e objetiva. Ajude com dúvidas das aulas, resumos, ' +
-    'explicações e organização dos estudos. Se não souber, diga. Seja motivadora e ' +
-    'acolhedora. Use Markdown quando ajudar.';
+  const ISA_NAME='ISA';
+  const ISA_TAG='a mais bela';
+  const ISA_SYS='Você é a ISA — "a mais bela" — uma tutora de estudos brasileira, ' +
+    'amigável, calorosa e didática. Acompanha alunos em uma plataforma de videoaulas ' +
+    '(Google Drive Index). Responda em português, de forma clara e objetiva. Ajude com ' +
+    'dúvidas das aulas, resumos, explicações e organização dos estudos. Se não souber, ' +
+    'diga. Seja motivadora e acolhedora. Use Markdown quando ajudar.';
 
   // CSS
   if(!document.getElementById('gdi-ai-style')){
@@ -4227,7 +3757,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   border-bottom:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
 #gdi-ai-head .gdi-ai-avatar{width:38px;height:38px;border-radius:50%;flex:none;
   background:linear-gradient(135deg,#ff8b9f,#c026d3);display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:22px;line-height:1;
+  color:#fff;font-size:18px;font-weight:700;font-family:var(--ferreto-font-display,'Poppins',sans-serif);
   box-shadow:0 0 0 2px rgba(255,255,255,.1) inset;}
 #gdi-ai-head .gdi-ai-info{flex:1;min-width:0;}
 #gdi-ai-head .gdi-ai-name{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;font-weight:700;color:var(--ferreto-text,#f3f5fa);line-height:1.1;}
@@ -4312,7 +3842,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         topK:3
       });
       return _browserSession;
-    }catch(e){console.warn('[Meggy] não pôde criar sessão do navegador:',e);_browserSession=null;return null;}
+    }catch(e){console.warn('[ISA] não pôde criar sessão do navegador:',e);_browserSession=null;return null;}
   }
 
   async function callBrowserAI(history){
@@ -4330,9 +3860,9 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     const dot=panel.querySelector('.gdi-ai-dot');
     const st=panel.querySelector('.gdi-ai-status');
     if(!dot||!st)return;
-    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> Meggy · IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
-    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
-    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Meggy · online';const sl=serverLabel();_providerLabel=sl.label;}
+    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
+    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
+    else{dot.classList.remove('local');const sl=serverLabel();st.innerHTML='<span class="gdi-ai-dot"></span> '+sl.name+' · online';_providerLabel=sl.label;}
     const pv=panel.querySelector('.gdi-ai-provider');
     if(pv)pv.innerHTML='via '+_providerLabel;
   }
@@ -4340,17 +3870,17 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   // UI no <html> (fora do body) — sobrevive a trocas de página
   const root=GDI_ROOT();
   const fab=document.createElement('button');
-  fab.id='gdi-ai-fab';fab.title='Meggy 🐩 · sua poodle tutora de estudos';
-  fab.innerHTML='<span class="gdi-ai-fab-ico">🐩</span><span id="gdi-ai-fab-badge"></span>';
+  fab.id='gdi-ai-fab';fab.title='ISA — a mais bela · sua tutora de estudos';
+  fab.innerHTML='<span class="gdi-ai-fab-ico">💖</span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar">${MEGGY_AVATAR}</div>
+      <div class="gdi-ai-avatar">ISA</div>
       <div class="gdi-ai-info">
-        <div class="gdi-ai-name">${MEGGY_NAME}<span class="gdi-ai-tag">${MEGGY_TAG}</span></div>
+        <div class="gdi-ai-name">${ISA_NAME}<span class="gdi-ai-tag">— ${ISA_TAG}</span></div>
         <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
       </div>
       <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
@@ -4358,7 +3888,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     <div id="gdi-ai-body"></div>
     <div class="gdi-ai-provider"></div>
     <div id="gdi-ai-input-wrap">
-      <input id="gdi-ai-input" type="text" placeholder="Pergunte à Meggy 🐩 sobre a aula, peça um resumo..." autocomplete="off">
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte à ISA sobre a aula, peça um resumo..." autocomplete="off">
       <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
     </div>`;
   root.appendChild(panel);
@@ -4380,7 +3910,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   function renderHistory(){
     body.innerHTML='';
     if(!messages.length){
-      addMsg('assistant','Oi! Sou a **Meggy** 🐩 — sua poodle tutora de estudos.\n\nPosso ajudar com:\n- Explicar um tema da aula\n- Fazer um resumo\n- Tirar dúvidas\n- Sugerir um plano de estudos\n\nO que você precisa hoje? 🐾');
+      addMsg('assistant','Oi! Sou a **ISA — a mais bela** 💖, sua tutora de estudos.\n\nPosso ajudar com:\n- Explicar um tema da aula\n- Fazer um resumo\n- Tirar dúvidas\n- Sugerir um plano de estudos\n\nO que você precisa hoje?');
       messages.pop();save(); // saudação não conta no histórico
       return;
     }
@@ -4417,7 +3947,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       try{
         response=await callBrowserAI(hist);
         if(response)usedLocal=true;
-      }catch(e){console.warn('[Meggy] IA do navegador falhou, caindo p/ servidor:',e);response=null;}
+      }catch(e){console.warn('[ISA] IA do navegador falhou, caindo p/ servidor:',e);response=null;}
     }
     // 2) fallback servidor /api/ai
     if(!response){
@@ -4489,14 +4019,14 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     updateStatus();
     const browserReady=(_browserAIState==='ready');
     const serverOk=!!_serverEnabled;
-    console.log('[Meggy] IA do navegador:',_browserAIState,'| servidor habilitado:',serverOk);
+    console.log('[ISA] IA do navegador:',_browserAIState,'| servidor habilitado:',serverOk);
     if(browserReady||serverOk){
       showWidget();
     }else{
       // Nenhum backend disponível — esconde o botão mas mantém o código.
       // Ativa automaticamente quando o usuário configurar ZHIPU_API_KEY.
       hideWidget();
-      console.log('[Meggy] widget oculto — configure ZHIPU_API_KEY no Cloudflare para ativar');
+      console.log('[ISA] widget oculto — configure ZHIPU_API_KEY no Cloudflare para ativar');
     }
   });
 
@@ -4506,5 +4036,5 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
 
-  console.log('[GDI Extras] M-AI widget Meggy 🐩 — poodle tutora ativo');
+  console.log('[GDI Extras] M-AI widget ISA — a mais bela ativo');
 })();
