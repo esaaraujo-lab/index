@@ -2622,14 +2622,25 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 })();
 
 // ═══════════════════════════════════════════════════════════════
-// M-AI: WIDGET DA IA FERRETO (tutora de estudos)
-// Botão flutuante + painel de chat. Chama POST /api/ai (rota do
-// worker.js que suporta CF Workers AI ou endpoint OpenAI-compat).
+// M-AI: WIDGET DA ISA — A MAIS BELA (tutora de estudos)
+// Botão flutuante + painel de chat. PRIORIDADE de backend:
+//   1) IA do navegador (Chrome Prompt API / Gemini Nano via
+//      ai.languageModel — ativada por extensões Chrome). 100% local,
+//      sem servidor, sem custo, funciona offline após download.
+//   2) POST /api/ai (worker.js → CF Workers AI ou OpenAI-compat).
 // Conversa persistida em sessionStorage. UI no <html> (fora do
 // body) para sobreviver a trocas de página. Estilo Ferreto.
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if(window.__gdiAiWidget)return;window.__gdiAiWidget=true;
+
+  const ISA_NAME='ISA';
+  const ISA_TAG='a mais bela';
+  const ISA_SYS='Você é a ISA — "a mais bela" — uma tutora de estudos brasileira, ' +
+    'amigável, calorosa e didática. Acompanha alunos em uma plataforma de videoaulas ' +
+    '(Google Drive Index). Responda em português, de forma clara e objetiva. Ajude com ' +
+    'dúvidas das aulas, resumos, explicações e organização dos estudos. Se não souber, ' +
+    'diga. Seja motivadora e acolhedora. Use Markdown quando ajudar.';
 
   // CSS
   if(!document.getElementById('gdi-ai-style')){
@@ -2640,7 +2651,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   box-shadow:0 8px 28px -6px rgba(255,139,159,.5),0 0 0 1px rgba(255,255,255,.12);
   transition:transform .18s,box-shadow .18s;}
 #gdi-ai-fab:hover{transform:scale(1.08) translateY(-2px);box-shadow:0 12px 36px -6px rgba(255,139,159,.6);}
-#gdi-ai-fab .bi-robot-fill{font-size:26px;}
+#gdi-ai-fab .gdi-ai-fab-ico{font-size:26px;line-height:1;}
 #gdi-ai-fab-badge{position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;
   background:#5ddeda;border:2px solid var(--ferreto-bg,#070910);display:none;}
 #gdi-ai-fab-badge.show{display:block;animation:gdi-ai-pulse 1.6s ease infinite;}
@@ -2657,13 +2668,16 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 #gdi-ai-head{display:flex;align-items:center;gap:10px;padding:14px 16px;
   background:linear-gradient(135deg,rgba(255,139,159,.18),rgba(93,222,218,.1));
   border-bottom:1px solid var(--ferreto-border,rgba(255,255,255,.09));}
-#gdi-ai-head .gdi-ai-avatar{width:36px;height:36px;border-radius:50%;flex:none;
+#gdi-ai-head .gdi-ai-avatar{width:38px;height:38px;border-radius:50%;flex:none;
   background:linear-gradient(135deg,#ff8b9f,#c026d3);display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:18px;}
+  color:#fff;font-size:18px;font-weight:700;font-family:var(--ferreto-font-display,'Poppins',sans-serif);
+  box-shadow:0 0 0 2px rgba(255,255,255,.1) inset;}
 #gdi-ai-head .gdi-ai-info{flex:1;min-width:0;}
-#gdi-ai-head .gdi-ai-name{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;font-weight:700;color:var(--ferreto-text,#f3f5fa);}
-#gdi-ai-head .gdi-ai-status{font-size:11px;color:var(--ferreto-text-muted,#9aa4b8);display:flex;align-items:center;gap:5px;}
+#gdi-ai-head .gdi-ai-name{font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;font-weight:700;color:var(--ferreto-text,#f3f5fa);line-height:1.1;}
+#gdi-ai-head .gdi-ai-name .gdi-ai-tag{font-size:10px;font-weight:500;color:var(--ferreto-secondary,#5ddeda);margin-left:5px;letter-spacing:.02em;}
+#gdi-ai-head .gdi-ai-status{font-size:11px;color:var(--ferreto-text-muted,#9aa4b8);display:flex;align-items:center;gap:5px;margin-top:2px;}
 #gdi-ai-head .gdi-ai-dot{width:7px;height:7px;border-radius:50%;background:#3fb950;}
+#gdi-ai-head .gdi-ai-dot.local{background:#5ddeda;}
 #gdi-ai-close{background:none;border:0;color:var(--ferreto-text-muted,#9aa4b8);font-size:18px;cursor:pointer;padding:4px;border-radius:8px;}
 #gdi-ai-close:hover{background:var(--ferreto-surface-3,rgba(255,255,255,.08));color:var(--ferreto-text,#f3f5fa);}
 #gdi-ai-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
@@ -2677,7 +2691,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 .gdi-ai-msg .gdi-ai-bubble p{margin:0 0 6px;} .gdi-ai-msg .gdi-ai-bubble p:last-child{margin:0;}
 .gdi-ai-msg .gdi-ai-bubble code{background:rgba(0,0,0,.25);padding:1px 5px;border-radius:4px;font-size:12px;}
 .gdi-ai-msg .gdi-ai-bubble pre{background:rgba(0,0,0,.3);padding:8px;border-radius:8px;overflow-x:auto;margin:6px 0;}
-.gdi-ai-typing{display:flex;gap:4px;padding:12px 14px;}
+.gdi-ai-typing{display:flex;gap:4px;padding:4px 0;}
 .gdi-ai-typing span{width:7px;height:7px;border-radius:50%;background:var(--ferreto-text-muted,#9aa4b8);animation:gdi-ai-typ 1.2s ease infinite;}
 .gdi-ai-typing span:nth-child(2){animation-delay:.2s;} .gdi-ai-typing span:nth-child(3){animation-delay:.4s;}
 @keyframes gdi-ai-typ{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-4px);}}
@@ -2691,6 +2705,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 #gdi-ai-send:hover{filter:brightness(1.1);transform:scale(1.05);}
 #gdi-ai-send:disabled{opacity:.5;cursor:default;transform:none;}
 .gdi-ai-err{font-size:12px;color:#ff8b8b;text-align:center;padding:8px;margin:0 4px;}
+.gdi-ai-provider{font-size:10px;color:var(--ferreto-text-faint,#6b7488);text-align:center;padding:2px 0 6px;letter-spacing:.02em;}
+.gdi-ai-provider b{color:var(--ferreto-secondary,#5ddeda);}
 @media(max-width:480px){#gdi-ai-panel{right:8px;left:8px;width:auto;bottom:80px;height:calc(100vh - 160px);}}
 `;document.documentElement.appendChild(s);
   }
@@ -2707,27 +2723,85 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+  // ── Detecção da IA do navegador ──
+  // Chrome 127+ com "Prompt API for Gemini Nano" habilitado expõe
+  // `ai.languageModel`. Extensões Chrome ativam/desativam isso.
+  // Também tenta o alias antigo `window.ai`.
+  let _browserAIState='unknown'; // 'unknown' | 'ready' | 'download' | 'no'
+  let _browserSession=null;
+  let _providerLabel='verificando…';
+
+  async function detectBrowserAI(){
+    try{
+      const ai=(window.ai&&window.ai.languageModel)?window.ai.languageModel:(window.LanguageModel);
+      if(ai&&typeof ai.capabilities==='function'){
+        const caps=await ai.capabilities();
+        if(caps&&caps.available==='readily'){_browserAIState='ready';return 'ready';}
+        if(caps&&caps.available==='after-download'){_browserAIState='download';return 'download';}
+        _browserAIState='no';return 'no';
+      }
+    }catch(_){}
+    _browserAIState='no';return 'no';
+  }
+
+  async function getBrowserSession(){
+    if(_browserSession)return _browserSession;
+    try{
+      const ai=(window.ai&&window.ai.languageModel)?window.ai.languageModel:(window.LanguageModel);
+      if(!ai)return null;
+      _browserSession=await ai.create({
+        systemPrompt:ISA_SYS,
+        temperature:0.7,
+        topK:3
+      });
+      return _browserSession;
+    }catch(e){console.warn('[ISA] não pôde criar sessão do navegador:',e);_browserSession=null;return null;}
+  }
+
+  async function callBrowserAI(history){
+    const sess=await getBrowserSession();
+    if(!sess)return null;
+    // Prompt API mantém o contexto internamente; enviamos só a última
+    // mensagem do usuário (a sessão lembra as anteriores).
+    const lastUser=[...history].reverse().find(m=>m.role==='user');
+    if(!lastUser)return null;
+    const out=await sess.prompt(lastUser.content);
+    return out||null;
+  }
+
+  function updateStatus(){
+    const dot=panel.querySelector('.gdi-ai-dot');
+    const st=panel.querySelector('.gdi-ai-status');
+    if(!dot||!st)return;
+    if(_browserAIState==='ready'){dot.classList.add('local');st.innerHTML='<span class="gdi-ai-dot local"></span> IA do navegador · 100% local';_providerLabel='IA do navegador <b>(Chrome/Gemini Nano — local)</b>';}
+    else if(_browserAIState==='download'){dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Baixando modelo local…';_providerLabel='baixando modelo do navegador…';}
+    else{dot.classList.remove('local');st.innerHTML='<span class="gdi-ai-dot"></span> Servidor · online';_providerLabel='servidor <b>(/api/ai)</b>';}
+    const pv=panel.querySelector('.gdi-ai-provider');
+    if(pv)pv.innerHTML='via '+_providerLabel;
+  }
+
   // UI no <html> (fora do body) — sobrevive a trocas de página
   const root=GDI_ROOT();
   const fab=document.createElement('button');
-  fab.id='gdi-ai-fab';fab.title='IA Ferreto — sua tutora de estudos';
-  fab.innerHTML='<i class="bi bi-robot-fill"></i><span id="gdi-ai-fab-badge"></span>';
+  fab.id='gdi-ai-fab';fab.title='ISA — a mais bela · sua tutora de estudos';
+  fab.innerHTML='<span class="gdi-ai-fab-ico">💖</span><span id="gdi-ai-fab-badge"></span>';
   root.appendChild(fab);
 
   const panel=document.createElement('div');
   panel.id='gdi-ai-panel';
   panel.innerHTML=`
     <div id="gdi-ai-head">
-      <div class="gdi-ai-avatar"><i class="bi bi-robot-fill"></i></div>
+      <div class="gdi-ai-avatar">ISA</div>
       <div class="gdi-ai-info">
-        <div class="gdi-ai-name">IA Ferreto</div>
-        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> Tutora de estudos · online</div>
+        <div class="gdi-ai-name">${ISA_NAME}<span class="gdi-ai-tag">— ${ISA_TAG}</span></div>
+        <div class="gdi-ai-status"><span class="gdi-ai-dot"></span> verificando…</div>
       </div>
       <button id="gdi-ai-close" title="Fechar"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="gdi-ai-body"></div>
+    <div class="gdi-ai-provider"></div>
     <div id="gdi-ai-input-wrap">
-      <input id="gdi-ai-input" type="text" placeholder="Pergunte sobre a aula, peça um resumo..." autocomplete="off">
+      <input id="gdi-ai-input" type="text" placeholder="Pergunte à ISA sobre a aula, peça um resumo..." autocomplete="off">
       <button id="gdi-ai-send" title="Enviar"><i class="bi bi-send-fill"></i></button>
     </div>`;
   root.appendChild(panel);
@@ -2749,7 +2823,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   function renderHistory(){
     body.innerHTML='';
     if(!messages.length){
-      addMsg('assistant','Oi! Sou a **IA Ferreto**, sua tutora de estudos. 👋\n\nPosso ajudar com:\n- Explicar um tema da aula\n- Fazer um resumo\n- Tirar dúvidas\n- Sugerir um plano de estudos\n\nO que você precisa hoje?');
+      addMsg('assistant','Oi! Sou a **ISA — a mais bela** 💖, sua tutora de estudos.\n\nPosso ajudar com:\n- Explicar um tema da aula\n- Fazer um resumo\n- Tirar dúvidas\n- Sugerir um plano de estudos\n\nO que você precisa hoje?');
       messages.pop();save(); // saudação não conta no histórico
       return;
     }
@@ -2776,37 +2850,61 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     busy=true;sendBtn.disabled=true;input.value='';
     addMsg('user',txt);
     showTyping();
-    try{
-      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:txt,messages:messages.filter(m=>m.role!=='system').slice(-8).map(m=>({role:m.role,content:m.text}))})});
-      const data=await r.json();
-      hideTyping();
-      if(data.ok&&data.response){
-        addMsg('assistant',data.response);
-      }else{
+
+    // histórico para enviar (role/content)
+    const hist=messages.filter(m=>m.role!=='system').slice(-8).map(m=>({role:m.role,content:m.text}));
+
+    let response=null,usedLocal=false;
+    // 1) tenta IA do navegador
+    if(_browserAIState==='ready'){
+      try{
+        response=await callBrowserAI(hist);
+        if(response)usedLocal=true;
+      }catch(e){console.warn('[ISA] IA do navegador falhou, caindo p/ servidor:',e);response=null;}
+    }
+    // 2) fallback servidor /api/ai
+    if(!response){
+      try{
+        const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({message:txt,messages:hist})});
+        const data=await r.json();
+        hideTyping();
+        if(data.ok&&data.response){response=data.response;}
+        else{
+          const errEl=document.createElement('div');errEl.className='gdi-ai-err';
+          errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
+          body.appendChild(errEl);body.scrollTop=body.scrollHeight;
+          setTimeout(()=>errEl.remove(),5000);
+          busy=false;sendBtn.disabled=false;input.focus();
+          return;
+        }
+      }catch(e){
+        hideTyping();
         const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-        errEl.textContent=data.error||'Não consegui responder agora. Tente novamente.';
+        errEl.textContent='Erro de conexão. Verifique sua internet.';
         body.appendChild(errEl);body.scrollTop=body.scrollHeight;
         setTimeout(()=>errEl.remove(),5000);
+        busy=false;sendBtn.disabled=false;input.focus();
+        return;
       }
-    }catch(e){
-      hideTyping();
-      const errEl=document.createElement('div');errEl.className='gdi-ai-err';
-      errEl.textContent='Erro de conexão. Verifique sua internet.';
-      body.appendChild(errEl);body.scrollTop=body.scrollHeight;
-      setTimeout(()=>errEl.remove(),5000);
     }
+    hideTyping();
+    addMsg('assistant',response);
+    if(usedLocal)updateStatus(); // confirma que usou local
     busy=false;sendBtn.disabled=false;input.focus();
   }
 
   function toggle(){
     const open=panel.classList.toggle('open');
-    if(open){badge.classList.remove('show');renderHistory();setTimeout(()=>input.focus(),100);}
+    if(open){badge.classList.remove('show');renderHistory();updateStatus();setTimeout(()=>input.focus(),100);}
   }
   fab.addEventListener('click',toggle);
   panel.querySelector('#gdi-ai-close').addEventListener('click',()=>panel.classList.remove('open'));
   sendBtn.addEventListener('click',send);
   input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+
+  // detecta a IA do navegador ao carregar (1×)
+  detectBrowserAI().then(()=>{updateStatus();console.log('[ISA] IA do navegador:',_browserAIState);});
 
   // badge de novidade após 8s se nunca abriu
   if(!sessionStorage.getItem('gdi-ai-seen')){
@@ -2814,5 +2912,5 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   fab.addEventListener('click',()=>{sessionStorage.setItem('gdi-ai-seen','1');},{once:true});
 
-  console.log('[GDI Extras] M-AI widget IA Ferreto ativo');
+  console.log('[GDI Extras] M-AI widget ISA — a mais bela ativo');
 })();
