@@ -651,6 +651,142 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   window.GDI_MODULES.push({name:'materials',init:build});
 })();
 
+// ═══ M10 v5: MODOS DE FOCO + BOTÃO ASSISTIDO ═══
+(function(){
+  if(!document.getElementById('gdi-focus-style')){
+    const s=document.createElement('style');s.id='gdi-focus-style';s.textContent=`
+body.gdi-fv .gdi-study-grid,body.gdi-fm .gdi-study-grid{grid-template-columns:1fr!important;}
+body.gdi-fv .gdi-study-right{display:none!important;}
+body.gdi-fm .gdi-study-left{display:none!important;}
+body.gdi-fv .gdi-study-left{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap{width:100%!important;max-width:100%!important;}
+body.gdi-fv .gdi-player-wrap video,
+body.gdi-fv .gdi-player-wrap .plyr,
+body.gdi-fv .gdi-player-wrap .plyr__video-wrapper,
+body.gdi-fv .gdi-player-wrap .video-js,
+body.gdi-fv .gdi-player-wrap .dplayer,
+body.gdi-fv .gdi-player-wrap .dplayer-video-wrap,
+body.gdi-fv .gdi-player-wrap .dplayer-video,
+body.gdi-fv .gdi-player-wrap .jwplayer,
+body.gdi-fv .gdi-player-wrap #player,
+body.gdi-fv .gdi-player-wrap #vplayer,
+body.gdi-fv .gdi-player-wrap #player-container,
+body.gdi-fv .gdi-player-wrap iframe{
+  width:100%!important;max-width:100%!important;max-height:none!important;
+  margin-left:auto!important;margin-right:auto!important;display:block!important;}`;
+    document.head.appendChild(s);
+  }
+  function isDone(){
+    const key=window.gdiVideoKey?window.gdiVideoKey():window.location.pathname;
+    let done=false;
+    try{
+      done=GDIUser.isWatched(key);
+      if(!done&&window.gdiNormKey)done=GDIUser.isWatched(gdiNormKey(key));
+      if(!done)done=GDIUser.isWatched(window.location.pathname);
+    }catch(_){}
+    return done;
+  }
+  function updBtn(){
+    const wb=document.getElementById('gdi-watched-btn');
+    if(!wb)return;
+    const done=isDone();
+    wb.classList.toggle('done',done);
+    wb.innerHTML=done?'<i class="bi bi-eye-fill"></i><span>Assistida \u2713</span>':'<i class="bi bi-eye"></i><span>Assistido</span>';
+  }
+  function findLayout(){
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(study){
+      const grid=study.querySelector('.gdi-study-grid');
+      const left=(grid||study).querySelector('.gdi-study-left');
+      const right=(grid||study).querySelector('.gdi-study-right');
+      if(grid&&(left||right))return{grid,left,right};
+    }
+    const rightEl=document.getElementById('gdi-slot-right')||document.getElementById('gdi-mat-body');
+    if(wrap&&rightEl&&rightEl!==wrap){
+      let p=wrap.parentElement;
+      while(p&&p!==document.body&&!p.contains(rightEl))p=p.parentElement;
+      if(p&&p!==document.body&&p.contains(wrap)){
+        const col=el=>{let n=el;while(n&&n.parentElement&&n.parentElement!==p)n=n.parentElement;return n;};
+        return{grid:p,left:col(wrap),right:col(rightEl)};
+      }
+    }
+    return{grid:null,left:null,right:null};
+  }
+  window.GDI_MODULES.push({name:'focus-modes',init:function(){
+    const study=document.getElementById('gdi-study');
+    const wrap=document.querySelector('.gdi-player-wrap');
+    if(!study&&!wrap)return;
+    let slot=document.getElementById('gdi-slot-modes');
+    let created=false;
+    if(!slot){
+      const host=study?study.querySelector('.gdi-study-left'):null;
+      slot=document.createElement('div');
+      slot.id='gdi-slot-modes';
+      slot.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px 0;';
+      if(host)host.insertBefore(slot,host.firstChild);
+      else if(wrap&&wrap.parentElement)wrap.parentElement.insertBefore(slot,wrap);
+      else if(study)study.insertBefore(slot,study.firstChild);
+      else return;
+      created=true;
+    }
+    if(slot.dataset.m10)return;
+    slot.dataset.m10='1';
+    console.log('[GDI M10] v5 ativo \u2014 slot '+(created?'CRIADO pelo extras (o core n\u00e3o fornece)':'do core'));
+    slot.innerHTML=`
+      <button class="gdi-mode-btn" data-mode="split" title="Tela dividida (v\u00eddeo + material)"><i class="bi bi-layout-split"></i><span class="d-none d-md-inline">Dividido</span></button>
+      <button class="gdi-mode-btn" data-mode="fv" title="Foco na aula (v\u00eddeo em largura total)"><i class="bi bi-lightning-charge-fill"></i><span class="d-none d-md-inline">Foco na aula</span></button>
+      <button class="gdi-mode-btn" data-mode="fm" title="Foco no material (s\u00f3 PDF, zoom autom\u00e1tico)"><i class="bi bi-file-earmark-pdf-fill"></i><span class="d-none d-md-inline">Foco no material</span></button>
+      <button class="gdi-watched-btn" id="gdi-watched-btn" title="Marcar esta aula como assistida"><i class="bi bi-eye"></i><span>Assistido</span></button>`;
+    function zoom(){
+      const z=document.body.classList.contains('gdi-fm')?'150':'100';
+      const ifr=document.querySelector('#gdi-mat-body iframe');
+      if(ifr){const base=ifr.src.split('#')[0];if(!base.endsWith('.html'))ifr.src=base+'#zoom='+z;}
+    }
+    function applyLayout(m){
+      const{grid,left,right}=findLayout();
+      if(grid){
+        if(m==='fv'||m==='fm')grid.style.setProperty('grid-template-columns','1fr','important');
+        else grid.style.removeProperty('grid-template-columns');
+      }
+      if(right){
+        if(m==='fv')right.style.setProperty('display','none','important');
+        else right.style.removeProperty('display');
+      }
+      if(left){
+        if(m==='fm')left.style.setProperty('display','none','important');
+        else left.style.removeProperty('display');
+      }
+    }
+    function setMode(m){
+      document.body.classList.toggle('gdi-fv',m==='fv');
+      document.body.classList.toggle('gdi-fm',m==='fm');
+      try{localStorage.setItem('gdi-study-mode',m)}catch(_){}
+      slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+      applyLayout(m);
+      if(m!=='fv')setTimeout(zoom,60);
+    }
+    slot.querySelectorAll('.gdi-mode-btn[data-mode]').forEach(b=>{
+      b.addEventListener('click',()=>setMode(b.dataset.mode));
+    });
+    let saved='split';try{saved=localStorage.getItem('gdi-study-mode')||'split'}catch(_){}
+    setMode(['fv','fm','split'].includes(saved)?saved:'split');
+    const wb=document.getElementById('gdi-watched-btn');
+    if(wb&&!wb.dataset.b){
+      wb.dataset.b='1';
+      wb.addEventListener('click',()=>{
+        const done=isDone();
+        if(done){window.gdiUnmarkVideo?gdiUnmarkVideo():GDIUser.unmarkWatched(window.location.pathname);}
+        else{window.gdiMarkVideo?gdiMarkVideo():GDIUser.markWatched(window.location.pathname);}
+        showToast(done?'Aula desmarcada':'Aula marcada como assistida \u2713');
+      });
+    }
+    updBtn();
+    Bus.onGlobal('watched:changed',updBtn);
+    Bus.onGlobal('user:ready',updBtn);
+    Bus.onGlobal('video:switched',()=>setTimeout(updBtn,150));
+  }});
+})();
 
 // ═══ M11 v3.2: MODO DESCANSO — UI fora do body (não é apagada pelo core) ═══
 (function(){
