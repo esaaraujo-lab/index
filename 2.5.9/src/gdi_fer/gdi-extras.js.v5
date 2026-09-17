@@ -3530,8 +3530,8 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   if(!document.getElementById('gdi-central-style')){
     const s=document.createElement('style');s.id='gdi-central-style';s.textContent=`
-/* ★ Central de Estudos agora é aba na navbar — fab flutuante removido */
-#gdi-central-fab{display:none!important;}
+#gdi-central-fab{position:fixed;bottom:76px;right:76px;z-index:9999;width:44px;height:44px;border-radius:50%;cursor:pointer;background:var(--ferreto-surface,rgba(18,18,28,.92));border:1.5px solid var(--ferreto-border-strong,rgba(255,255,255,.15));color:var(--ferreto-primary,#ff8b9f);font-size:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);opacity:.55;transition:opacity .25s,transform .18s;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+#gdi-central-fab:hover{opacity:1;transform:scale(1.08);}
 #gdi-central{position:fixed;inset:0;z-index:10001;background:rgba(5,7,10,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;}
 .gdi-central-box{background:var(--ferreto-surface,#0f1218);border:1px solid var(--ferreto-border,#21262d);border-radius:18px;max-width:980px;width:100%;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;overflow:hidden;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 20px 60px -12px rgba(0,0,0,.6);}
 .gdi-central-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--ferreto-border,#21262d);flex-wrap:wrap;background:linear-gradient(135deg,rgba(255,139,159,.1),rgba(93,222,218,.06));}
@@ -3551,35 +3551,12 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 .gdi-fc{background:var(--ferreto-surface-2,rgba(255,255,255,.045));border:1px solid var(--ferreto-border-strong,#30363d);border-radius:14px;padding:26px 20px;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:pointer;max-width:560px;margin:0 auto;}
 `;document.head.appendChild(s);
   }
-  // ★ Central de Estudos agora é uma ABA na navbar (não mais flutuante).
-  // Injeta um .gdi-nav-btn em .gdi-nav-actions a cada render da navbar.
-  function injectNavButton(){
-    const actions=document.querySelector('.gdi-nav-actions');
-    if(!actions)return;
-    if(actions.querySelector('#gdi-central-nav'))return; // já injetou
-    const btn=document.createElement('button');
-    btn.id='gdi-central-nav';
-    btn.className='gdi-nav-btn';
-    btn.title='Central de Estudos (tecla C)';
-    btn.innerHTML='<i class="bi bi-journal-bookmark-fill"></i><span class="d-none d-md-inline">Estudos</span>';
-    btn.onclick=()=>openPanel('cursos');
-    // insere antes do botão de tema (se existir) ou no início
-    const themeBtn=document.getElementById('theme-toggle');
-    if(themeBtn)actions.insertBefore(btn,themeBtn);
-    else actions.appendChild(btn);
+  if(!document.getElementById('gdi-central-fab')){
+    const b=document.createElement('button');
+    b.id='gdi-central-fab';b.title='Central de Estudos (tecla C)';b.textContent='\ud83d\udcda';
+    b.onclick=()=>openPanel('cursos');
+    GDI_ROOT().appendChild(b);
   }
-  // tenta injetar imediatamente + a cada troca de página
-  injectNavButton();
-  setTimeout(injectNavButton,500);
-  setTimeout(injectNavButton,1500);
-  Bus.onGlobal('page:change',()=>setTimeout(injectNavButton,100));
-  Bus.onGlobal('rows:appended',()=>setTimeout(injectNavButton,50));
-  // observer como fallback (navbar pode ser reconstruída async)
-  const navObs=new MutationObserver(()=>injectNavButton());
-  const navEl=document.querySelector('.gdi-nav');
-  if(navEl)navObs.observe(navEl,{childList:true,subtree:true});
-  else setTimeout(()=>{const n=document.querySelector('.gdi-nav');if(n)navObs.observe(n,{childList:true,subtree:true});},1000);
-
   document.addEventListener('keydown',e=>{
     const t=e.target;
     if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
@@ -3595,7 +3572,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     if(e.code==='Space'){e.preventDefault();FC.flip&&FC.flip();}
     else if(e.key==='1'||e.key==='2'||e.key==='3'){FC.grade&&FC.grade(+e.key);}
   });
-  log('central de estudos ativa (v2.6 \u2014 aba na navbar, sem observer loop)');
+  log('central de estudos ativa (v2.6 \u2014 sem observer, sem loop)');
 })();
 
 // ═══════════════════════════════════════════════════════════════
