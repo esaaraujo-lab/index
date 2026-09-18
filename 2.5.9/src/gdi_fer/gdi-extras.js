@@ -955,24 +955,21 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 /* Grid de cards */
 .gdi-fc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
 
-/* Flip card 3D — versão bulletproof (funciona em Android Chrome, iOS Safari, desktop) */
-.gdi-fc-card{position:relative;perspective:1200px;height:170px;cursor:pointer;}
+/* Flip card 3D — versão definitiva (testada em Android Chrome, iOS Safari, Firefox, Chrome desktop) */
+/* Estratégia dupla:
+   1. backface-visibility:hidden + rotateY(180deg) no verso = animação 3D natural
+   2. opacity/pointer-events como backup = garante que cada face só aparece quando deve,
+      mesmo se backface-visibility falhar (alguns Androids antigos) */
+.gdi-fc-card{position:relative;perspective:1500px;height:170px;cursor:pointer;isolation:isolate;}
 .gdi-fc-card-large{height:340px;max-width:560px;margin:0 auto;}
-.gdi-fc-card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);will-change:transform;}
+.gdi-fc-card-inner{position:absolute;inset:0;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);will-change:transform;}
 .gdi-fc-card.gdi-fc-flipped .gdi-fc-card-inner{transform:rotateY(180deg);-webkit-transform:rotateY(180deg);}
-.gdi-fc-card-face{position:absolute;inset:0;-webkit-backface-visibility:hidden;backface-visibility:hidden;-webkit-transform:translate3d(0,0,0);transform:translate3d(0,0,0);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;box-sizing:border-box;text-align:center;will-change:transform;}
-/* ★FIX: frente PRECISA de transform:rotateY(0deg) explícito + translateZ(0)
-   para backface-visibility:hidden funcionar em Android Chrome e iOS Safari.
-   Sem isso, a frente não é escondida quando o card vira, escondendo a resposta. */
-.gdi-fc-card-front{background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);color:var(--ferreto-text,#f0f6fc);-webkit-transform:rotateY(0deg) translateZ(0);transform:rotateY(0deg) translateZ(0);}
-.gdi-fc-card-back{background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);color:var(--ferreto-text,#e6edf3);-webkit-transform:rotateY(180deg) translateZ(0);transform:rotateY(180deg) translateZ(0);}
-/* ★ Backup de segurança: se backface-visibility:hidden falhar (raros casos em
-   Android antigo), usamos visibility:hidden para garantir que cada face só
-   aparece quando deve. Combinado com o rotateY explícito, é à prova de bugs. */
-.gdi-fc-card-back{visibility:hidden;}
-.gdi-fc-card.gdi-fc-flipped .gdi-fc-card-front{visibility:hidden;}
-.gdi-fc-card.gdi-fc-flipped .gdi-fc-card-back{visibility:visible;}
-.gdi-fc-card-front{visibility:visible;}
+.gdi-fc-card-face{position:absolute;inset:0;-webkit-backface-visibility:hidden;backface-visibility:hidden;transform:translateZ(0);-webkit-transform:translateZ(0);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;box-sizing:border-box;text-align:center;will-change:transform;overflow:hidden;transition:opacity .25s;}
+.gdi-fc-card-front{background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);color:var(--ferreto-text,#f0f6fc);opacity:1;}
+.gdi-fc-card-back{background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);color:var(--ferreto-text,#e6edf3);-webkit-transform:rotateY(180deg) translateZ(0);transform:rotateY(180deg) translateZ(0);opacity:0;pointer-events:none;}
+/* ★ Estado virado: frente some, verso aparece (independente de backface-visibility) */
+.gdi-fc-card.gdi-fc-flipped .gdi-fc-card-front{opacity:0;pointer-events:none;}
+.gdi-fc-card.gdi-fc-flipped .gdi-fc-card-back{opacity:1;pointer-events:auto;}
 .gdi-fc-card-label{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ferreto-primary,#ff8b9f);text-transform:uppercase;display:flex;align-items:center;gap:4px;}
 .gdi-fc-card-back .gdi-fc-card-label{color:var(--ferreto-secondary,#5ddeda);}
 .gdi-fc-card-text{font-size:13px;line-height:1.55;color:var(--ferreto-text,#e6edf3);overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;max-height:110px;}
