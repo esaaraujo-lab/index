@@ -861,7 +861,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     const buf=await resp.arrayBuffer();
     const doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
-    const n=Math.min(doc.numPages,60);
+    const n=Math.min(doc.numPages,30);
     let txt='';
 
     for(let i=1;i<=n;i++){
@@ -896,7 +896,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       }
 
       txt+=pageText+'\n\n';
-      if(txt.length>25000)break;
+      if(txt.length>12000)break;
     }
 
     // ★ fallback: tenta extrair de annotations/form fields
@@ -910,7 +910,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             if(a.fieldValue&&typeof a.fieldValue==='string')txt+=a.fieldValue+'\n';
             if(a.contents&&typeof a.contents==='string')txt+=a.contents+'\n';
           }
-          if(txt.length>10000)break;
+          if(txt.length>5000)break;
         }
       }catch(_){}
     }
@@ -918,7 +918,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     try{doc.destroy();}catch(_){}
     // limpa texto: remove espaços excessivos, decodifica entidades
     txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-    return txt.slice(0,20000);
+    return txt.slice(0,8000);
   }
 
   // ── ISA call (POST /api/ai) ──
@@ -4118,7 +4118,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       if(lib&&lib.GlobalWorkerOptions)lib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const buf=await file.arrayBuffer();
       const doc=await lib.getDocument({data:buf,disableFontFace:true}).promise;
-      const n=Math.min(doc.numPages,60);
+      const n=Math.min(doc.numPages,30);
       let txt='';
       for(let i=1;i<=n;i++){
         const pg=await doc.getPage(i);
@@ -4126,7 +4126,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
         let pt='';
         for(const item of tc.items){if(item.str!==undefined){pt+=item.str;if(item.hasEOL)pt+='\n';}}
         txt+=pt+'\n\n';
-        if(txt.length>25000)break;
+        if(txt.length>10000)break;
       }
       try{doc.destroy();}catch(_){}
       txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000);
