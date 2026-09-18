@@ -641,9 +641,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         </div>
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-mindmap" title="Gerar pílulas com a Meggy (IA)">
           <i class="bi bi-capsule"></i><span>Pílulas</span>
-        </div>
-        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-flashcards" title="Flashcards desta aula">
-          <i class="bi bi-card-text"></i><span>Flashcards</span>
         </div>`;
       if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
       const isMobile=Os.isMobile;
@@ -692,10 +689,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             activateOnly(t);
             if(window.gdiIsaPdf&&window.gdiIsaPdf.mindmap)window.gdiIsaPdf.mindmap(items,bodyEl,base);
             else showToast('Módulo Meggy indisponível');
-          }else if(m==='isa-flashcards'){
-            activateOnly(t);
-            if(window.gdiIsaPdf&&window.gdiIsaPdf.flashcards)window.gdiIsaPdf.flashcards(items,bodyEl,base);
-            else showToast('Módulo Flashcards indisponível');
           }else{
             show(+m);
           }
@@ -1091,9 +1084,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   // ── Auto-criar flashcards das questões geradas ──
   // Cada questão vira um flashcard: frente = enunciado, verso = resposta certa + explicação
-  // ★FIX: usa gdi-cards-v1 (mesma chave da Central de Estudos) em vez de gdi-fc-v1
   function autoCreateFlashcards(questions,lesson){
-    const cards=lsGet('gdi-cards-v1',[]);
+    const cards=lsGet('gdi-fc-v1',[]);
     let n=0;
     questions.forEach(q=>{
       if(!q||!q.statement||!Array.isArray(q.options))return;
@@ -1103,11 +1095,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       // evita duplicatas (mesma frente)
       const exists=cards.some(c=>c.f===q.statement);
       if(!exists){
-        cards.push({id:uid(),f:q.statement,b:back,due:Date.now()+86400000,src:'ISA:'+lesson,path:lesson});
+        cards.push({id:uid(),f:q.statement,b:back,due:Date.now()+86400000,src:'ISA:'+lesson});
         n++;
       }
     });
-    if(n)lsSet('gdi-cards-v1',cards);
+    if(n)lsSet('gdi-fc-v1',cards);
     return n;
   }
 
@@ -1527,157 +1519,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }catch(e){setError(bodyEl,e.message);return;}
   }
 
-  // ── Flashcards flow (aba no M9 — mostra cards da aula + estudo interativo) ──
-  async function flashcards(items,bodyEl,lessonName){
-    const lesson=realLessonName(lessonName||items[0].name);
-    const allCards=lsGet('gdi-cards-v1',[]);
-    // flashcards desta aula (por src ISA:lesson ou path:lesson)
-    const lessonCards=allCards.filter(c=>(c.src||'').includes(lesson)||(c.path||'')===lesson);
-    const dueCards=lessonCards.filter(c=>(c.due||0)<=Date.now());
-
-    if(!lessonCards.length){
-      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;padding:30px;">
-        <div style="font-size:48px;">🃏</div>
-        <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Nenhum flashcard ainda</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Os flashcards são criados automaticamente quando a Meggy gera questões.</p>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;">Clique em <b>Resumo Meggy</b> ou <b>Questões Meggy</b> para gerar.</p>
-        <div style="margin-top:18px;">
-          <input id="gdi-fc-manual-f" placeholder="Frente (pergunta)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;max-width:400px;margin-bottom:6px;box-sizing:border-box;">
-          <input id="gdi-fc-manual-b" placeholder="Verso (resposta)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;max-width:400px;margin-bottom:8px;box-sizing:border-box;">
-          <button id="gdi-fc-manual-add" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar flashcard</button>
-        </div>
-      </div>`;
-      bodyEl.querySelector('#gdi-fc-manual-add').onclick=()=>{
-        const f=bodyEl.querySelector('#gdi-fc-manual-f').value.trim();
-        const b=bodyEl.querySelector('#gdi-fc-manual-b').value.trim();
-        if(!f||!b){showToast('Preencha frente e verso');return;}
-        const cards=lsGet('gdi-cards-v1',[]);
-        cards.push({id:uid(),f,b,due:Date.now()+86400000,src:'manual:'+lesson,path:lesson});
-        lsSet('gdi-cards-v1',cards);
-        showToast('Flashcard adicionado!');
-        flashcards(items,bodyEl,lessonName);
-      };
-      return;
-    }
-
-    // lista de flashcards + botão estudar
-    bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <i class="bi bi-card-text" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Flashcards · ${esc(lesson)}</b>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">${lessonCards.length} cards · ${dueCards.length} p/ revisar</span>
-          <button id="gdi-fc-study-btn" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${dueCards.length?'':'disabled'}><i class="bi bi-play-fill"></i> Estudar (${dueCards.length})</button>
-        </div>
-      </div>
-      <div id="gdi-fc-list-m9" style="display:flex;flex-direction:column;gap:8px;"></div>
-    </div>`;
-
-    // lista os cards
-    const listEl=bodyEl.querySelector('#gdi-fc-list-m9');
-    lessonCards.slice().reverse().forEach(c=>{
-      const row=document.createElement('div');
-      row.className='gdi-note';
-      row.style.flexDirection='column';row.style.alignItems='stretch';
-      const due=(c.due||0)<=Date.now();
-      row.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;width:100%;">
-        <span style="flex:1;word-break:break-word;">
-          <b style="color:var(--ferreto-text,#f0f6fc);">${esc(String(c.f).slice(0,80))}</b><br>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(String(c.b).slice(0,100))}</span>
-        </span>
-        <span style="font-size:10px;color:${due?'#ffd43b':'var(--ferreto-text-muted,#8b949e)'};white-space:nowrap;">${due?'hoje':new Date(c.due||0).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</span>
-        <button class="gdi-note-del" title="Excluir" style="flex:none;"><i class="bi bi-x-lg"></i></button>
-      </div>`;
-      row.querySelector('button').onclick=(e)=>{e.stopPropagation();
-        const cards=lsGet('gdi-cards-v1',[]);
-        lsSet('gdi-cards-v1',cards.filter(x=>x.id!==c.id));
-        flashcards(items,bodyEl,lessonName);
-      };
-      listEl.appendChild(row);
-    });
-
-    // botão estudar — modo interativo (vira o card)
-    bodyEl.querySelector('#gdi-fc-study-btn').onclick=()=>{
-      const queue=dueCards.length?dueCards:lessonCards;
-      runFlashcardSession(bodyEl,lesson,queue,items,lessonName);
-    };
-  }
-
-  // ── Sessão de estudo de flashcards (vira o card) ──
-  function runFlashcardSession(bodyEl,lesson,queue,items,lessonName){
-    let idx=0,hits=0,misses=0;
-    function draw(){
-      if(idx>=queue.length){
-        const pct=Math.round(hits/queue.length*100);
-        bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;text-align:center;">
-          <div style="font-size:48px;">${pct>=60?'🎉':'📚'}</div>
-          <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Sessão concluída!</h3>
-          <p style="color:var(--ferreto-text,#e6edf3);font-size:16px;margin-top:8px;"><b style="color:${pct>=60?'#3fb950':'#ff8b8b'};">${hits}/${queue.length}</b> · ${pct}% acerto</p>
-          <button id="gdi-fc-back-list" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-arrow-left"></i> Voltar aos flashcards</button>
-        </div>`;
-        bodyEl.querySelector('#gdi-fc-back-list').onclick=()=>flashcards(items,bodyEl,lessonName);
-        return;
-      }
-      const c=queue[idx];
-      bodyEl.innerHTML=`<div style="max-width:760px;height:100%;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
-        </div>
-        <div style="flex:1;overflow-y:auto;min-height:0;">
-          <div class="gdi-course" style="margin-bottom:14px;cursor:pointer;" id="gdi-fc-card">
-            <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">🃏 Flashcard — clique para virar</b>
-            <div id="gdi-fc-front" style="color:var(--ferreto-text,#f0f6fc);font-size:15px;line-height:1.7;">${esc(c.f)}</div>
-            <div id="gdi-fc-back-show" style="display:none;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.6;margin-top:12px;padding-top:12px;border-top:1px solid var(--ferreto-border,#21262d);">${esc(c.b)}</div>
-          </div>
-        </div>
-        <div id="gdi-fc-grade" style="display:none;flex-shrink:0;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;text-align:center;margin-bottom:8px;">Você sabia a resposta?</p>
-          <div style="display:flex;gap:8px;justify-content:center;">
-            <button id="gdi-fc-no" class="gdi-mode-btn" style="background:rgba(255,107,107,.15);border-color:rgba(255,107,107,.3);color:#ff8b8b;font-size:13px;padding:10px 20px;"><i class="bi bi-x-circle"></i> Não sabia</button>
-            <button id="gdi-fc-yes" class="gdi-btn gdi-btn-primary" style="font-size:13px;padding:10px 20px;"><i class="bi bi-check-circle"></i> Sabia!</button>
-          </div>
-        </div>
-        <div style="flex-shrink:0;display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
-          <button id="gdi-fc-skip" title="Pular" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);"><i class="bi bi-arrow-right"></i></button>
-        </div>
-      </div>`;
-      // vira o card ao clicar
-      const card=bodyEl.querySelector('#gdi-fc-card');
-      const front=bodyEl.querySelector('#gdi-fc-front');
-      const back=bodyEl.querySelector('#gdi-fc-back-show');
-      const grade=bodyEl.querySelector('#gdi-fc-grade');
-      let flipped=false;
-      card.onclick=()=>{
-        if(flipped)return;flipped=true;
-        back.style.display='block';
-        grade.style.display='block';
-        card.querySelector('b').textContent='🃏 Resposta';
-      };
-      // sabia / não sabia
-      bodyEl.querySelector('#gdi-fc-yes').onclick=()=>{
-        hits++;
-        // atualiza SRS do flashcard (box+1, due = +7 dias)
-        const cards=lsGet('gdi-cards-v1',[]);
-        const ci=cards.findIndex(x=>x.id===c.id);
-        if(ci>=0){cards[ci].box=Math.min(4,(cards[ci].box||0)+1);cards[ci].due=Date.now()+[1,3,7,21,60][cards[ci].box]*86400000;lsSet('gdi-cards-v1',cards);}
-        idx++;draw();
-      };
-      bodyEl.querySelector('#gdi-fc-no').onclick=()=>{
-        misses++;
-        const cards=lsGet('gdi-cards-v1',[]);
-        const ci=cards.findIndex(x=>x.id===c.id);
-        if(ci>=0){cards[ci].box=0;cards[ci].due=Date.now()+86400000;lsSet('gdi-cards-v1',cards);}
-        idx++;draw();
-      };
-      // pular
-      bodyEl.querySelector('#gdi-fc-skip').onclick=()=>{idx++;draw();};
-    }
-    draw();
-  }
-
   // ── Regenerate: força regeração de tudo (limpa cache em memória + Drive) ──
   async function regenerate(items,bodyEl,lessonName){
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
@@ -1694,7 +1535,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }
 
   // ── Public API ──
-  window.gdiIsaPdf={summary,questions,mindmap,flashcards,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary};
+  window.gdiIsaPdf={summary,questions,mindmap,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary};
 
   // ── Render: Resumos (M22 new tab) ──
   // ── Salvar resumo no pool compartilhado (todos os usuários) ──
@@ -3569,7 +3410,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   window.renderRevisoes=function(box){
     const srs=qSrs();
     const qs=questions();
-    const srsFC=lsGet('gdi-cards-v1',[]); // flashcards (mesma chave da Central)
+    const srsFC=lsGet('gdi-fc-v1',[]); // flashcards do M22
     // agenda: questões + flashcards + aulas (GDIUser.resume)
     let items=[];
     qs.forEach(q=>{const s=srs[q.id];if(s){items.push({date:new Date(s.due).toISOString().slice(0,10),tipo:'questão',nome:q.subject,label:q.statement.slice(0,50)});}});
