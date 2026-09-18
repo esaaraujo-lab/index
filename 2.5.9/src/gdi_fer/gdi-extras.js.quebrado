@@ -1132,8 +1132,23 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     return questions;
   }
 
-  // Gera os 3 materiais em cadeia (se ainda não existem)
-  // trigger: 'summary' | 'questions' | 'mindmap' (qual aba foi clicada)
+  // callIsa com hint de chave (para distribuir entre múltiplas APIs NVIDIA)
+  // Se o header X-Key-Hint falhar (CORS), cai para callIsa normal
+  async function callIsaKeyed(prompt,keyHint){
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json','X-Key-Hint':String(keyHint||0)},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      const data=await r.json();
+      if(!data.ok)throw new Error(data.error||'Meggy indisponível');
+      return data.response||'';
+    }catch(e){
+      // fallback: tenta sem o header X-Key-Hint (CORS pode bloquear)
+      return callIsa(prompt);
+    }
+  }
+
+  // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
+  // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
   async function generateAll(items,lesson,trigger){
     const key=lessonKey();
     // se já tem tudo no cache em memória, pula
@@ -1141,7 +1156,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       return _chainCache[key];
     }
 
-    // verifica cache do Drive
+    // verifica cache do Drive PRIMEIRO (antes de extrair PDF)
     const cached=await cacheGet();
     if(!_chainCache[key])_chainCache[key]={};
     if(cached){
@@ -1150,7 +1165,33 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       _chainCache[key].cachedQuestions=cached.questions||[];
     }
 
-    // extrai texto de TODOS os PDFs (concatena para resumo e pílulas)
+    // ★ Se já tem resumo + pílulas + questões no Drive, carrega e NÃO regenera
+    if(_chainCache[key].summary&&_chainCache[key].mindmap&&cached&&cached.questions&&cached.questions.length){
+      _chainCache[key].questionsGenerated=true;
+      _chainCache[key].questions=cached.questions;
+      // carrega questões no banco local se ainda não estão
+      cached.questions.forEach(q=>{
+        if(q&&q.statement){
+          let cleanQ;
+          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+          }else if(Array.isArray(q.options)){
+            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+          }
+          if(cleanQ){
+            const all=lsGet(LQ,[]);
+            if(!all.some(x=>x.statement===cleanQ.statement))addQ(cleanQ);
+          }
+        }
+      });
+      // flashcards do cache
+      if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson);
+      saveIsaSummary(lesson,_chainCache[key].summary);
+      console.log('[Meggy] cache completo do Drive — sem retrabalho');
+      return _chainCache[key];
+    }
+
+    // só extrai PDF se precisa gerar algo
     let allText='';
     const pdfTexts=[];
     for(const item of items){
@@ -1168,77 +1209,100 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     _chainCache[key].allText=allText;
     _chainCache[key].pdfTexts=pdfTexts;
 
-    // 1+2) RESUMO e PÍLULAS em PARALELO (são independentes — corta tempo pela metade)
-    const tasks=[];
-    if(!_chainCache[key].summary){
-      tasks.push(callIsa('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos do material. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado. Não omita nenhum tema importante:\n\n'+allText.slice(0,20000)).then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r);}}).catch(e=>console.warn('[Meggy] resumo falhou',e.message)));
-    }
-    if(!_chainCache[key].mindmap){
-      tasks.push(callIsa('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas os pontos-chave que cabem numa revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000)).then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;}).catch(e=>console.warn('[Meggy] pílulas falhou',e.message)));
-    }
-    if(tasks.length>0)await Promise.allSettled(tasks);
+    // ★ PARALELISMO TOTAL: resumo + pílulas + questões de cada PDF — TODOS ao mesmo tempo
+    // Cada tarefa recebe um keyHint diferente para distribuir entre as APIs NVIDIA
+    let keyHintCounter=0;
+    const allTasks=[];
 
-    // 3) QUESTÕES (se ainda não gerou) — até 20 por material
+    // tarefa 1: resumo
+    if(!_chainCache[key].summary){
+      allTasks.push({
+        hint:keyHintCounter++,
+        fn:()=>callIsaKeyed('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos. Organize em seções com ## títulos, use **negrito** para destaques e listas. Não omita nenhum tema:\n\n'+allText.slice(0,20000),keyHintCounter-1)
+          .then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r);}})
+          .catch(e=>console.warn('[Meggy] resumo falhou',e.message))
+      });
+    }
+
+    // tarefa 2: pílulas
+    if(!_chainCache[key].mindmap){
+      allTasks.push({
+        hint:keyHintCounter++,
+        fn:()=>callIsaKeyed('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas pontos-chave para revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000),keyHintCounter-1)
+          .then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;})
+          .catch(e=>console.warn('[Meggy] pílulas falhou',e.message))
+      });
+    }
+
+    // tarefa 3+: questões de cada PDF (uma tarefa por PDF)
     if(!_chainCache[key].questionsGenerated){
       _chainCache[key].questionsGenerated=true;
-      const allCleanQ=[];
-      // primeiro, extrai questões que já existem no PDF (lista de exercícios)
+      _chainCache[key]._allCleanQ=[];
+      // extrai questões existentes primeiro (síncrono, rápido)
       for(const pdf of pdfTexts){
         const existing=extractQuestionsFromText(pdf.text);
         for(const q of existing){
-          // não pode saber a resposta de questões extraídas — pula se não tem gabarito
-          // mas salva no banco como "questão aberta" para revisão
           const all=lsGet(LQ,[]);
           if(!all.some(x=>x.statement===q)){
-            addQ({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material. Resolva manualmente.',source:'PDF-extract'});
+            addQ({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material.',source:'PDF-extract'});
           }
         }
       }
-      // depois, gera questões via Meggy para cada PDF em PARALELO (todos ao mesmo tempo)
-      const qPromises=pdfTexts.map(pdf=>callIsa('Baseado neste material, gere 10 questões de concurso público em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+pdf.text.slice(0,15000)).catch(e=>{console.warn('[Meggy] questões falharam',e.message);return null;}));
-      const qResults=await Promise.allSettled(qPromises);
-      qResults.forEach(res=>{
-        if(res.status!=='fulfilled'||!res.value)return;
-        try{
-          const arr=parseJsonArray(res.value);
-          arr.forEach(q=>{
-            if(!q||!q.statement)return;
-            let cleanQ;
-            if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-              cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||'')};
-            }else if(Array.isArray(q.options)){
-              cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||'')};
-            }
-            if(cleanQ){
-              const all=lsGet(LQ,[]);
-              if(!all.some(x=>x.statement===cleanQ.statement)){
-                addQ({subject:lesson,...cleanQ,source:'ISA-PDF'});
-                allCleanQ.push(cleanQ);
-              }
-            }
-          });
-        }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
+      // uma tarefa por PDF
+      pdfTexts.forEach((pdf)=>{
+        allTasks.push({
+          hint:keyHintCounter++,
+          fn:()=>callIsaKeyed('Baseado neste material, gere 10 questões de concurso público em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+pdf.text.slice(0,15000),keyHintCounter-1)
+            .then(resp=>{
+              if(!resp)return;
+              try{
+                const arr=parseJsonArray(resp);
+                arr.forEach(q=>{
+                  if(!q||!q.statement)return;
+                  let cleanQ;
+                  if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+                    cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||'')};
+                  }else if(Array.isArray(q.options)){
+                    cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||'')};
+                  }
+                  if(cleanQ){
+                    const all=lsGet(LQ,[]);
+                    if(!all.some(x=>x.statement===cleanQ.statement)){
+                      addQ({subject:lesson,...cleanQ,source:'ISA-PDF'});
+                      _chainCache[key]._allCleanQ.push(cleanQ);
+                    }
+                  }
+                });
+              }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
+            })
+            .catch(e=>console.warn('[Meggy] questões falharam',e.message))
+        });
       });
-      _chainCache[key].questions=allCleanQ;
-      // flashcards automáticos
-      if(allCleanQ.length)autoCreateFlashcards(allCleanQ,lesson);
     }
 
-    // salva tudo no Drive
-    const existing=await cacheGet();
-    cacheSave(
-      _chainCache[key].summary||existing?.summary||null,
-      _chainCache[key].questions||existing?.questions||null,
-      lesson
-    );
-    // também salva pílulas (mindmap) no cache estendendo o objeto
-    if(_chainCache[key].mindmap){
-      try{
-        await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({key:lessonKey(),summary:_chainCache[key].summary,questions:_chainCache[key].questions,mindmap:_chainCache[key].mindmap,lessonName:lesson})});
-      }catch(_){}
+    // ★ EXECUTA TODAS AS TAREFAS AO MESMO TEMPO
+    if(allTasks.length>0){
+      await Promise.allSettled(allTasks.map(t=>t.fn()));
     }
-    // compartilha
+
+    // finaliza: flashcards + salva no Drive
+    _chainCache[key].questions=_chainCache[key]._allCleanQ||[];
+    if(_chainCache[key].questions.length){
+      autoCreateFlashcards(_chainCache[key].questions,lesson);
+    }
+
+    // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
+    try{
+      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          key:lessonKey(),
+          summary:_chainCache[key].summary||null,
+          questions:_chainCache[key].questions||null,
+          mindmap:_chainCache[key].mindmap||null,
+          lessonName:lesson
+        })});
+    }catch(_){}
+    // compartilha no pool de resumos
     if(_chainCache[key].summary){
       saveSharedSummary(lesson,_chainCache[key].summary,_chainCache[key].questions||null);
     }
@@ -5071,6 +5135,58 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function hideTyping(){if(typingEl){typingEl.remove();typingEl=null;}}
 
+  // ── BANCO DE MEMÓRIA da Meggy ──
+  // A Meggy mantém um perfil do aluno e aprende com as interações.
+  // Persistido em localStorage + enviado como contexto nas conversas.
+  const MEMORY_KEY='gdi-meggy-memory-v1';
+  function loadMemory(){
+    try{return JSON.parse(localStorage.getItem(MEMORY_KEY)||'null')||{interactions:0,topics:[],weaknesses:[],preferences:{},lastLessons:[]};}
+    catch(_){return {interactions:0,topics:[],weaknesses:[],preferences:{},lastLessons:[]};}
+  }
+  function saveMemory(mem){try{localStorage.setItem(MEMORY_KEY,JSON.stringify(mem));}catch(_){}}
+  function updateMemory(topic,context){
+    const mem=loadMemory();
+    mem.interactions=(mem.interactions||0)+1;
+    // registra tópicos estudados
+    if(topic&&!mem.topics.includes(topic)){
+      mem.topics.push(topic);
+      if(mem.topics.length>50)mem.topics.shift();
+    }
+    // registra última aula
+    if(topic){
+      mem.lastLessons=mem.lastLessons.filter(l=>l!==topic);
+      mem.lastLessons.unshift(topic);
+      if(mem.lastLessons.length>10)mem.lastLessons.pop();
+    }
+    // detecta pontos fracos do banco de questões
+    try{
+      const qs=lsGet('gdi-questions-v1',[]);
+      const srs=lsGet('gdi-q-srs-v1',{});
+      const bySubject={};
+      qs.forEach(q=>{
+        const s=q.subject||'Geral';
+        if(!bySubject[s])bySubject[s]={total:0,correct:0};
+        bySubject[s].total++;
+        if(srs[q.id]&&srs[q.id].box>0)bySubject[s].correct++;
+      });
+      mem.weaknesses=Object.entries(bySubject)
+        .filter(([,v])=>v.total>=2&&(v.correct/v.total)<0.5)
+        .map(([k,v])=>({subject:k,acc:Math.round(v.correct/v.total*100)}))
+        .slice(0,5);
+    }catch(_){}
+    saveMemory(mem);
+    return mem;
+  }
+  function buildMemoryContext(){
+    const mem=loadMemory();
+    let ctx='';
+    if(mem.interactions>0)ctx+=`Aluno tem ${mem.interactions} interações com a Meggy. `;
+    if(mem.lastLessons&&mem.lastLessons.length)ctx+=`Últimas aulas estudadas: ${mem.lastLessons.slice(0,5).join(', ')}. `;
+    if(mem.weaknesses&&mem.weaknesses.length)ctx+=`Pontos fracos: ${mem.weaknesses.map(w=>w.subject+' ('+w.acc+'%)').join(', ')}. `;
+    if(mem.topics&&mem.topics.length>3)ctx+=`Já estudou ${mem.topics.length} tópicos diferentes. `;
+    return ctx;
+  }
+
   let busy=false;
   async function send(){
     const txt=input.value.trim();if(!txt||busy)return;
@@ -5078,8 +5194,13 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     addMsg('user',txt);
     showTyping();
 
-    // histórico para enviar (role/content)
+    // histórico para enviar (role/content) + contexto de memória
     const hist=messages.filter(m=>m.role!=='system').slice(-8).map(m=>({role:m.role,content:m.text}));
+    // adiciona contexto de memória na primeira mensagem do histórico
+    const memCtx=buildMemoryContext();
+    if(memCtx&&hist.length>0){
+      hist[0]={role:'assistant',content:'Contexto do aluno: '+memCtx};
+    }
 
     let response=null,usedLocal=false;
     // 1) tenta IA do navegador
@@ -5117,18 +5238,44 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     }
     hideTyping();
     addMsg('assistant',response);
+    // ★ atualiza banco de memória com a interação
+    updateMemory(undefined,{question:txt,response:response});
     if(usedLocal)updateStatus(); // confirma que usou local
     busy=false;sendBtn.disabled=false;input.focus();
   }
 
   function toggle(){
     const open=panel.classList.toggle('open');
+    try{sessionStorage.setItem('gdi-meggy-open',open?'1':'0');}catch(_){}
     if(open){badge.classList.remove('show');renderHistory();updateStatus();setTimeout(()=>input.focus(),100);}
   }
   fab.addEventListener('click',toggle);
-  panel.querySelector('#gdi-ai-close').addEventListener('click',()=>panel.classList.remove('open'));
+  panel.querySelector('#gdi-ai-close').addEventListener('click',()=>{panel.classList.remove('open');try{sessionStorage.setItem('gdi-meggy-open','0');}catch(_){}});
   sendBtn.addEventListener('click',send);
   input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+
+  // ★ Meggy persiste entre trocas de página — reabre se estava aberta
+  // O widget está em GDI_ROOT() (documentElement) que NÃO é recriado
+  // pelo SPA. As mensagens ficam em sessionStorage. Só precisamos
+  // restaurar o estado aberto/fechado.
+  Bus.onGlobal('page:change',()=>{
+    // re-renderiza o histórico se o painel estiver aberto
+    if(panel.classList.contains('open')){
+      renderHistory();
+      updateStatus();
+    }
+    // atualiza memória com a aula atual
+    const lesson=document.querySelector('.gdi-file-header-name');
+    if(lesson&&lesson.textContent){
+      updateMemory(lesson.textContent.trim());
+    }
+  });
+  // restaura estado aberto ao carregar
+  try{
+    if(sessionStorage.getItem('gdi-meggy-open')==='1'){
+      setTimeout(()=>{panel.classList.add('open');renderHistory();updateStatus();},500);
+    }
+  }catch(_){}
 
   // ── Ativação condicional ──
   // O botão 💖 só aparece se houver IA disponível: (1) IA do navegador
