@@ -1263,32 +1263,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     startQuizFromBank(bodyEl,lesson);
   }
 
-  // ── Gera questões via Meggy (usa PDFs diferentes a cada vez) ──
-  // Cicla entre todos os PDFs disponíveis para variar as questões.
-  // Se só tem 1 PDF, usa ele (a Meggy gera questões diferentes cada vez).
-  if(!window.__gdiPdfCursor)window.__gdiPdfCursor=0;
+  // ── Gera questões via Meggy (sem cache) ──
   async function generateQuestions(items,bodyEl,lesson){
-    if(!items||!items.length)return false;
-    // escolhe um PDF diferente a cada vez (cicla entre os disponíveis)
-    const pdfIdx=window.__gdiPdfCursor%items.length;
-    window.__gdiPdfCursor++;
-    const pdfItem=items[pdfIdx];
-    setLoading(bodyEl,'Extraindo texto do PDF: '+esc(pdfItem.name||'material')+'…');
+    setLoading(bodyEl,'Extraindo texto do PDF…');
     let text;
     try{
-      text=await extractPdfText(pdfItem.url);
-    }catch(e){
-      // se falhar neste PDF, tenta o próximo
-      for(let i=1;i<items.length;i++){
-        const next=items[(pdfIdx+i)%items.length];
-        try{
-          text=await extractPdfText(next.url);
-          if(text&&text.trim().length>=50)break;
-        }catch(_){}
-      }
-      if(!text||text.trim().length<50){setError(bodyEl,'Falha ao extrair texto de todos os PDFs.');return false;}
-    }
-    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível. Tentando outro material…');return false;}
+      text=await extractPdfText(items[0].url);
+    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return false;}
+    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível.');return false;}
     setLoading(bodyEl,'Meggy está criando questões no estilo concurso…');
     let resp;
     try{
@@ -1316,13 +1298,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
       }
     });
-    // salva no cache do Drive (merge)
+    // salva no cache do Drive
     if(cleanArr.length){
+      // merge com cache existente
       const existing=await cacheGet();
       const merged=[...((existing&&existing.questions)||[]),...cleanArr];
       cacheSave(existing?.summary||null,merged,lesson);
     }
-    showToast(cleanArr.length+' questões geradas'+(items.length>1?' (material '+(pdfIdx+1)+'/'+items.length+')':'')+'!');
+    showToast(cleanArr.length+' questões geradas!');
     return cleanArr.length>0;
   }
 
@@ -1388,22 +1371,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const q=queue[idx];
       const isTF=q.type==='tf';
       const optCount=isTF?2:(q.options?.length||4);
-      bodyEl.innerHTML=`<div style="max-width:760px;height:100%;display:flex;flex-direction:column;position:relative;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
+      bodyEl.innerHTML=`<div style="max-width:760px;position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
-        <div style="flex:1;overflow-y:auto;padding-right:4px;min-height:0;">
-          <div class="gdi-course" style="margin-bottom:14px;">
-            <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
-            <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.7;">${esc(q.statement)}</div>
-          </div>
-          <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
-          <div id="gdi-q-feedback" style="margin-top:14px;"></div>
+        <div class="gdi-course" style="margin-bottom:14px;">
+          <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
+          <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
         </div>
-        <div style="flex-shrink:0;display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
-          <button id="gdi-q-skip" title="Pular para próxima questão" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
-        </div>
+        <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="gdi-q-feedback" style="margin-top:14px;"></div>
+        <button id="gdi-q-skip" title="Pular para próxima questão" style="position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);z-index:100;transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
       </div>`;
       // ★ seta fixa para pular questão (mesmo sem responder)
       const skipBtn=bodyEl.querySelector('#gdi-q-skip');
