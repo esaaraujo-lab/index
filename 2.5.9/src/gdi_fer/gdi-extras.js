@@ -1133,12 +1133,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   }
 
   // callIsa com hint de chave (para distribuir entre múltiplas APIs NVIDIA)
+  // Se o header X-Key-Hint falhar (CORS), cai para callIsa normal
   async function callIsaKeyed(prompt,keyHint){
-    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json','X-Key-Hint':String(keyHint||0)},
-      body:JSON.stringify({message:prompt,messages:[]})});
-    const data=await r.json();
-    if(!data.ok)throw new Error(data.error||'Meggy indisponível');
-    return data.response||'';
+    try{
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json','X-Key-Hint':String(keyHint||0)},
+        body:JSON.stringify({message:prompt,messages:[]})});
+      const data=await r.json();
+      if(!data.ok)throw new Error(data.error||'Meggy indisponível');
+      return data.response||'';
+    }catch(e){
+      // fallback: tenta sem o header X-Key-Hint (CORS pode bloquear)
+      return callIsa(prompt);
+    }
   }
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
