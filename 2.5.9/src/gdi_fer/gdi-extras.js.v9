@@ -620,8 +620,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         return{name:x.name,label:cls.l,icon:cls.i,ord:cls.ord,match,url};
       });
       items.sort((x,y)=>x.match-y.match||x.ord-y.ord||x.name.localeCompare(y.name,undefined,{numeric:true}));
-      // ★ salva items para o botão "Regerar" encontrar
-      tabsEl.__items=items;
       const used={};
       items.forEach((it,idx)=>{
         used[it.label]=(used[it.label]||0)+1;
@@ -1058,7 +1056,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           ${cacheBadge}
-          <button id="gdi-isa-regen" title="Regerar (PDF pode estar incompleto)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-arrow-clockwise"></i> Regerar</button>
           <button id="gdi-isa-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
           <button id="gdi-isa-copy" title="Copiar resumo" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-clipboard"></i> Copiar</button>
         </div>
@@ -1069,17 +1066,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     </div>`;
     bodyEl.querySelector('#gdi-isa-dl').onclick=()=>downloadAsPdf(lesson,markdownText);
     bodyEl.querySelector('#gdi-isa-copy').onclick=()=>copySummary(markdownText);
-    // ★ botão Regerar: limpa cache e regenera resumo + questões
-    const regenBtn=bodyEl.querySelector('#gdi-isa-regen');
-    if(regenBtn)regenBtn.onclick=()=>{
-      // busca os items do M9 para passar para regenerate
-      const matTabs=document.querySelector('#gdi-mat-tabs');
-      if(matTabs&&matTabs.__items){
-        window.gdiIsaPdf.regenerate(matTabs.__items,bodyEl,lesson);
-      }else{
-        showToast('Navegue para a aba de materiais para regerar');
-      }
-    };
   }
 
   // ── Auto-criar flashcards das questões geradas ──
@@ -1144,7 +1130,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     // 3) gera resumo E questões em paralelo (duas chamadas à Meggy ao mesmo tempo)
     setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões…');
     const summaryPrompt='Leia este material de aula e faça um resumo estruturado em Markdown com os pontos principais. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado:\n\n'+text;
-    const questionsPrompt='Baseado neste material de aula, gere 5 questões de concurso público em formato JSON array. Misture estilos:\n- 3 questões de múltipla escolha (4 alternativas): {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."} (correct = índice 0-3)\n- 2 questões de certo/errado (estilo CEBRASPE/CESPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."} (correct = 1 para Certo, 0 para Errado)\nNível concurso público brasileiro. Sem comentários, só JSON array:\n\n'+text;
+    const questionsPrompt='Baseado neste material de aula, gere 5 questões de múltipla escolha (4 alternativas) em formato JSON array. Cada item: {"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}. correct é o índice 0-3 da alternativa certa. Nível concurso público brasileiro. Sem comentários, só JSON:\n\n'+text;
 
     let resp=null,qResp=null;
     // tenta ambas em paralelo; se uma falha, continua com a outra
@@ -1168,21 +1154,11 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     if(qResp){
       try{
         const arr=parseJsonArray(qResp);
-        cleanQArr=arr.filter(q=>q&&q.statement).map(q=>{
-          // suporta mc (múltipla escolha) e tf (certo/errado CEBRASPE)
-          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            // certo/errado: options = ["Certo","Errado"], correct = 0 ou 1
-            return{type:'tf',statement:String(q.statement),
-              options:['Certo','Errado'],
-              correct:Math.max(0,Math.min(1,Number(q.correct)||0)),
-              explanation:String(q.explanation||'')};
-          }
-          // múltipla escolha (padrão)
-          return{type:'mc',statement:String(q.statement),
-            options:Array.isArray(q.options)?q.options.map(String):['a','b','c','d'],
-            correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
-            explanation:String(q.explanation||'')};
-        });
+        cleanQArr=arr.filter(q=>q&&q.statement&&Array.isArray(q.options)).map(q=>({
+          statement:String(q.statement),options:q.options.map(String),
+          correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
+          explanation:String(q.explanation||'')
+        }));
         cleanQArr.forEach(q=>{
           addQ({subject:lesson,...q,source:'ISA-PDF'});
           qn++;
@@ -1252,7 +1228,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     setLoading(bodyEl,'Meggy está criando questões no estilo concurso…');
     let resp;
     try{
-      resp=await callIsa('Baseado neste material de aula, gere 5 questões de concurso público em formato JSON array. Misture estilos:\n- 3 questões de múltipla escolha (4 alternativas): {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."} (correct = índice 0-3)\n- 2 questões de certo/errado (estilo CEBRASPE/CESPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."} (correct = 1 para Certo, 0 para Errado)\nNível concurso público brasileiro. Sem comentários, só JSON array:\n\n'+text);
+      resp=await callIsa('Baseado neste material de aula, gere 5 questões de múltipla escolha (4 alternativas) em formato JSON array. Cada item: {"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}. correct é o índice 0-3 da alternativa certa. Nível concurso público brasileiro. Sem comentários, só JSON:\n\n'+text);
     }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
     let arr;
     try{
@@ -1262,24 +1238,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const cleanArr=[];
     const savedIds=[];
     arr.forEach(q=>{
-      if(!q||!q.statement)return;
-      let cleanQ;
-      if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-        cleanQ={subject:lesson,type:'tf',statement:String(q.statement),
-          options:['Certo','Errado'],
-          correct:Math.max(0,Math.min(1,Number(q.correct)||0)),
-          explanation:String(q.explanation||''),source:'ISA-PDF'};
-      }else{
-        if(!Array.isArray(q.options))return;
-        cleanQ={subject:lesson,type:'mc',statement:String(q.statement),
-          options:q.options.map(String),
-          correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
-          explanation:String(q.explanation||''),source:'ISA-PDF'};
+      if(q&&q.statement&&Array.isArray(q.options)){
+        const cleanQ={subject:lesson,statement:String(q.statement),options:q.options.map(String),
+          correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+        const saved=addQ(cleanQ);
+        savedIds.push(saved.id);
+        cleanArr.push({statement:cleanQ.statement,options:cleanQ.options,correct:cleanQ.correct,explanation:cleanQ.explanation});
+        n++;
       }
-      const saved=addQ(cleanQ);
-      savedIds.push(saved.id);
-      cleanArr.push({type:cleanQ.type,statement:cleanQ.statement,options:cleanQ.options,correct:cleanQ.correct,explanation:cleanQ.explanation});
-      n++;
     });
     cacheSave(null,cleanArr,lesson); // salva no Drive para próximas visitas
     bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;">
@@ -1312,55 +1278,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }
   }
 
-  // ── Mental map flow ──
-  async function mindmap(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula para gerar mapa mental.');return;}
-    const lesson=realLessonName(lessonName||items[0].name);
-    // extrai texto do PDF
-    setLoading(bodyEl,'Extraindo texto do PDF…');
-    let text;
-    try{
-      text=await extractPdfText(items[0].url);
-    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
-    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
-    setLoading(bodyEl,'Meggy está criando o mapa mental…');
-    let resp;
-    try{
-      resp=await callIsa('Crie um mapa mental em Markdown hierárquico deste material de aula. Use indentação com marcadores (-) para ramificações. Comece com o tema central como # título, depois ramificações principais com ##, e detalhes com sub-itens indentados. Máximo 3 níveis de profundidade. Formato:\n# Tema Central\n## Ramo 1\n- Detalhe 1\n- Detalhe 2\n## Ramo 2\n- Sub-item\n  - Detalhe\n\nConteúdo:\n'+text);
-    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
-    if(!resp||!resp.trim()){setError(bodyEl,'Meggy retornou uma resposta vazia. Tente novamente.');return;}
-    // renderiza mapa mental com indentação visual
-    bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <i class="bi bi-diagram-3" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
-          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Mapa Mental · ${esc(lesson)}</b>
-        </div>
-        <button id="gdi-mm-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-      </div>
-      <div class="gdi-isa-summary-body gdi-mental-map" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;overflow-y:auto;max-height:calc(100vh - 320px);">
-        ${renderMd(resp)}
-      </div>
-    </div>`;
-    bodyEl.querySelector('#gdi-mm-dl').onclick=()=>downloadAsPdf('Mapa Mental · '+lesson,resp);
-    showToast('Mapa mental gerado!');
-  }
-
-  // ── Regenerate: força regeração do resumo + questões (ignora cache) ──
-  async function regenerate(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
-    const lesson=realLessonName(lessonName||items[0].name);
-    // limpa cache do Drive para esta aula
-    try{
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:lessonKey(),summary:null,questions:null,lessonName:lesson})});
-    }catch(_){}
-    // chama summary() que vai regenerar tudo
-    await summary(items,bodyEl,lessonName);
-  }
-
   // ── Public API ──
-  window.gdiIsaPdf={summary,questions,mindmap,regenerate,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary};
+  window.gdiIsaPdf={summary,questions,extractPdfText,saveIsaSummary,listIsaSummaries,delIsaSummary};
 
   // ── Render: Resumos (M22 new tab) ──
   // ── Salvar resumo no pool compartilhado (todos os usuários) ──
@@ -4018,7 +3937,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   // ── Render: Correção de Redação ──
   window.renderRedacao=function(box){
     const corrections=lsGet('gdi-essay-corrections-v1',[]);
-    const BANCAS=['CEBRASPE (CESPE)','FGV','VUNESP','FCC','CESGRANRIO','IBFC','FUJB','OAB','TJ/SP','TRT','MPU','TRE','TCU','PF/PRF','Outra'];
+    const BANCAS=['CEBRASPE','FGV','VUNESP','FCC','FUJB','CESGRANRIO','IBFC','Outra'];
     box.innerHTML=`
       <div style="margin-bottom:18px;">
         <h3 style="color:var(--ferreto-text,#f0f6fc);margin:0 0 8px;">✍️ Correção de Redação</h3>
@@ -4050,25 +3969,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       status.innerHTML='<i class="bi bi-hourglass-split"></i> Meggy está corrigindo…';
       result.innerHTML='';
       try{
-        const bancaInfo={
-          'CEBRASPE (CESPE)':'CEBRASPE/CESPE usa escala 0-10. Critérios: adequação ao tema, estrutura textual, desenvolvimento de ideias, coesão e coerência, gramática. Desclassifica se fuga ao tema.',
-          'FGV':'FGV avalia: conteúdo (0-5), estrutura (0-3), linguagem (0-2). Total 0-10. Penaliza erros graves de português.',
-          'VUNESP':'VUNESP avalia: tema e conteúdo (0-4), estrutura e coesão (0-3), norma culta (0-3). Total 0-10.',
-          'FCC':'FCC avalia: adequação ao tema (0-3), estrutura e coesão (0-3), norma culta e clareza (0-4). Total 0-10.',
-          'CESGRANRIO':'CESGRANRIO avalia: atendimento ao tema (0-4), estrutura e coesão (0-3), norma culta (0-3). Total 0-10.',
-          'IBFC':'IBFC avalia: conteúdo e tema (0-4), estrutura e coesão (0-3), linguagem e norma culta (0-3). Total 0-10.',
-          'OAB':'OAB avalia: correção jurídica, estrutura argumentativa, clareza e objetividade, norma culta. Total 0-10.',
-          'FUJB':'FUJB avalia: adequação ao tema, coesão/coerência, norma culta, criatividade. Total 0-10.',
-          'TJ/SP':'TJ/SP (VUNESP): tema e conteúdo (0-4), estrutura (0-3), norma culta (0-3).',
-          'TRT':'TRT (CEBRASPE/FCC): mesma banca organizadora. Avalia tema, estrutura, gramática.',
-          'MPU':'MPU (CEBRASPE): escala 0-10. Adequação ao tema, estrutura, desenvolvimento, coesão, gramática.',
-          'TRE':'TRE (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'TCU':'TCU (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'PF/PRF':'PF/PRF (CEBRASPE): escala 0-10. Mesmos critérios CEBRASPE.',
-          'Outra':'Critérios gerais de concurso público brasileiro.'
-        };
-        const criterios=bancaInfo[banca]||bancaInfo['Outra'];
-        const resp=await callMeggy('Corrija esta redação de concurso público (banca: '+banca+'). CRITÉRIOS DESTA BANCA: '+criterios+'. Avalie cada critério com nota de 0 a 10 + nota geral + comentários detalhados ponto por ponto + sugestões de melhoria + versão reescrita de trechos problemáticos. Formato Markdown com ## seções:\n\nREDAÇÃO:\n'+text);
+        const resp=await callMeggy('Corrija esta redação de concurso público (banca: '+banca+'). Avalie critérios oficiais: estrutura, coesão, coerência, argumentação, gramática, adequação ao tema. Dê nota de 0 a 10 para cada critério + nota geral + comentários detalhados + sugestões de melhoria. Formato Markdown com ## seções:\n\nREDAÇÃO:\n'+text);
         // extrai nota geral (procura "Nota geral:" ou "Nota: X")
         const scoreMatch=resp.match(/nota\s*geral\s*:?\s*(\d+[,.]?\d*)/i)||resp.match(/nota\s*:?\s*(\d+[,.]?\d*)/i);
         const score=scoreMatch?scoreMatch[1]:'—';
