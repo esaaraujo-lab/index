@@ -1031,82 +1031,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     return pdfjsPromise;
   }
 
-  // ── Dynamic load Tesseract.js (OCR para PDFs escaneados) ──
-  // ★ Carrega só quando necessário (PDFs sem texto selecionável).
-  // Usa modelo em português (por) + inglês (eng) como fallback.
-  let tesseractPromise=null;
-  function ensureTesseract(){
-    if(window.Tesseract)return Promise.resolve(window.Tesseract);
-    if(tesseractPromise)return tesseractPromise;
-    tesseractPromise=new Promise((resolve,reject)=>{
-      const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.crossOrigin='anonymous';
-      s.onload=()=>{
-        if(window.Tesseract)resolve(window.Tesseract);
-        else reject(new Error('Tesseract não exposto pelo CDN'));
-      };
-      s.onerror=()=>reject(new Error('Falha ao carregar Tesseract.js do CDN'));
-      document.head.appendChild(s);
-    });
-    return tesseractPromise;
-  }
-
-  // ── OCR de uma página: renderiza no canvas e roda Tesseract ──
-  // Retorna o texto extraído. Mostra progresso via callback opcional.
-  // ★ Configurações otimizadas para PDFs escaneados de apostilas:
-  //   - scale 3x (melhor precisão que 2x, ainda razoável em memória)
-  //   - PSM 3 (auto page segmentation — funciona para texto corrido e múltiplas colunas)
-  //   - idiomas: português + inglês
-  async function ocrPdfPage(pdfjs,doc,pageNum,progressCb){
-    const page=await doc.getPage(pageNum);
-    // escala 3x para melhorar precisão do OCR (testado: 2x = muita falha, 3x = bom)
-    const viewport=page.getViewport({scale:3});
-    const canvas=document.createElement('canvas');
-    const ctx=canvas.getContext('2d');
-    canvas.width=viewport.width;
-    canvas.height=viewport.height;
-    // fundo branco para páginas transparentes
-    ctx.fillStyle='#fff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    await page.render({canvasContext:ctx,viewport}).promise;
-    const Tesseract=await ensureTesseract();
-    // idioma: português + inglês (modelos baixados do CDN do Tesseract)
-    // ★ parâmetros otimizados:
-    //   - tessedit_pageseg_mode=3 (auto — detecta orientação + colunas automaticamente)
-    //   - preserve_interword_spaces=1 (mantém espaços entre palavras)
-    const result=await Tesseract.recognize(
-      canvas,
-      'por+eng',
-      {
-        logger:m=>{
-          if(m.status==='recognizing text'&&progressCb){
-            progressCb(pageNum,doc.numPages,m.progress);
-          }
-        },
-        // path dos modelos de idioma (CDN jsdelivr)
-        corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5',
-        workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-        langPath:'https://tessdata.project-fast.com/4.0.0',
-        // parâmetros do Tesseract engine
-        tessedit_pageseg_mode:'3',
-        preserve_interword_spaces:'1',
-      }
-    );
-    return result.data.text||'';
-  }
-
   // ── Extract text from PDF (up to 30 pages, ~8000 chars) ──
   // FIX: alguns PDFs têm texto selecionável mas getTextContent() básico
   // retorna vazio (fontes com encoding custom, text runs fragmentados).
   // Usa opções avançadas + fallback em annotations.
   // ★FIX v2: erros descritivos (não engole mais silenciosamente) + retry
   // com opções alternativas de fetch + fallback para PDFs escaneados.
-  // ★FIX v3: OCR (Tesseract.js) como fallback quando pdf.js retorna vazio.
-  //   - Suporta um callback de progresso (para mostrar "OCR: página 3/11…")
-  //   - Limita a 8 páginas no OCR (tempo total ~2-4 min para PDF grande)
-  //   - Idiomas: português + inglês
-  async function extractPdfText(url, progressCb){
+  async function extractPdfText(url){
     const pdfjs=await ensurePdfjs();
 
     // ★ Tenta fetch com credenciais same-origin primeiro; se falhar,
@@ -1193,46 +1124,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       }catch(_){}
     }
 
-    // ★★ FALLBACK OCR (Tesseract.js) — para PDFs escaneados (só imagens) ★★
-    // Se pdf.js extraiu menos de 50 chars, é provável que o PDF seja escaneado.
-    // Renderizamos cada página como imagem e rodamos OCR em português.
-    // ★ Limita a 15 páginas no OCR (~3-6 min no total). Para PDFs maiores,
-    // as primeiras 15 páginas já dão contexto suficiente para a Meggy gerar
-    // resumo + questões + pílulas úteis.
-    if(!txt.trim()||txt.trim().length<50){
-      console.log('[Meggy] PDF sem texto selecionável — ativando OCR (Tesseract.js)');
-      const ocrMaxPages=Math.min(doc.numPages,15);
-      if(progressCb)progressCb({phase:'ocr-init',page:0,total:ocrMaxPages});
-      try{
-        let ocrTxt='';
-        for(let i=1;i<=ocrMaxPages;i++){
-          if(progressCb)progressCb({phase:'ocr-page',page:i,total:ocrMaxPages,progress:0});
-          const pageTxt=await ocrPdfPage(pdfjs,doc,i,(pNum,pTotal,p)=>{
-            if(progressCb)progressCb({phase:'ocr-page',page:pNum,total:pTotal,progress:p});
-          });
-          ocrTxt+=pageTxt+'\n\n';
-          if(ocrTxt.length>20000)break;
-        }
-        if(ocrTxt.trim().length>50){
-          // sucesso! OCR extraiu texto
-          try{doc.destroy();}catch(_){}
-          if(progressCb)progressCb({phase:'ocr-done',chars:ocrTxt.length});
-          return ocrTxt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,20000);
-        }
-      }catch(ocrErr){
-        console.warn('[Meggy] OCR falhou:',ocrErr.message);
-        // continua para o erro descritivo abaixo
-      }
-    }
-
     try{doc.destroy();}catch(_){}
     // limpa texto: remove espaços excessivos, decodifica entidades
     txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
     const result=txt.slice(0,20000);
     if(!result||result.length<50){
       // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
-      // e o OCR também falhou ou não retornou texto útil
-      throw new Error('PDF sem texto selecionável e OCR não conseguiu extrair. Possíveis causas:\n• PDF é composto só de imagens (escaneado) e o OCR falhou\n• PDF está criptografado ou corrompido\n• Falha ao baixar modelos de OCR do CDN (Tesseract.js)\n\nTente abrir o PDF num leitor comum para confirmar o conteúdo.');
+      throw new Error('PDF sem texto selecionável (provavelmente escaneado/só imagens — precisaria OCR)');
     }
     return result;
   }
@@ -1254,14 +1152,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   // ── UI helpers ──
   function setLoading(bodyEl,msg){
-    // ★ suporta \n e mensagens longas (OCR etc) — wrap e max-width
-    const html=esc(msg).replace(/\n/g,'<br>');
-    bodyEl.innerHTML=`<div class="gdi-mat-isa-loading" style="max-width:560px;margin:0 auto;padding:30px 20px;">
+    bodyEl.innerHTML=`<div class="gdi-mat-isa-loading">
       <div class="gdi-mat-isa-spin"></div>
-      <div style="text-align:center;font-size:13px;line-height:1.6;color:var(--ferreto-text,#e6edf3);">${html}</div>
-      <div style="margin-top:14px;font-size:11px;color:var(--ferreto-text-muted,#8b949e);font-style:italic;">
-        <i class="bi bi-info-circle"></i> Não feche esta aba — a geração continua em segundo plano.
-      </div>
+      <div>${esc(msg)}</div>
     </div>`;
   }
   function setError(bodyEl,msg){
@@ -1536,7 +1429,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 
   // Gera TODOS os materiais EM PARALELO TOTAL (não em cascata)
   // Cada tarefa usa uma chave NVIDIA diferente (se houver múltiplas)
-  async function generateAll(items,lesson,trigger,progressCb){
+  async function generateAll(items,lesson,trigger){
     const key=lessonKey();
     // se já tem tudo no cache em memória, pula
     if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
@@ -1584,10 +1477,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
     for(const item of items){
       try{
-        if(progressCb)progressCb({phase:'extract',pdf:item.name});
-        const txt=await extractPdfText(item.url,(p)=>{
-          if(progressCb)progressCb(Object.assign({pdf:item.name},p));
-        });
+        const txt=await extractPdfText(item.url);
         if(txt&&txt.trim().length>50){
           allText+=(allText?'\n\n---\n\n':'')+txt;
           pdfTexts.push({name:item.name,text:txt});
@@ -1729,13 +1619,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     bodyEl.__items=items;bodyEl.__lesson=lesson;
     setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões + pílulas…');
     try{
-      const result=await generateAll(items,lesson,'summary',(p)=>{
-        // ★ feedback de progresso durante extração/OCR
-        if(p.phase==='extract')setLoading(bodyEl,'Extraindo texto: '+p.pdf+'…');
-        else if(p.phase==='ocr-init')setLoading(bodyEl,'PDF escaneado detectado — iniciando OCR (pode levar alguns minutos)…');
-        else if(p.phase==='ocr-page')setLoading(bodyEl,'OCR em andamento — página '+p.page+' de '+p.total+(p.progress?(' ('+Math.round(p.progress*100)+'%)'):'')+'…');
-        else if(p.phase==='ocr-done')setLoading(bodyEl,'OCR concluído ('+p.chars+' caracteres extraídos). Gerando resumo…');
-      });
+      const result=await generateAll(items,lesson,'summary');
       if(!result.summary){setError(bodyEl,'Meggy não conseguiu gerar o resumo.');return;}
       renderSummaryCard(bodyEl,lesson,result.summary,false);
       // badge com tudo que foi gerado
@@ -1766,12 +1650,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     bodyEl.__items=items;bodyEl.__lesson=lesson;
     setLoading(bodyEl,'Meggy está lendo todos os materiais e criando resumo + pílulas + questões…');
     try{
-      await generateAll(items,lesson,'questions',(p)=>{
-        if(p.phase==='extract')setLoading(bodyEl,'Extraindo texto: '+p.pdf+'…');
-        else if(p.phase==='ocr-init')setLoading(bodyEl,'PDF escaneado detectado — iniciando OCR (pode levar alguns minutos)…');
-        else if(p.phase==='ocr-page')setLoading(bodyEl,'OCR em andamento — página '+p.page+' de '+p.total+(p.progress?(' ('+Math.round(p.progress*100)+'%)'):'')+'…');
-        else if(p.phase==='ocr-done')setLoading(bodyEl,'OCR concluído ('+p.chars+' caracteres). Gerando questões…');
-      });
+      await generateAll(items,lesson,'questions');
     }catch(e){setError(bodyEl,e.message);return;}
     // carrega questões do cache se existirem
     const cached=await cacheGet();
@@ -1982,12 +1861,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     bodyEl.__items=items;bodyEl.__lesson=lesson;
     setLoading(bodyEl,'Meggy está lendo o material e criando pílulas + resumo + questões…');
     try{
-      const result=await generateAll(items,lesson,'mindmap',(p)=>{
-        if(p.phase==='extract')setLoading(bodyEl,'Extraindo texto: '+p.pdf+'…');
-        else if(p.phase==='ocr-init')setLoading(bodyEl,'PDF escaneado detectado — iniciando OCR (pode levar alguns minutos)…');
-        else if(p.phase==='ocr-page')setLoading(bodyEl,'OCR em andamento — página '+p.page+' de '+p.total+(p.progress?(' ('+Math.round(p.progress*100)+'%)'):'')+'…');
-        else if(p.phase==='ocr-done')setLoading(bodyEl,'OCR concluído ('+p.chars+' caracteres). Gerando pílulas…');
-      });
+      const result=await generateAll(items,lesson,'mindmap');
       if(!result.mindmap){setError(bodyEl,'Meggy não conseguiu gerar as pílulas.');return;}
       bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;flex-shrink:0;">
