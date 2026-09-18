@@ -1214,205 +1214,102 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     showToast('Resumo salvo no Drive'+(qn>0?' + '+qn+' questões':''));
   }
 
-  // ── Track answered questions (evita repetir) ──
-  const ANSWERED_KEY='gdi-answered-questions-v1';
-  function getAnsweredIds(){try{return JSON.parse(localStorage.getItem(ANSWERED_KEY)||'[]')}catch(_){return []}}
-  function markAnswered(id){const arr=getAnsweredIds();if(!arr.includes(id)){arr.push(id);if(arr.length>500)arr.shift();try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(arr))}catch(_){}}}
-
-  // ── Questions flow: gera + já abre quiz interativo ──
-  // Ao clicar na aba "Questões Meggy": carrega do cache (se houver),
-  // gera novas se não houver, e IMEDIATAMENTE abre o quiz interativo.
-  // No fim do quiz: botão "Gerar mais 5 questões" para continuar.
-  // Nunca repete questões já respondidas pelo usuário.
+  // ── Questions flow ──
   async function questions(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula.');return;}
+    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula para gerar questões.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
-    // salva items para "Gerar mais"
-    bodyEl.__items=items;
-    bodyEl.__lesson=lesson;
 
-    // 1) verifica cache no Drive — carrega questões existentes silenciosamente
-    setLoading(bodyEl,'Verificando questões disponíveis…');
+    // 1) verifica cache no Drive
+    setLoading(bodyEl,'Verificando cache no Drive…');
     const cached=await cacheGet();
-    let hasCached=false;
     if(cached&&cached.questions&&Array.isArray(cached.questions)&&cached.questions.length){
+      // adiciona questões do cache ao banco local
+      let n=0;
       cached.questions.forEach(q=>{
-        if(q&&q.statement){
-          let cleanQ;
-          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-          }else if(Array.isArray(q.options)){
-            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-          }
-          if(cleanQ){
-            // só adiciona se não existe (dedup por statement)
-            const all=lsGet(LQ,[]);
-            if(!all.some(x=>x.statement===cleanQ.statement))addQ(cleanQ);
-          }
+        if(q&&q.statement&&Array.isArray(q.options)){
+          addQ({subject:lesson,statement:String(q.statement),options:q.options.map(String),
+            correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'});
+          n++;
         }
       });
-      hasCached=true;
+      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;">
+        <div style="font-size:48px;">📦</div>
+        <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">${n} questões do cache!</h3>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Matéria: <b style="color:var(--ferreto-text,#e6edf3);">${esc(lesson)}</b></p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;"><i class="bi bi-cloud-check" style="color:#3fb950;"></i> Carregadas do cache do Drive. Abra a Central → <b>Questões</b>.</p>
+      </div>`;
+      showToast(n+' questões carregadas do cache do Drive');
+      return;
     }
 
-    // 2) se não tem cache, gera novas questões
-    if(!hasCached){
-      await generateQuestions(items,bodyEl,lesson);
-    }
-
-    // 3) coleta questões do banco para esta matéria, NÃO respondidas ainda
-    startQuizFromBank(bodyEl,lesson);
-  }
-
-  // ── Gera questões via Meggy (sem cache) ──
-  async function generateQuestions(items,bodyEl,lesson){
+    // 2) gera novo
     setLoading(bodyEl,'Extraindo texto do PDF…');
     let text;
     try{
       text=await extractPdfText(items[0].url);
-    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return false;}
-    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível.');return false;}
+    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
+    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
     setLoading(bodyEl,'Meggy está criando questões no estilo concurso…');
     let resp;
     try{
       resp=await callIsa('Baseado neste material de aula, gere 5 questões de concurso público em formato JSON array. Misture estilos:\n- 3 questões de múltipla escolha (4 alternativas): {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."} (correct = índice 0-3)\n- 2 questões de certo/errado (estilo CEBRASPE/CESPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."} (correct = 1 para Certo, 0 para Errado)\nNível concurso público brasileiro. Sem comentários, só JSON array:\n\n'+text);
-    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return false;}
+    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
     let arr;
     try{
       arr=parseJsonArray(resp);
-    }catch(e){setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
+    }catch(e){setError(bodyEl,'Meggy retornou formato inválido (não era JSON): '+e.message);return;}
+    let n=0;
     const cleanArr=[];
+    const savedIds=[];
     arr.forEach(q=>{
       if(!q||!q.statement)return;
       let cleanQ;
       if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-        cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-      }else if(Array.isArray(q.options)){
-        cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
+        cleanQ={subject:lesson,type:'tf',statement:String(q.statement),
+          options:['Certo','Errado'],
+          correct:Math.max(0,Math.min(1,Number(q.correct)||0)),
+          explanation:String(q.explanation||''),source:'ISA-PDF'};
+      }else{
+        if(!Array.isArray(q.options))return;
+        cleanQ={subject:lesson,type:'mc',statement:String(q.statement),
+          options:q.options.map(String),
+          correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
+          explanation:String(q.explanation||''),source:'ISA-PDF'};
       }
-      if(cleanQ){
-        // só adiciona se não existe (dedup por statement)
-        const all=lsGet(LQ,[]);
-        if(!all.some(x=>x.statement===cleanQ.statement)){
-          addQ(cleanQ);
-          cleanArr.push({type:cleanQ.type,statement:cleanQ.statement,options:cleanQ.options,correct:cleanQ.correct,explanation:cleanQ.explanation});
-        }
-      }
+      const saved=addQ(cleanQ);
+      savedIds.push(saved.id);
+      cleanArr.push({type:cleanQ.type,statement:cleanQ.statement,options:cleanQ.options,correct:cleanQ.correct,explanation:cleanQ.explanation});
+      n++;
     });
-    // salva no cache do Drive
-    if(cleanArr.length){
-      // merge com cache existente
-      const existing=await cacheGet();
-      const merged=[...((existing&&existing.questions)||[]),...cleanArr];
-      cacheSave(existing?.summary||null,merged,lesson);
-    }
-    showToast(cleanArr.length+' questões geradas!');
-    return cleanArr.length>0;
-  }
-
-  // ── Inicia quiz com questões do banco (não respondidas) ──
-  function startQuizFromBank(bodyEl,lesson){
-    const all=lsGet(LQ,[]);
-    const answered=getAnsweredIds();
-    // questões desta matéria que ainda não foram respondidas
-    let pending=all.filter(q=>q.subject===lesson&&!answered.includes(q.id));
-    // se não tem nenhuma não-respondida, pega todas desta matéria (reinicia ciclo)
-    if(pending.length===0){
-      pending=all.filter(q=>q.subject===lesson);
-      // limpa answered para esta matéria (reinicia)
-      const newAnswered=answered.filter(id=>!all.some(q=>q.id===id&&q.subject===lesson));
-      try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(newAnswered))}catch(_){}
-    }
-    if(pending.length===0){
-      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;padding:30px;">
-        <div style="font-size:48px;">📝</div>
-        <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Nenhuma questão disponível ainda</h3>
-        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Matéria: <b style="color:var(--ferreto-text,#e6edf3);">${esc(lesson)}</b></p>
-        <button id="gdi-q-gen-more" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-stars"></i> Gerar 5 questões com Meggy</button>
-      </div>`;
-      bodyEl.querySelector('#gdi-q-gen-more').onclick=async()=>{
-        const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-        if(ok)startQuizFromBank(bodyEl,lesson);
+    cacheSave(null,cleanArr,lesson); // salva no Drive para próximas visitas
+    bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;">
+      <div style="font-size:48px;">🎉</div>
+      <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">${n} questões geradas!</h3>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Salvas no banco com a matéria "<b style="color:var(--ferreto-text,#e6edf3);">${esc(lesson)}</b>".</p>
+      <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;"><i class="bi bi-cloud-check" style="color:#3fb950;"></i> Salvo no Drive + Central → <b>Questões</b>.</p>
+      ${n>0?`<button id="gdi-isa-resolve-now" class="gdi-btn gdi-btn-primary" style="margin-top:14px;font-size:13px;"><i class="bi bi-play-fill"></i> Resolver agora →</button>`:''}
+    </div>`;
+    showToast(n+' questões salvas no Drive e no banco');
+    // Task 3: botão "Resolver agora →" dispara startSession com as
+    // questões recém-criadas (busca pelos ids salvos no banco).
+    const resolveBtn=bodyEl.querySelector('#gdi-isa-resolve-now');
+    if(resolveBtn){
+      resolveBtn.onclick=()=>{
+        // busca as questões recém-salvas pelo id (já vêm com SRS/stats)
+        const all=lsGet(LQ,[]);
+        const justGenerated=all.filter(q=>savedIds.includes(q.id));
+        if(justGenerated.length&&window.__gdiStartSession){
+          // startSession do M23 opera sobre o #gdi-central-body; aqui
+          // operamos sobre o bodyEl da aula (mesma estrutura visual).
+          window.__gdiStartSession(bodyEl,justGenerated,'Questões ISA · '+lesson);
+        }else if(window.__gdiOpenCentral){
+          // fallback: abre a Central na aba Questões
+          window.__gdiOpenCentral('questoes');
+        }else{
+          showToast('Abra a Central de Estudos → Questões para resolver');
+        }
       };
-      return;
     }
-    // pega até 5 questões
-    const batch=pending.slice(0,5);
-    runQuizSession(bodyEl,lesson,batch);
-  }
-
-  // ── Roda uma sessão de quiz interativo ──
-  function runQuizSession(bodyEl,lesson,queue){
-    let idx=0,hits=0,misses=0;
-    function draw(){
-      if(idx>=queue.length){
-        // fim do batch
-        const total=queue.length;
-        const pct=Math.round(hits/total*100);
-        bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;text-align:center;">
-          <div style="font-size:48px;">${pct>=60?'🎉':'📚'}</div>
-          <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Batch concluído!</h3>
-          <p style="color:var(--ferreto-text,#e6edf3);font-size:16px;margin-top:8px;"><b style="color:${pct>=60?'#3fb950':'#ff8b8b'};">${hits}/${total}</b> · ${pct}% acerto</p>
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">Matéria: ${esc(lesson)}</p>
-          <div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
-            <button id="gdi-q-more" class="gdi-btn gdi-btn-primary"><i class="bi bi-stars"></i> Gerar mais 5 questões</button>
-            <button id="gdi-q-next-batch" class="gdi-mode-btn"><i class="bi bi-arrow-right"></i> Próximo batch</button>
-          </div>
-        </div>`;
-        // Gerar mais 5 questões
-        bodyEl.querySelector('#gdi-q-more').onclick=async()=>{
-          const ok=await generateQuestions(bodyEl.__items||[],bodyEl,lesson);
-          if(ok)startQuizFromBank(bodyEl,lesson);
-          else startQuizFromBank(bodyEl,lesson); // tenta de novo com o que tem
-        };
-        // Próximo batch (questões que ainda não foram respondidas)
-        bodyEl.querySelector('#gdi-q-next-batch').onclick=()=>startQuizFromBank(bodyEl,lesson);
-        return;
-      }
-      const q=queue[idx];
-      const isTF=q.type==='tf';
-      const optCount=isTF?2:(q.options?.length||4);
-      bodyEl.innerHTML=`<div style="max-width:760px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
-        </div>
-        <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
-          <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.6;">${esc(q.statement)}</div>
-        </div>
-        <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
-        <div id="gdi-q-feedback" style="margin-top:14px;"></div>
-      </div>`;
-      const optsEl=bodyEl.querySelector('#gdi-q-opts');
-      const options=q.options||(isTF?['Certo','Errado']:['a','b','c','d']);
-      options.forEach((opt,i)=>{
-        const b=document.createElement('button');
-        b.className='gdi-note';b.style.cursor='pointer';b.style.textAlign='left';
-        const letter=isTF?'':String.fromCharCode(65+i)+') ';
-        b.innerHTML=`<span style="display:flex;align-items:center;gap:10px;"><b style="color:var(--ferreto-primary,#ff8b9f);">${letter}</b> <span style="color:var(--ferreto-text,#e6edf3);">${esc(opt)}</span></span>`;
-        b.onclick=()=>{
-          const acertou=i===q.correct;
-          if(acertou)hits++;else misses++;
-          markAnswered(q.id);
-          // grade no SRS
-          if(window.__gdiGradeQ)window.__gdiGradeQ(q.id,acertou);
-          optsEl.querySelectorAll('button').forEach((bb,bi)=>{
-            bb.disabled=true;bb.style.cursor='default';bb.style.opacity='.7';
-            if(bi===q.correct)bb.style.background='rgba(63,185,80,.18)';
-            if(bi===i&&!acertou)bb.style.background='rgba(255,107,107,.18)';
-          });
-          const fb=bodyEl.querySelector('#gdi-q-feedback');
-          fb.innerHTML=`<div class="gdi-course" style="border-left:3px solid ${acertou?'#3fb950':'#ff6b6b'};">
-            <b style="color:${acertou?'#3fb950':'#ff6b6b'};">${acertou?'✓ Correto':'✗ Errado'}</b>
-            ${q.explanation?`<div style="color:var(--ferreto-text,#e6edf3);font-size:13px;margin-top:6px;line-height:1.5;">${esc(q.explanation)}</div>`:''}
-          </div>
-          <button class="gdi-btn gdi-btn-primary" id="gdi-q-next" style="margin-top:12px;">${idx+1<queue.length?'Próxima →':'Ver resultado'}</button>`;
-          fb.querySelector('#gdi-q-next').onclick=()=>{idx++;draw();};
-        };
-        optsEl.appendChild(b);
-      });
-    }
-    draw();
   }
 
   // ── Mental map flow ──
@@ -3396,8 +3293,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   // agora →" após gerar questões) possa chamar a sessão interativa
   // diretamente sobre o bodyEl da aula, sem precisar abrir a Central.
   window.__gdiStartSession=startSession;
-  // ★ Expõe gradeQ para o quiz do M9-ISA (interativo na aba de questões)
-  window.__gdiGradeQ=gradeQ;
   // ★ Expõe gradeQ para outros módulos (ex.: flashcards das erradas)
   window.__gdiQStats=function(){
     // retorna {perSubject:[{subject,total,hits,misses,acc}], worst:[...], overall:{...}}
