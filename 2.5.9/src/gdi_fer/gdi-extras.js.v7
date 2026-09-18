@@ -1071,125 +1071,38 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     bodyEl.querySelector('#gdi-isa-copy').onclick=()=>copySummary(markdownText);
   }
 
-  // ── Auto-criar flashcards das questões geradas ──
-  // Cada questão vira um flashcard: frente = enunciado, verso = resposta certa + explicação
-  function autoCreateFlashcards(questions,lesson){
-    const cards=lsGet('gdi-fc-v1',[]);
-    let n=0;
-    questions.forEach(q=>{
-      if(!q||!q.statement||!Array.isArray(q.options))return;
-      const correctLetter=String.fromCharCode(65,q.correct||0);
-      const correctText=q.options[q.correct||0]||'';
-      const back=correctLetter+') '+correctText+(q.explanation?'\n\n💡 '+q.explanation:'');
-      // evita duplicatas (mesma frente)
-      const exists=cards.some(c=>c.f===q.statement);
-      if(!exists){
-        cards.push({id:uid(),f:q.statement,b:back,due:Date.now()+86400000,src:'ISA:'+lesson});
-        n++;
-      }
-    });
-    if(n)lsSet('gdi-fc-v1',cards);
-    return n;
-  }
-
-  // ── Summary flow (com auto-geração de questões em paralelo) ──
+  // ── Summary flow ──
   async function summary(items,bodyEl,lessonName){
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula para resumir.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
 
-    // 1) verifica cache no Drive — se tem resumo, mostra direto
+    // 1) verifica cache no Drive
     setLoading(bodyEl,'Verificando cache no Drive…');
     const cached=await cacheGet();
     if(cached&&cached.summary){
       saveIsaSummary(lesson,cached.summary);
       renderSummaryCard(bodyEl,lesson,cached.summary,true);
       showToast('Resumo carregado do cache do Drive');
-      // se também tem questões no cache, carrega no banco silenciosamente
-      if(cached.questions&&Array.isArray(cached.questions)&&cached.questions.length){
-        let qn=0;
-        cached.questions.forEach(q=>{
-          if(q&&q.statement&&Array.isArray(q.options)){
-            addQ({subject:lesson,statement:String(q.statement),options:q.options.map(String),
-              correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'});
-            qn++;
-          }
-        });
-        if(qn>0){
-          autoCreateFlashcards(cached.questions,lesson);
-          showToast(qn+' questões e flashcards carregados do cache');
-        }
-      }
       return;
     }
 
-    // 2) extrai texto do PDF
+    // 2) gera novo
     setLoading(bodyEl,'Extraindo texto do PDF…');
     let text;
     try{
       text=await extractPdfText(items[0].url);
     }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
     if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
-
-    // 3) gera resumo E questões em paralelo (duas chamadas à Meggy ao mesmo tempo)
-    setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões…');
-    const summaryPrompt='Leia este material de aula e faça um resumo estruturado em Markdown com os pontos principais. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado:\n\n'+text;
-    const questionsPrompt='Baseado neste material de aula, gere 5 questões de múltipla escolha (4 alternativas) em formato JSON array. Cada item: {"statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}. correct é o índice 0-3 da alternativa certa. Nível concurso público brasileiro. Sem comentários, só JSON:\n\n'+text;
-
-    let resp=null,qResp=null;
-    // tenta ambas em paralelo; se uma falha, continua com a outra
-    const [sumResult,qResult]=await Promise.allSettled([
-      callIsa(summaryPrompt),
-      callIsa(questionsPrompt)
-    ]);
-    if(sumResult.status==='fulfilled')resp=sumResult.value;
-    if(qResult.status==='fulfilled')qResp=qResult.value;
-
-    // 4) processa resumo
-    if(!resp||!resp.trim()){
-      setError(bodyEl,'Meggy não conseguiu gerar o resumo. Tente novamente.');
-      return;
-    }
+    setLoading(bodyEl,'Meggy está lendo o material e preparando o resumo…');
+    let resp;
+    try{
+      resp=await callIsa('Leia este material de aula e faça um resumo estruturado em Markdown com os pontos principais. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado:\n\n'+text);
+    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
+    if(!resp||!resp.trim()){setError(bodyEl,'Meggy retornou uma resposta vazia. Tente novamente.');return;}
     saveIsaSummary(lesson,resp);
-
-    // 5) processa questões (se vieram)
-    let qn=0;
-    let cleanQArr=[];
-    if(qResp){
-      try{
-        const arr=parseJsonArray(qResp);
-        cleanQArr=arr.filter(q=>q&&q.statement&&Array.isArray(q.options)).map(q=>({
-          statement:String(q.statement),options:q.options.map(String),
-          correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
-          explanation:String(q.explanation||'')
-        }));
-        cleanQArr.forEach(q=>{
-          addQ({subject:lesson,...q,source:'ISA-PDF'});
-          qn++;
-        });
-        // cria flashcards automáticos das questões
-        if(qn>0){
-          const fcN=autoCreateFlashcards(cleanQArr,lesson);
-          showToast(qn+' questões + '+fcN+' flashcards criados');
-        }
-      }catch(e){
-        // questões falharam mas o resumo funcionou — não bloqueia
-        console.warn('[Meggy] questões falharam:',e.message);
-      }
-    }
-
-    // 6) salva tudo no Drive (resumo + questões)
-    cacheSave(resp,cleanQArr.length?cleanQArr:null,lesson);
-
-    // 7) mostra o resumo com badge "questões geradas"
+    cacheSave(resp,null,lesson);
     renderSummaryCard(bodyEl,lesson,resp,false);
-    if(qn>0){
-      // adiciona badge de questões no topo do card
-      const badge=document.createElement('div');
-      badge.style.cssText='background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#3fb950;';
-      badge.innerHTML='<i class="bi bi-check-circle-fill"></i> '+qn+' questões + flashcards criados automaticamente! Abra a Central → Questões para resolver.';
-      bodyEl.querySelector('.gdi-mat-isa-result').insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
-    }
-    showToast('Resumo salvo no Drive'+(qn>0?' + '+qn+' questões':''));
+    showToast('Resumo salvo no Drive e na Central de Estudos');
   }
 
   // ── Questions flow ──
