@@ -651,101 +651,16 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         if(!tabsEl.isConnected||!bodyEl.isConnected)return;
         tabsEl.querySelectorAll('.gdi-mat-tab').forEach(t=>t.classList.toggle('active',+t.dataset.mat===idx));
         if(isMobile){
-          // ★ Android/iOS: muitos navegadores móveis NÃO renderizam PDF em <iframe>
-          // e abrem popup de download. Usamos pdf.js (viewer) embutido para
-          // garantir que o PDF apareça DENTRO da página.
-          bodyEl.innerHTML=`<div class="gdi-mat-mobile-pdf" style="height:100%;display:flex;flex-direction:column;gap:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--ferreto-surface-2,rgba(255,255,255,.04));border:1px solid var(--ferreto-border,#21262d);border-radius:8px;flex-shrink:0;">
-              <div style="min-width:0;flex:1;">
-                <div style="font-weight:600;color:var(--ferreto-text,#f0f6fc);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-file-earmark-pdf"></i> ${escHtml(items[idx].name)}</div>
-              </div>
-              <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;font-size:11px;padding:5px 10px;flex:none;" title="Abrir em aba nova (baixar)">
-                <i class="bi bi-box-arrow-up-right"></i> Abrir
-              </a>
+          bodyEl.innerHTML=`<div class="gdi-mat-empty">
+            <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:var(--ferreto-primary,#7aa2ff);"></i>
+            <div style="text-align:center;padding:0 16px;">
+              <div style="font-weight:600;margin-bottom:4px;">${escHtml(items[idx].name)}</div>
+              <div style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);margin-bottom:14px;">Toque para abrir o PDF</div>
             </div>
-            <div id="gdi-mat-mobile-viewer" style="flex:1;min-height:300px;border:1px solid var(--ferreto-border,#21262d);border-radius:8px;overflow:hidden;background:#525659;display:flex;align-items:center;justify-content:center;">
-              <div style="color:#fff;font-size:12px;text-align:center;padding:20px;"><div class="gdi-mat-isa-spin" style="margin:0 auto 10px;"></div>Carregando PDF…</div>
-            </div>
+            <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-mode-btn" style="text-decoration:none;justify-content:center;min-width:200px;">
+              <i class="bi bi-box-arrow-up-right"></i> Abrir material
+            </a>
           </div>`;
-          // tenta renderizar com pdf.js (viewer embutido)
-          (async()=>{
-            try{
-              if(!window.pdfjsLib){
-                // carrega pdf.js dinamicamente
-                await new Promise((res,rej)=>{
-                  const s=document.createElement('script');
-                  s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-                  s.crossOrigin='anonymous';
-                  s.onload=res;s.onerror=()=>rej(new Error('pdf.js falhou'));
-                  document.head.appendChild(s);
-                });
-                if(window.pdfjsLib){
-                  try{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}catch(_){}
-                }
-              }
-              if(!window.pdfjsLib)throw new Error('pdf.js indisponível');
-              const viewer=bodyEl.querySelector('#gdi-mat-mobile-viewer');
-              if(!viewer)return;
-              viewer.innerHTML='<canvas id="gdi-mat-mobile-canvas" style="width:100%;height:100%;display:block;background:#525659;"></canvas>';
-              const canvas=viewer.querySelector('#gdi-mat-mobile-canvas');
-              const ctx=canvas.getContext('2d');
-              const resp=await fetch(items[idx].url,{credentials:'same-origin'});
-              if(!resp.ok)throw new Error('HTTP '+resp.status);
-              const buf=await resp.arrayBuffer();
-              const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
-              let pageNum=1;
-              let scale=1.5;
-              async function renderPage(){
-                const page=await doc.getPage(pageNum);
-                const viewport=page.getViewport({scale});
-                const containerWidth=viewer.clientWidth-20;
-                if(viewport.width>containerWidth){
-                  scale=containerWidth/viewport.width*scale;
-                }
-                const vp2=page.getViewport({scale});
-                canvas.height=vp2.height;
-                canvas.width=vp2.width;
-                canvas.style.height=vp2.height+'px';
-                canvas.style.width='100%';
-                await page.render({canvasContext:ctx,viewport:vp2}).promise;
-                // controles de página
-                if(!viewer.querySelector('.gdi-mat-mobile-nav')){
-                  const nav=document.createElement('div');
-                  nav.className='gdi-mat-mobile-nav';
-                  nav.style.cssText='position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(0,0,0,.75);padding:6px 10px;border-radius:20px;backdrop-filter:blur(6px);';
-                  nav.innerHTML=`
-                    <button class="gdi-mat-mobile-prev" style="background:transparent;border:0;color:#fff;cursor:pointer;font-size:16px;padding:2px 8px;"><i class="bi bi-chevron-left"></i></button>
-                    <span class="gdi-mat-mobile-info" style="color:#fff;font-size:12px;padding:2px 6px;">${pageNum}/${doc.numPages}</span>
-                    <button class="gdi-mat-mobile-next" style="background:transparent;border:0;color:#fff;cursor:pointer;font-size:16px;padding:2px 8px;"><i class="bi bi-chevron-right"></i></button>`;
-                  viewer.style.position='relative';
-                  viewer.appendChild(nav);
-                  nav.querySelector('.gdi-mat-mobile-prev').onclick=async()=>{
-                    if(pageNum>1){pageNum--;await renderPage();}
-                  };
-                  nav.querySelector('.gdi-mat-mobile-next').onclick=async()=>{
-                    if(pageNum<doc.numPages){pageNum++;await renderPage();}
-                  };
-                }else{
-                  viewer.querySelector('.gdi-mat-mobile-info').textContent=pageNum+'/'+doc.numPages;
-                }
-                // scroll topo
-                viewer.scrollTop=0;
-              }
-              await renderPage();
-            }catch(err){
-              console.warn('[M9 mobile] pdf.js falhou, caindo p/ link:',err);
-              const viewer=bodyEl.querySelector('#gdi-mat-mobile-viewer');
-              if(viewer){
-                viewer.innerHTML=`<div style="text-align:center;padding:24px;color:var(--ferreto-text,#e6edf3);">
-                  <i class="bi bi-file-earmark-pdf" style="font-size:38px;color:var(--ferreto-primary,#ff8b9f);"></i>
-                  <div style="margin-top:8px;font-size:13px;">Não foi possível exibir o PDF dentro da página neste dispositivo.</div>
-                  <a href="${items[idx].url}" target="_blank" rel="noopener" class="gdi-btn gdi-btn-primary" style="margin-top:14px;text-decoration:none;">
-                    <i class="bi bi-box-arrow-up-right"></i> Abrir em nova aba
-                  </a>
-                </div>`;
-              }
-            }
-          })();
           return;
         }
         let ifr=frames.get(items[idx].url);
@@ -885,10 +800,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-mat-isa-loading{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:14px;}
 .gdi-mat-isa-spin{width:30px;height:30px;border:3px solid var(--ferreto-surface-3,rgba(255,255,255,.12));border-top-color:var(--ferreto-primary,#ff8b9f);border-radius:50%;animation:gdi-mat-isa-spin 1s linear infinite;}
 @keyframes gdi-mat-isa-spin{to{transform:rotate(360deg);}}
-/* ★FIX barra de rolagem dupla: antes havia overflow-y:auto aqui E dentro
-   do .gdi-isa-summary-body, gerando duas scrollbars aninhadas. Agora só
-   este contêiner rola — os filhos apenas preenchem naturalmente. */
-.gdi-mat-isa-result{height:100%;overflow-y:auto;overflow-x:hidden;padding:14px 18px;background:var(--ferreto-surface,#161b22);color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.6;}
+.gdi-mat-isa-result{height:100%;overflow-y:auto;padding:14px 18px;background:var(--ferreto-surface,#161b22);color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.6;}
 .gdi-mat-isa-result h1,.gdi-mat-isa-result h2,.gdi-mat-isa-result h3,.gdi-mat-isa-result h4{color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);margin:14px 0 6px;}
 .gdi-mat-isa-result h1{font-size:20px;} .gdi-mat-isa-result h2{font-size:17px;} .gdi-mat-isa-result h3{font-size:15px;} .gdi-mat-isa-result h4{font-size:13px;}
 .gdi-mat-isa-result p{margin:0 0 8px;}
@@ -916,91 +828,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
 .gdi-mat-isa-err{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:30px;text-align:center;}
 .gdi-mat-isa-err i{font-size:36px;color:#ff8b8b;}
 .gdi-mat-isa-err div{color:var(--ferreto-text,#e6edf3);font-size:14px;max-width:420px;}
-
-/* ═══ BIBLIOTECA DE FLASHCARDS (M9) ═══ */
-.gdi-fc-library{padding:14px 14px 24px;}
-.gdi-fc-library-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;margin-bottom:14px;}
-.gdi-fc-library-title{display:flex;align-items:center;gap:10px;min-width:0;}
-.gdi-fc-library-title > i{font-size:24px;color:var(--ferreto-primary,#ff8b9f);flex:none;}
-.gdi-fc-library-title b{color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;display:block;}
-.gdi-fc-library-title span{color:var(--ferreto-text-muted,#8b949e);font-size:12px;}
-.gdi-fc-library-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-.gdi-fc-add-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;}
-.gdi-fc-add-form input{flex:1;min-width:140px;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px 10px;font-size:13px;font-family:inherit;}
-
-/* Disciplina */
-.gdi-fc-discipline{margin-bottom:10px;background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:12px;overflow:hidden;}
-.gdi-fc-disc-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none;background:rgba(255,255,255,.025);transition:background .15s;}
-.gdi-fc-disc-head:hover{background:rgba(255,255,255,.06);}
-.gdi-fc-disc-head .gdi-fc-chevron{transition:transform .2s;color:var(--ferreto-text-muted,#8b949e);font-size:12px;flex:none;}
-.gdi-fc-disc-head .gdi-fc-chevron.gdi-fc-rotated{transform:rotate(-90deg);}
-.gdi-fc-disc-icon{color:var(--ferreto-primary,#ff8b9f);font-size:18px;flex:none;}
-.gdi-fc-disc-name{color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.gdi-fc-disc-meta{color:var(--ferreto-text-muted,#8b949e);font-size:11px;white-space:nowrap;}
-.gdi-fc-due{color:#ffd43b !important;}
-.gdi-fc-disc-body{padding:4px 8px 10px 8px;}
-
-/* Tema */
-.gdi-fc-theme{margin:6px 0 6px 26px;background:rgba(255,255,255,.02);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;overflow:hidden;}
-.gdi-fc-theme-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;transition:background .15s;}
-.gdi-fc-theme-head:hover{background:rgba(255,255,255,.05);}
-.gdi-fc-theme-head .gdi-fc-chevron{transition:transform .2s;color:var(--ferreto-text-muted,#8b949e);font-size:11px;flex:none;}
-.gdi-fc-theme-head .gdi-fc-chevron.gdi-fc-rotated{transform:rotate(-90deg);}
-.gdi-fc-theme-icon{color:var(--ferreto-secondary,#5ddeda);font-size:14px;flex:none;}
-.gdi-fc-theme-name{color:var(--ferreto-text,#e6edf3);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.gdi-fc-theme-meta{color:var(--ferreto-text-muted,#8b949e);font-size:11px;white-space:nowrap;}
-.gdi-fc-theme-study{padding:4px 10px !important;font-size:11px !important;}
-.gdi-fc-theme-body{padding:8px 10px 10px 10px;}
-
-/* Grid de cards */
-.gdi-fc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
-
-/* Flip card 3D */
-.gdi-fc-card{position:relative;perspective:1000px;height:170px;cursor:pointer;}
-.gdi-fc-card-large{height:340px;max-width:560px;margin:0 auto;}
-.gdi-fc-card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);}
-.gdi-fc-card.gdi-fc-flipped .gdi-fc-card-inner{transform:rotateY(180deg);}
-.gdi-fc-card-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 16px;border-radius:12px;box-sizing:border-box;text-align:center;}
-.gdi-fc-card-front{background:linear-gradient(135deg,rgba(255,139,159,.14),rgba(192,38,211,.08));border:1.5px solid rgba(255,139,159,.4);color:var(--ferreto-text,#f0f6fc);}
-.gdi-fc-card-back{background:linear-gradient(135deg,rgba(93,222,218,.14),rgba(63,185,80,.08));border:1.5px solid rgba(93,222,218,.4);color:var(--ferreto-text,#e6edf3);transform:rotateY(180deg);}
-.gdi-fc-card-label{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ferreto-primary,#ff8b9f);text-transform:uppercase;display:flex;align-items:center;gap:4px;}
-.gdi-fc-card-back .gdi-fc-card-label{color:var(--ferreto-secondary,#5ddeda);}
-.gdi-fc-card-text{font-size:13px;line-height:1.55;color:var(--ferreto-text,#e6edf3);overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;max-height:110px;}
-.gdi-fc-card-large .gdi-fc-card-text{font-size:16px;line-height:1.6;-webkit-line-clamp:10;max-height:240px;}
-.gdi-fc-card-hint{font-size:10px;color:var(--ferreto-text-muted,#8b949e);display:flex;align-items:center;gap:4px;font-style:italic;}
-.gdi-fc-card-del{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:rgba(255,107,107,.2);border:1px solid rgba(255,107,107,.4);color:#ff8b8b;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;z-index:2;transition:background .15s;}
-.gdi-fc-card-del:hover{background:rgba(255,107,107,.4);}
-.gdi-fc-card:hover .gdi-fc-card-del{opacity:1;}
-
-/* Empty state */
-.gdi-fc-empty{padding:40px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;}
-.gdi-fc-empty-icon{font-size:64px;line-height:1;}
-.gdi-fc-empty h3{color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:18px;margin:0;}
-.gdi-fc-empty p{color:var(--ferreto-text-muted,#8b949e);font-size:13px;max-width:480px;margin:0;line-height:1.6;}
-.gdi-fc-manual-wrap{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:420px;}
-.gdi-fc-manual-wrap input, .gdi-fc-manual-form input{width:100%;box-sizing:border-box;background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px 10px;font-size:13px;font-family:inherit;}
-
-/* Sessão de estudo (modo amplified) */
-.gdi-fc-session{max-width:760px;height:100%;display:flex;flex-direction:column;}
-.gdi-fc-session-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ferreto-text-muted,#8b949e);padding:0 4px 10px;flex-shrink:0;}
-.gdi-fc-session-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:10px 0;}
-.gdi-fc-session-grade{flex-shrink:0;padding:14px;border-top:1px solid var(--ferreto-border,#21262d);}
-.gdi-fc-session-grade p{text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin:0 0 10px;}
-.gdi-fc-grade-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
-.gdi-fc-btn-no{background:rgba(255,107,107,.15)!important;border-color:rgba(255,107,107,.3)!important;color:#ff8b8b!important;font-size:13px!important;padding:10px 20px!important;}
-.gdi-fc-btn-yes{font-size:13px!important;padding:10px 20px!important;}
-.gdi-fc-session-foot{flex-shrink:0;display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);}
-.gdi-fc-skip-btn{width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);transition:transform .15s;}
-.gdi-fc-skip-btn:hover{transform:scale(1.08);}
-
-/* Responsivo */
-@media(max-width:680px){
-  .gdi-fc-grid{grid-template-columns:1fr;}
-  .gdi-fc-card{height:200px;}
-  .gdi-fc-library-head{flex-direction:column;align-items:stretch;}
-  .gdi-fc-library-actions{justify-content:space-between;}
-  .gdi-fc-theme{margin-left:14px;}
-}
 `;
     document.head.appendChild(s);
   }
@@ -1035,41 +862,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   // FIX: alguns PDFs têm texto selecionável mas getTextContent() básico
   // retorna vazio (fontes com encoding custom, text runs fragmentados).
   // Usa opções avançadas + fallback em annotations.
-  // ★FIX v2: erros descritivos (não engole mais silenciosamente) + retry
-  // com opções alternativas de fetch + fallback para PDFs escaneados.
   async function extractPdfText(url){
     const pdfjs=await ensurePdfjs();
-
-    // ★ Tenta fetch com credenciais same-origin primeiro; se falhar,
-    // tenta sem credenciais (alguns workers rejeitam cookies em fetch cross-origin)
-    let resp;
-    let fetchErr;
-    const fetchOpts=[
-      {credentials:'same-origin'},
-      {credentials:'include'},
-      {} // sem credenciais
-    ];
-    for(const opts of fetchOpts){
-      try{
-        resp=await fetch(url,opts);
-        if(resp.ok)break;
-      }catch(e){fetchErr=e;}
-    }
-    if(!resp||!resp.ok){
-      const status=resp?resp.status:(fetchErr?fetchErr.message:'unknown');
-      throw new Error('HTTP '+status+' ao baixar PDF');
-    }
+    const resp=await fetch(url,{credentials:'same-origin'});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
     const buf=await resp.arrayBuffer();
-    if(!buf||buf.byteLength<100){
-      throw new Error('PDF vazio ou muito pequeno ('+(buf?buf.byteLength:0)+' bytes)');
-    }
-
-    let doc;
-    try{
-      doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
-    }catch(e){
-      throw new Error('pdf.js não conseguiu abrir o PDF: '+(e&&e.message||e));
-    }
+    const doc=await pdfjs.getDocument({data:buf,disableFontFace:true,isEvalSupported:false}).promise;
     const n=Math.min(doc.numPages,60);
     let txt='';
 
@@ -1127,12 +925,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     try{doc.destroy();}catch(_){}
     // limpa texto: remove espaços excessivos, decodifica entidades
     txt=txt.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-    const result=txt.slice(0,20000);
-    if(!result||result.length<50){
-      // ★ Erro descritivo: PDF provavelmente é escaneado (só imagens)
-      throw new Error('PDF sem texto selecionável (provavelmente escaneado/só imagens — precisaria OCR)');
-    }
-    return result;
+    return txt.slice(0,20000);
   }
 
   // ── ISA call (POST /api/ai) ──
@@ -1158,39 +951,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     </div>`;
   }
   function setError(bodyEl,msg){
-    // ★ preserva quebras de linha para mensagens multi-linha (ex: erros de PDF)
-    const html=esc(msg).replace(/\n/g,'<br>');
-    bodyEl.innerHTML=`<div class="gdi-mat-isa-err" style="align-items:stretch;text-align:left;max-width:680px;margin:0 auto;padding:24px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--ferreto-border,#21262d);">
-        <i class="bi bi-exclamation-triangle" style="font-size:28px;color:#ff8b8b;flex:none;"></i>
-        <b style="color:#ff8b8b;font-size:15px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Erro</b>
-      </div>
-      <div style="color:var(--ferreto-text,#e6edf3);font-size:13px;line-height:1.7;white-space:normal;">${html}</div>
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--ferreto-border,#21262d);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
-        <button id="gdi-err-retry" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-arrow-clockwise"></i> Tentar novamente</button>
-        <button id="gdi-err-close" class="gdi-mode-btn" style="font-size:12px;">Fechar</button>
-      </div>
+    bodyEl.innerHTML=`<div class="gdi-mat-isa-err">
+      <i class="bi bi-exclamation-triangle"></i>
+      <div>${esc(msg)}</div>
     </div>`;
-    const retryBtn=bodyEl.querySelector('#gdi-err-retry');
-    if(retryBtn)retryBtn.onclick=()=>{
-      // volta para a aba de materiais (re-renderiza o M9)
-      const matTabs=document.querySelector('#gdi-mat-tabs');
-      const matBody=document.querySelector('#gdi-mat-body');
-      if(matTabs&&matTabs.__items&&matBody){
-        // re-dispara o click na aba Resumo Meggy
-        const tab=matTabs.querySelector('[data-mat="isa-summary"]');
-        if(tab)tab.click();
-      }
-    };
-    const closeBtn=bodyEl.querySelector('#gdi-err-close');
-    if(closeBtn)closeBtn.onclick=()=>{
-      // volta para o primeiro PDF
-      const matTabs=document.querySelector('#gdi-mat-tabs');
-      if(matTabs){
-        const firstTab=matTabs.querySelector('[data-mat="0"]');
-        if(firstTab)firstTab.click();
-      }
-    };
   }
 
   // ── Question bank integration (replicates M23 addQ on LS) ──
@@ -1281,17 +1045,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       return (d&&d.ok&&d.cached)?d.cached:null;
     }catch(_){return null;}
   }
-  async function cacheSave(summary,questions,lessonName,mindmap){
+  async function cacheSave(summary,questions,lessonName){
     try{
-      // ★FIX: se mindmap não foi passado, preserva o que já está no cache
-      // (antes, ao adicionar mais questões, o cache era sobrescrito SEM mindmap)
-      let mindmapToSave=mindmap;
-      if(mindmapToSave===undefined){
-        const existing=await cacheGet();
-        mindmapToSave=(existing&&existing.mindmap)||null;
-      }
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:lessonKey(),summary,questions,mindmap:mindmapToSave,lessonName})});
+        body:JSON.stringify({key:lessonKey(),summary,questions,lessonName})});
     }catch(_){/* não bloqueia o fluxo se o cache falhar */}
   }
 
@@ -1313,7 +1070,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           <button id="gdi-isa-copy" title="Copiar resumo" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;transition:.15s;"><i class="bi bi-clipboard"></i> Copiar</button>
         </div>
       </div>
-      <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
+      <div class="gdi-isa-summary-body" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;overflow-y:auto;max-height:calc(100vh - 320px);">
         ${renderMd(markdownText)}
       </div>
     </div>`;
@@ -1335,12 +1092,9 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   // ── Auto-criar flashcards das questões geradas ──
   // Cada questão vira um flashcard: frente = enunciado, verso = resposta certa + explicação
   // ★FIX: usa gdi-cards-v1 (mesma chave da Central de Estudos) em vez de gdi-fc-v1
-  // ★FIX v2: agora salva urlPath (path real da aula) para permitir agrupar por
-  // disciplina (pasta pai) e tema (nome da aula) na biblioteca de flashcards.
-  function autoCreateFlashcards(questions,lesson,urlPath){
+  function autoCreateFlashcards(questions,lesson){
     const cards=lsGet('gdi-cards-v1',[]);
     let n=0;
-    const path=urlPath||lessonKey()||lesson;
     questions.forEach(q=>{
       if(!q||!q.statement||!Array.isArray(q.options))return;
       const correctLetter=String.fromCharCode(65,q.correct||0);
@@ -1349,55 +1103,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       // evita duplicatas (mesma frente)
       const exists=cards.some(c=>c.f===q.statement);
       if(!exists){
-        cards.push({id:uid(),f:q.statement,b:back,due:Date.now()+86400000,box:0,src:'ISA:'+lesson,path:path,lesson:lesson,createdAt:Date.now()});
+        cards.push({id:uid(),f:q.statement,b:back,due:Date.now()+86400000,src:'ISA:'+lesson,path:lesson});
         n++;
       }
     });
     if(n)lsSet('gdi-cards-v1',cards);
     return n;
   }
-
-  // ── Extrai disciplina + tema de um path ou lesson name ──
-  // path: URL pathname como "/0:/Direito Constitucional/Aula 02.mp4"
-  // Retorna {discipline, theme} — usado pela biblioteca de flashcards (M9)
-  function extractDisciplineTheme(card){
-    let discipline='Geral',theme='Geral';
-    const path=card.path||'';
-    const lessonName=card.lesson||((card.src||'').replace(/^ISA:/,'').replace(/^manual:/,''))||'';
-    // tenta extrair do path (URL)
-    if(path&&path.charAt(0)==='/'){
-      try{
-        const segs=normPath(path).split('/').filter(Boolean);
-        // segs[0]="0:" (drive id); segs[1..n-1]=pastas; segs[n]=arquivo
-        if(segs.length>=3){
-          discipline=segs[1];
-          // tema = última pasta antes do arquivo (ou o próprio arquivo sem extensão)
-          const themeSegs=segs.slice(2,-1);
-          theme=themeSegs.length?themeSegs.join(' / '):stripExt(segs[segs.length-1]);
-        }else if(segs.length===2){
-          discipline=segs[1];
-          theme='Geral';
-        }
-      }catch(_){}
-    }
-    // fallback: heurística no lessonName ("Disciplina - Tema" ou só "Tema")
-    if(discipline==='Geral'&&lessonName&&lessonName.length>3){
-      const parts=lessonName.split(/\s*[-–—|·]\s*/).filter(p=>p.trim());
-      if(parts.length>=2){
-        // disciplina = maior segmento (heurística); tema = resto
-        const sorted=parts.map((p,i)=>({p:p.trim(),i,len:p.trim().length})).sort((a,b)=>b.len-a.len);
-        discipline=sorted[0].p;
-        theme=parts.filter((_,i)=>i!==sorted[0].i).join(' - ').trim()||'Geral';
-      }else{
-        theme=lessonName;
-      }
-    }else if(theme==='Geral'&&lessonName&&lessonName.length>3){
-      theme=lessonName;
-    }
-    return{discipline,theme};
-  }
-  function normPath(p){try{return decodeURIComponent(String(p||''))}catch(_){return String(p||'')}}
-  function stripExt(s){return String(s||'').replace(/\.[a-z0-9]{1,5}$/i,'').trim()};
 
   // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
   // Qualquer aba clicada (Resumo/Questões/Pílulas) dispara a geração
@@ -1465,7 +1177,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
       });
       // flashcards do cache
-      if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson,lessonKey());
+      if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson);
       saveIsaSummary(lesson,_chainCache[key].summary);
       console.log('[Meggy] cache completo do Drive — sem retrabalho');
       return _chainCache[key];
@@ -1474,7 +1186,6 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     // só extrai PDF se precisa gerar algo
     let allText='';
     const pdfTexts=[];
-    const pdfErrors=[]; // ★ coleta erros por PDF para diagnóstico
     for(const item of items){
       try{
         const txt=await extractPdfText(item.url);
@@ -1482,31 +1193,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           allText+=(allText?'\n\n---\n\n':'')+txt;
           pdfTexts.push({name:item.name,text:txt});
         }
-      }catch(e){
-        // ★ guarda o erro com nome do PDF para mostrar depois
-        pdfErrors.push({name:item.name,error:e.message||String(e),url:item.url});
-        console.warn('[Meggy] PDF falhou:',item.name,e.message);
-      }
+      }catch(_){}
     }
     if(!allText||allText.trim().length<50){
-      // ★ Mensagem detalhada com os erros de cada PDF
-      let detail='Não foi possível extrair texto dos PDFs.';
-      if(pdfErrors.length){
-        detail+=' Erros por arquivo:\n';
-        pdfErrors.forEach(e=>{
-          detail+='• '+e.name+': '+e.error+'\n';
-        });
-        // sugestões baseadas no tipo de erro
-        const hasHttp=pdfErrors.some(e=>/HTTP/.test(e.error));
-        const hasScanned=pdfErrors.some(e=>/escaneado|sem texto/i.test(e.error));
-        const hasPdfjs=pdfErrors.some(e=>/pdf\.js/.test(e.error));
-        detail+='\nSugestões:\n';
-        if(hasHttp)detail+='• Verifique se o PDF está acessível (sem proteção de link) e se você está logado.\n';
-        if(hasScanned)detail+='• Alguns PDFs são escaneados (só imagens) — a Meggy não faz OCR ainda.\n';
-        if(hasPdfjs)detail+='• O PDF pode estar corrompido ou criptografado.\n';
-        if(!hasHttp&&!hasScanned&&!hasPdfjs)detail+='• Tente abrir o PDF no navegador para confirmar que carrega normalmente.\n';
-      }
-      throw new Error(detail);
+      throw new Error('Não foi possível extrair texto dos PDFs.');
     }
     _chainCache[key].allText=allText;
     _chainCache[key].pdfTexts=pdfTexts;
@@ -1590,7 +1280,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     // finaliza: flashcards + salva no Drive
     _chainCache[key].questions=_chainCache[key]._allCleanQ||[];
     if(_chainCache[key].questions.length){
-      autoCreateFlashcards(_chainCache[key].questions,lesson,lessonKey());
+      autoCreateFlashcards(_chainCache[key].questions,lesson);
     }
 
     // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
@@ -1790,18 +1480,20 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const q=queue[idx];
       const isTF=q.type==='tf';
       const optCount=isTF?2:(q.options?.length||4);
-      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
+      bodyEl.innerHTML=`<div style="max-width:760px;height:100%;display:flex;flex-direction:column;position:relative;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
-        <div class="gdi-course" style="margin-bottom:14px;">
-          <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
-          <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.7;">${esc(q.statement)}</div>
+        <div style="flex:1;overflow-y:auto;padding-right:4px;min-height:0;">
+          <div class="gdi-course" style="margin-bottom:14px;">
+            <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">${isTF?'CEBRASPE — Certo ou Errado':'Múltipla Escolha'}</b>
+            <div style="color:var(--ferreto-text,#f0f6fc);font-size:14px;line-height:1.7;">${esc(q.statement)}</div>
+          </div>
+          <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <div id="gdi-q-feedback" style="margin-top:14px;"></div>
         </div>
-        <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
-        <div id="gdi-q-feedback" style="margin-top:14px;"></div>
-        <div style="display:flex;justify-content:flex-end;padding-top:14px;margin-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
+        <div style="flex-shrink:0;display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
           <button id="gdi-q-skip" title="Pular para próxima questão" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
         </div>
       </div>`;
@@ -1864,14 +1556,14 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const result=await generateAll(items,lesson,'mindmap');
       if(!result.mindmap){setError(bodyEl,'Meggy não conseguiu gerar as pílulas.');return;}
       bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;flex-shrink:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
             <i class="bi bi-capsule" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
             <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Pílulas · ${esc(lesson)}</b>
           </div>
           <button id="gdi-mm-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
         </div>
-        <div class="gdi-isa-summary-body gdi-mental-map" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;">
+        <div class="gdi-isa-summary-body gdi-mental-map" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;overflow-y:auto;max-height:calc(100vh - 320px);">
           ${renderMd(result.mindmap)}
         </div>
       </div>`;
@@ -1891,290 +1583,85 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     }catch(e){setError(bodyEl,e.message);return;}
   }
 
-  // ── Flashcards flow (aba no M9 — BIBLIOTECA organizada por disciplina → tema) ──
-  // ★FIX v3: agora mostra TODOS os flashcards (não só da aula atual),
-  // agrupados por disciplina (pasta pai) → tema (aula). Cada card é um
-  // flip card 3D de verdade (frente/verso). Botão "Gerar com Meggy"
-  // dispara a cadeia de geração quando a biblioteca está vazia.
-  async function flashcards(items, bodyEl, lessonName){
-    const lesson = realLessonName(lessonName || (items[0] && items[0].name) || 'Aula');
-    const urlPath = lessonKey();
-    const allCards = lsGet('gdi-cards-v1', []);
+  // ── Flashcards flow (aba no M9 — mostra cards da aula + estudo interativo) ──
+  async function flashcards(items,bodyEl,lessonName){
+    const lesson=realLessonName(lessonName||items[0].name);
+    const allCards=lsGet('gdi-cards-v1',[]);
+    // flashcards desta aula (por src ISA:lesson ou path:lesson)
+    const lessonCards=allCards.filter(c=>(c.src||'').includes(lesson)||(c.path||'')===lesson);
+    const dueCards=lessonCards.filter(c=>(c.due||0)<=Date.now());
 
-    // ── Agrupa por disciplina → tema ──
-    const grouped = {};
-    allCards.forEach(c=>{
-      const {discipline, theme} = extractDisciplineTheme(c);
-      if(!grouped[discipline]) grouped[discipline] = {};
-      if(!grouped[discipline][theme]) grouped[discipline][theme] = [];
-      grouped[discipline][theme].push(c);
-    });
-    const disciplines = Object.keys(grouped).sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    const totalDue = allCards.filter(c=>(c.due||0)<=Date.now()).length;
-
-    // ── Empty state ──
-    if(!allCards.length){
-      bodyEl.innerHTML = `
-        <div class="gdi-mat-isa-result gdi-fc-library">
-          <div class="gdi-fc-empty">
-            <div class="gdi-fc-empty-icon">🃏</div>
-            <h3>Nenhum flashcard ainda</h3>
-            <p>Os flashcards são criados automaticamente quando a Meggy gera resumos, questões ou pílulas das aulas. Você também pode adicionar manualmente abaixo.</p>
-            <button id="gdi-fc-gen-btn" class="gdi-btn gdi-btn-primary">
-              <i class="bi bi-stars"></i> Gerar com a Meggy
-            </button>
-            <div class="gdi-fc-manual-wrap">
-              <button id="gdi-fc-manual-toggle" class="gdi-mode-btn">
-                <i class="bi bi-plus-lg"></i> Adicionar manualmente
-              </button>
-              <div id="gdi-fc-manual-form" style="display:none;">
-                <input id="gdi-fc-manual-f" placeholder="Frente (pergunta)" />
-                <input id="gdi-fc-manual-b" placeholder="Verso (resposta)" />
-                <button id="gdi-fc-manual-add" class="gdi-btn gdi-btn-primary">
-                  <i class="bi bi-check-lg"></i> Salvar flashcard
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>`;
-      const genBtn = bodyEl.querySelector('#gdi-fc-gen-btn');
-      if(genBtn) genBtn.onclick = async ()=>{
-        if(window.gdiIsaPdf && window.gdiIsaPdf.summary){
-          showToast('Meggy está preparando resumo + questões + pílulas + flashcards…');
-          // Mostra loading no próprio bodyEl
-          setLoading(bodyEl, 'Meggy está lendo os PDFs e criando flashcards automaticamente…');
-          try{
-            // Chama generateAll indiretamente via summary — os flashcards
-            // são criados como side-effect (autoCreateFlashcards).
-            await window.gdiIsaPdf.summary(items, bodyEl, lessonName);
-            // Após gerar, volta para a biblioteca de flashcards
-            setTimeout(()=>flashcards(items, bodyEl, lessonName), 300);
-          }catch(e){
-            setError(bodyEl, e.message);
-            // Após erro, também volta para a biblioteca
-            setTimeout(()=>flashcards(items, bodyEl, lessonName), 1500);
-          }
-        } else {
-          showToast('Módulo Meggy indisponível');
-        }
-      };
-      const toggleBtn = bodyEl.querySelector('#gdi-fc-manual-toggle');
-      const formEl = bodyEl.querySelector('#gdi-fc-manual-form');
-      if(toggleBtn) toggleBtn.onclick = ()=>{
-        const open = formEl.style.display !== 'none';
-        formEl.style.display = open ? 'none' : 'block';
-        toggleBtn.innerHTML = open
-          ? '<i class="bi bi-plus-lg"></i> Adicionar manualmente'
-          : '<i class="bi bi-dash-lg"></i> Fechar formulário';
-      };
-      const addBtn = bodyEl.querySelector('#gdi-fc-manual-add');
-      if(addBtn) addBtn.onclick = ()=>{
-        const f = bodyEl.querySelector('#gdi-fc-manual-f').value.trim();
-        const b = bodyEl.querySelector('#gdi-fc-manual-b').value.trim();
-        if(!f || !b){ showToast('Preencha frente e verso'); return; }
-        const cards = lsGet('gdi-cards-v1', []);
-        cards.push({id:uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
-        lsSet('gdi-cards-v1', cards);
+    if(!lessonCards.length){
+      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="text-align:center;padding:30px;">
+        <div style="font-size:48px;">🃏</div>
+        <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Nenhum flashcard ainda</h3>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:13px;margin-top:8px;">Os flashcards são criados automaticamente quando a Meggy gera questões.</p>
+        <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;">Clique em <b>Resumo Meggy</b> ou <b>Questões Meggy</b> para gerar.</p>
+        <div style="margin-top:18px;">
+          <input id="gdi-fc-manual-f" placeholder="Frente (pergunta)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;max-width:400px;margin-bottom:6px;box-sizing:border-box;">
+          <input id="gdi-fc-manual-b" placeholder="Verso (resposta)" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);border-radius:8px;color:var(--ferreto-text,#e6edf3);padding:8px;font-size:13px;width:100%;max-width:400px;margin-bottom:8px;box-sizing:border-box;">
+          <button id="gdi-fc-manual-add" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-plus-lg"></i> Adicionar flashcard</button>
+        </div>
+      </div>`;
+      bodyEl.querySelector('#gdi-fc-manual-add').onclick=()=>{
+        const f=bodyEl.querySelector('#gdi-fc-manual-f').value.trim();
+        const b=bodyEl.querySelector('#gdi-fc-manual-b').value.trim();
+        if(!f||!b){showToast('Preencha frente e verso');return;}
+        const cards=lsGet('gdi-cards-v1',[]);
+        cards.push({id:uid(),f,b,due:Date.now()+86400000,src:'manual:'+lesson,path:lesson});
+        lsSet('gdi-cards-v1',cards);
         showToast('Flashcard adicionado!');
-        flashcards(items, bodyEl, lessonName);
+        flashcards(items,bodyEl,lessonName);
       };
       return;
     }
 
-    // ── Library header ──
-    bodyEl.innerHTML = `
-      <div class="gdi-mat-isa-result gdi-fc-library">
-        <div class="gdi-fc-library-head">
-          <div class="gdi-fc-library-title">
-            <i class="bi bi-card-text"></i>
-            <div>
-              <b>Biblioteca de Flashcards</b>
-              <span>${allCards.length} cards em ${disciplines.length} disciplina${disciplines.length>1?'s':''} · ${totalDue} p/ revisar</span>
-            </div>
-          </div>
-          <div class="gdi-fc-library-actions">
-            ${totalDue ? `<button id="gdi-fc-study-due" class="gdi-btn gdi-btn-primary"><i class="bi bi-play-fill"></i> Revisar (${totalDue})</button>` : ''}
-            <button id="gdi-fc-study-all" class="gdi-mode-btn"><i class="bi bi-collection"></i> Estudar todos</button>
-            <button id="gdi-fc-add-toggle" class="gdi-mode-btn" title="Adicionar flashcard"><i class="bi bi-plus-lg"></i></button>
-          </div>
+    // lista de flashcards + botão estudar
+    bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="bi bi-card-text" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Flashcards · ${esc(lesson)}</b>
         </div>
-        <div id="gdi-fc-add-form" class="gdi-fc-add-form" style="display:none;">
-          <input id="gdi-fc-add-f" placeholder="Frente (pergunta)" />
-          <input id="gdi-fc-add-b" placeholder="Verso (resposta)" />
-          <button id="gdi-fc-add-save" class="gdi-btn gdi-btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--ferreto-text-muted,#8b949e);">${lessonCards.length} cards · ${dueCards.length} p/ revisar</span>
+          <button id="gdi-fc-study-btn" class="gdi-btn gdi-btn-primary" style="font-size:12px;" ${dueCards.length?'':'disabled'}><i class="bi bi-play-fill"></i> Estudar (${dueCards.length})</button>
         </div>
-        <div class="gdi-fc-disciplines"></div>
+      </div>
+      <div id="gdi-fc-list-m9" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>`;
+
+    // lista os cards
+    const listEl=bodyEl.querySelector('#gdi-fc-list-m9');
+    lessonCards.slice().reverse().forEach(c=>{
+      const row=document.createElement('div');
+      row.className='gdi-note';
+      row.style.flexDirection='column';row.style.alignItems='stretch';
+      const due=(c.due||0)<=Date.now();
+      row.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;width:100%;">
+        <span style="flex:1;word-break:break-word;">
+          <b style="color:var(--ferreto-text,#f0f6fc);">${esc(String(c.f).slice(0,80))}</b><br>
+          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(String(c.b).slice(0,100))}</span>
+        </span>
+        <span style="font-size:10px;color:${due?'#ffd43b':'var(--ferreto-text-muted,#8b949e)'};white-space:nowrap;">${due?'hoje':new Date(c.due||0).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</span>
+        <button class="gdi-note-del" title="Excluir" style="flex:none;"><i class="bi bi-x-lg"></i></button>
       </div>`;
-
-    const discWrap = bodyEl.querySelector('.gdi-fc-disciplines');
-
-    // ── Render disciplines → themes → cards ──
-    disciplines.forEach((disc, di)=>{
-      const themes = grouped[disc];
-      const themeKeys = Object.keys(themes).sort((a,b)=>a.localeCompare(b,'pt-BR'));
-      const discCount = themeKeys.reduce((s,t)=>s+themes[t].length, 0);
-      const discDue = themeKeys.reduce((s,t)=>s+themes[t].filter(c=>(c.due||0)<=Date.now()).length, 0);
-
-      const discEl = document.createElement('div');
-      discEl.className = 'gdi-fc-discipline';
-      discEl.innerHTML = `
-        <div class="gdi-fc-disc-head" data-disc-idx="${di}">
-          <i class="bi bi-chevron-down gdi-fc-chevron"></i>
-          <i class="bi bi-folder-fill gdi-fc-disc-icon"></i>
-          <b class="gdi-fc-disc-name">${esc(disc)}</b>
-          <span class="gdi-fc-disc-meta">${discCount} cards · ${themeKeys.length} tema${themeKeys.length>1?'s':''}${discDue?` · <b class="gdi-fc-due">${discDue} p/ revisar</b>`:''}</span>
-        </div>
-        <div class="gdi-fc-disc-body">`;
-
-      themeKeys.forEach((theme, ti)=>{
-        const cardsT = themes[theme];
-        const dueT = cardsT.filter(c=>(c.due||0)<=Date.now()).length;
-        const themeEl = document.createElement('div');
-        themeEl.className = 'gdi-fc-theme';
-        themeEl.innerHTML = `
-          <div class="gdi-fc-theme-head" data-disc-idx="${di}" data-theme-idx="${ti}">
-            <i class="bi bi-chevron-down gdi-fc-chevron"></i>
-            <i class="bi bi-bookmark-fill gdi-fc-theme-icon"></i>
-            <b class="gdi-fc-theme-name">${esc(theme)}</b>
-            <span class="gdi-fc-theme-meta">${cardsT.length} cards${dueT?` · <b class="gdi-fc-due">${dueT} p/ revisar</b>`:''}</span>
-            <button class="gdi-mode-btn gdi-fc-theme-study" data-disc-idx="${di}" data-theme-idx="${ti}" title="Estudar este tema">
-              <i class="bi bi-play-fill"></i>
-            </button>
-          </div>
-          <div class="gdi-fc-theme-body">
-            <div class="gdi-fc-grid">
-              ${cardsT.map(c=>`
-                <div class="gdi-fc-card" data-card-id="${esc(c.id)}">
-                  <div class="gdi-fc-card-inner">
-                    <div class="gdi-fc-card-face gdi-fc-card-front">
-                      <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-                      <div class="gdi-fc-card-text">${esc(String(c.f).slice(0,300))}</div>
-                      <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
-                    </div>
-                    <div class="gdi-fc-card-face gdi-fc-card-back">
-                      <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-                      <div class="gdi-fc-card-text">${esc(String(c.b).slice(0,400))}</div>
-                      <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
-                    </div>
-                  </div>
-                  <button class="gdi-fc-card-del" data-card-id="${esc(c.id)}" title="Excluir">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>`;
-        discEl.querySelector('.gdi-fc-disc-body').appendChild(themeEl);
-      });
-
-      discWrap.appendChild(discEl);
-    });
-
-    // ── Discipline collapse/expand ──
-    discWrap.querySelectorAll('.gdi-fc-disc-head').forEach(h=>{
-      h.onclick = (e)=>{
-        e.stopPropagation();
-        const body = h.nextElementSibling;
-        const chevron = h.querySelector('.gdi-fc-chevron');
-        const isOpen = body.style.display !== 'none';
-        if(isOpen){
-          body.style.display = 'none';
-          chevron.classList.add('gdi-fc-rotated');
-        }else{
-          body.style.display = 'block';
-          chevron.classList.remove('gdi-fc-rotated');
-        }
+      row.querySelector('button').onclick=(e)=>{e.stopPropagation();
+        const cards=lsGet('gdi-cards-v1',[]);
+        lsSet('gdi-cards-v1',cards.filter(x=>x.id!==c.id));
+        flashcards(items,bodyEl,lessonName);
       };
+      listEl.appendChild(row);
     });
 
-    // ── Theme collapse/expand ──
-    discWrap.querySelectorAll('.gdi-fc-theme-head').forEach(h=>{
-      h.onclick = (e)=>{
-        if(e.target.closest('.gdi-fc-theme-study')) return;
-        e.stopPropagation();
-        const body = h.nextElementSibling;
-        const chevron = h.querySelector('.gdi-fc-chevron');
-        const isOpen = body.style.display !== 'none';
-        if(isOpen){
-          body.style.display = 'none';
-          chevron.classList.add('gdi-fc-rotated');
-        }else{
-          body.style.display = 'block';
-          chevron.classList.remove('gdi-fc-rotated');
-        }
-      };
-    });
-
-    // ── Card flip ──
-    discWrap.querySelectorAll('.gdi-fc-card').forEach(card=>{
-      card.onclick = (e)=>{
-        if(e.target.closest('.gdi-fc-card-del')) return;
-        e.stopPropagation();
-        card.classList.toggle('gdi-fc-flipped');
-      };
-    });
-
-    // ── Card delete ──
-    discWrap.querySelectorAll('.gdi-fc-card-del').forEach(btn=>{
-      btn.onclick = (e)=>{
-        e.stopPropagation();
-        const id = btn.dataset.cardId;
-        const cards = lsGet('gdi-cards-v1', []);
-        lsSet('gdi-cards-v1', cards.filter(x=>x.id !== id));
-        showToast('Flashcard excluído');
-        flashcards(items, bodyEl, lessonName);
-      };
-    });
-
-    // ── Theme study ──
-    discWrap.querySelectorAll('.gdi-fc-theme-study').forEach(btn=>{
-      btn.onclick = (e)=>{
-        e.stopPropagation();
-        const di = +btn.dataset.discIdx;
-        const ti = +btn.dataset.themeIdx;
-        const disc = disciplines[di];
-        const theme = Object.keys(grouped[disc]).sort((a,b)=>a.localeCompare(b,'pt-BR'))[ti];
-        const queue = grouped[disc][theme].filter(c=>(c.due||0)<=Date.now());
-        const fullQueue = grouped[disc][theme];
-        runFlashcardSession(bodyEl, `${disc} · ${theme}`, queue.length ? queue : fullQueue, items, lessonName);
-      };
-    });
-
-    // ── Study all due / all cards ──
-    const studyDue = bodyEl.querySelector('#gdi-fc-study-due');
-    if(studyDue) studyDue.onclick = ()=>{
-      const queue = allCards.filter(c=>(c.due||0)<=Date.now());
-      if(queue.length) runFlashcardSession(bodyEl, 'Revisão geral', queue, items, lessonName);
-      else showToast('Nenhum card vencido hoje');
-    };
-    const studyAll = bodyEl.querySelector('#gdi-fc-study-all');
-    if(studyAll) studyAll.onclick = ()=>{
-      runFlashcardSession(bodyEl, 'Todos os flashcards', allCards.slice(0, 30), items, lessonName);
-    };
-
-    // ── Add form toggle ──
-    const addToggle = bodyEl.querySelector('#gdi-fc-add-toggle');
-    const addForm = bodyEl.querySelector('#gdi-fc-add-form');
-    if(addToggle) addToggle.onclick = ()=>{
-      const open = addForm.style.display !== 'none';
-      addForm.style.display = open ? 'none' : 'flex';
-    };
-    const addSave = bodyEl.querySelector('#gdi-fc-add-save');
-    if(addSave) addSave.onclick = ()=>{
-      const f = bodyEl.querySelector('#gdi-fc-add-f').value.trim();
-      const b = bodyEl.querySelector('#gdi-fc-add-b').value.trim();
-      if(!f || !b){ showToast('Preencha frente e verso'); return; }
-      const cards = lsGet('gdi-cards-v1', []);
-      cards.push({id:uid(), f, b, due:Date.now()+86400000, box:0, src:'manual:'+lesson, path:urlPath, lesson:lesson, createdAt:Date.now()});
-      lsSet('gdi-cards-v1', cards);
-      showToast('Flashcard adicionado!');
-      flashcards(items, bodyEl, lessonName);
+    // botão estudar — modo interativo (vira o card)
+    bodyEl.querySelector('#gdi-fc-study-btn').onclick=()=>{
+      const queue=dueCards.length?dueCards:lessonCards;
+      runFlashcardSession(bodyEl,lesson,queue,items,lessonName);
     };
   }
 
   // ── Sessão de estudo de flashcards (vira o card) ──
-  // ★FIX v2: usa o mesmo design flip 3D da biblioteca — visual consistente.
   function runFlashcardSession(bodyEl,lesson,queue,items,lessonName){
     let idx=0,hits=0,misses=0;
     function draw(){
@@ -2184,53 +1671,46 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           <div style="font-size:48px;">${pct>=60?'🎉':'📚'}</div>
           <h3 style="color:var(--ferreto-primary,#ff8b9f);font-family:var(--ferreto-font-display,'Poppins',sans-serif);">Sessão concluída!</h3>
           <p style="color:var(--ferreto-text,#e6edf3);font-size:16px;margin-top:8px;"><b style="color:${pct>=60?'#3fb950':'#ff8b8b'};">${hits}/${queue.length}</b> · ${pct}% acerto</p>
-          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-top:4px;">${esc(lesson)}</p>
           <button id="gdi-fc-back-list" class="gdi-btn gdi-btn-primary" style="margin-top:14px;"><i class="bi bi-arrow-left"></i> Voltar aos flashcards</button>
         </div>`;
         bodyEl.querySelector('#gdi-fc-back-list').onclick=()=>flashcards(items,bodyEl,lessonName);
         return;
       }
       const c=queue[idx];
-      bodyEl.innerHTML=`<div class="gdi-fc-session">
-        <div class="gdi-fc-session-head">
-          <span>${esc(lesson)} · ${idx+1}/${queue.length}</span>
-          <span>✓ ${hits} ✗ ${misses}</span>
+      bodyEl.innerHTML=`<div style="max-width:760px;height:100%;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
+          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
+          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
         </div>
-        <div class="gdi-fc-session-stage">
-          <div class="gdi-fc-card gdi-fc-card-large" id="gdi-fc-card">
-            <div class="gdi-fc-card-inner">
-              <div class="gdi-fc-card-face gdi-fc-card-front">
-                <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-                <div class="gdi-fc-card-text">${esc(c.f)}</div>
-                <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
-              </div>
-              <div class="gdi-fc-card-face gdi-fc-card-back">
-                <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-                <div class="gdi-fc-card-text">${esc(c.b)}</div>
-                <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
-              </div>
-            </div>
+        <div style="flex:1;overflow-y:auto;min-height:0;">
+          <div class="gdi-course" style="margin-bottom:14px;cursor:pointer;" id="gdi-fc-card">
+            <b style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;display:block;margin-bottom:8px;">🃏 Flashcard — clique para virar</b>
+            <div id="gdi-fc-front" style="color:var(--ferreto-text,#f0f6fc);font-size:15px;line-height:1.7;">${esc(c.f)}</div>
+            <div id="gdi-fc-back-show" style="display:none;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.6;margin-top:12px;padding-top:12px;border-top:1px solid var(--ferreto-border,#21262d);">${esc(c.b)}</div>
           </div>
         </div>
-        <div id="gdi-fc-grade" class="gdi-fc-session-grade" style="display:none;">
-          <p>Você sabia a resposta?</p>
-          <div class="gdi-fc-grade-btns">
-            <button id="gdi-fc-no" class="gdi-mode-btn gdi-fc-btn-no"><i class="bi bi-x-circle"></i> Não sabia</button>
-            <button id="gdi-fc-yes" class="gdi-btn gdi-btn-primary gdi-fc-btn-yes"><i class="bi bi-check-circle"></i> Sabia!</button>
+        <div id="gdi-fc-grade" style="display:none;flex-shrink:0;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
+          <p style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;text-align:center;margin-bottom:8px;">Você sabia a resposta?</p>
+          <div style="display:flex;gap:8px;justify-content:center;">
+            <button id="gdi-fc-no" class="gdi-mode-btn" style="background:rgba(255,107,107,.15);border-color:rgba(255,107,107,.3);color:#ff8b8b;font-size:13px;padding:10px 20px;"><i class="bi bi-x-circle"></i> Não sabia</button>
+            <button id="gdi-fc-yes" class="gdi-btn gdi-btn-primary" style="font-size:13px;padding:10px 20px;"><i class="bi bi-check-circle"></i> Sabia!</button>
           </div>
         </div>
-        <div class="gdi-fc-session-foot">
-          <button id="gdi-fc-skip" title="Pular" class="gdi-fc-skip-btn"><i class="bi bi-arrow-right"></i></button>
+        <div style="flex-shrink:0;display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);">
+          <button id="gdi-fc-skip" title="Pular" style="width:48px;height:48px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);"><i class="bi bi-arrow-right"></i></button>
         </div>
       </div>`;
       // vira o card ao clicar
       const card=bodyEl.querySelector('#gdi-fc-card');
+      const front=bodyEl.querySelector('#gdi-fc-front');
+      const back=bodyEl.querySelector('#gdi-fc-back-show');
       const grade=bodyEl.querySelector('#gdi-fc-grade');
       let flipped=false;
       card.onclick=()=>{
         if(flipped)return;flipped=true;
-        card.classList.add('gdi-fc-flipped');
+        back.style.display='block';
         grade.style.display='block';
+        card.querySelector('b').textContent='🃏 Resposta';
       };
       // sabia / não sabia
       bodyEl.querySelector('#gdi-fc-yes').onclick=()=>{
@@ -2260,10 +1740,10 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     const lesson=realLessonName(lessonName||items[0].name);
     // limpa cache em memória
     _chainCache={};
-    // limpa cache do Drive (★FIX: também limpa mindmap, antes ficava preso)
+    // limpa cache do Drive
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:lessonKey(),summary:null,questions:null,mindmap:null,lessonName:lesson})});
+        body:JSON.stringify({key:lessonKey(),summary:null,questions:null,lessonName:lesson})});
     }catch(_){}
     // regenera tudo em cadeia
     await summary(items,bodyEl,lessonName);
@@ -3286,17 +2766,9 @@ body.gdi-fv .gdi-player-wrap iframe{
   }
 })();
 
-// ═══ M17: VISUALIZADOR DE PDF (pdf.js) — com suporte mobile aprimorado ═══
-// ★FIX Android: quando o usuário clica num PDF na lista de arquivos (não na
-// aba de materiais), o file_pdf é chamado. Em desktop, renderiza canvas.
-// Em mobile, mantém o mesmo canvas (já é melhor que iframe que baixa o PDF),
-// mas com viewport scrollable e zoom otimizado para touch.
+// ═══ M17: VISUALIZADOR DE PDF (pdf.js) ═══
 (function(){
   window.file_pdf = function(i,e,t,n,a,c){
-    const isMobile=Os.isMobile;
-    const controlsStyle=isMobile
-      ? 'flex-wrap:wrap;gap:8px;padding:8px;justify-content:center;'
-      : '';
     const l=`<div class="gdi-wrap">
   <div class="gdi-viewer">
     <div class="gdi-breadcrumb-wrap"><ol class="gdi-bc">${_viewerBreadcrumb()}</ol></div>
@@ -3309,16 +2781,16 @@ body.gdi-fv .gdi-player-wrap iframe{
         </div>
       </div>
       <div class="gdi-viewer-body no-pad">
-        <div class="gdi-pdf-controls" style="${controlsStyle}">
+        <div class="gdi-pdf-controls">
           <button id="pdf-prev" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-left"></i></button>
-          <span style="font-size:13px;color:var(--gdi-text-muted);">Pág <span id="pdf-page-num">1</span> / <span id="pdf-page-count">?</span></span>
+          <span style="font-size:13px;color:var(--gdi-text-muted);">Page <span id="pdf-page-num">1</span> / <span id="pdf-page-count">?</span></span>
           <button id="pdf-next" class="gdi-btn gdi-btn-ghost gdi-btn-icon"><i class="bi bi-chevron-right"></i></button>
-          <input id="pdf-zoom" type="range" min="50" max="200" value="${isMobile?100:100}" style="width:${isMobile?80:100}px;" title="Zoom">
+          <input id="pdf-zoom" type="range" min="50" max="200" value="100" style="width:100px;" title="Zoom">
           <span id="pdf-zoom-val">100%</span>
         </div>
-        <div style="padding:16px;${isMobile?'overflow-y:auto;-webkit-overflow-scrolling:touch;':''}">
+        <div style="padding:16px;">
           <div id="pdf-spinner" class="gdi-spinner-wrap"><div class="gdi-spinner"></div></div>
-          <canvas id="pdf-canvas" style="max-width:100%;display:block;margin:auto;background:#525659;border-radius:4px;"></canvas>
+          <canvas id="pdf-canvas" style="max-width:100%;display:block;margin:auto;"></canvas>
         </div>
       </div>
       <div class="gdi-viewer-footer">${renderDownloadButtons(n,e)}</div>
@@ -3331,15 +2803,8 @@ body.gdi-fv .gdi-player-wrap iframe{
       const p=document.getElementById("pdf-canvas"),g=p.getContext("2d");
       pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
       function f(u){
-        // ★ mobile: ajusta escala automaticamente à largura do container
-        const containerW=p.parentElement.clientWidth-32;
-        let scale=s;
-        return d.getPage(u).then(function(h){
-          const testVp=h.getViewport({scale:1});
-          if(isMobile&&testVp.width>containerW){
-            scale=containerW/testVp.width*s;
-          }
-          const m=h.getViewport({scale});
+        d.getPage(u).then(function(h){
+          const m=h.getViewport({scale:s});
           p.height=m.height,p.width=m.width,
           h.render({canvasContext:g,viewport:m}).promise.then(function(){
             $("#pdf-spinner").hide();
@@ -3352,8 +2817,8 @@ body.gdi-fv .gdi-player-wrap iframe{
       }).catch(function(u){
         $("#pdf-spinner").html(`<div class="gdi-alert gdi-alert-error">Could not load PDF: ${u.message}</div>`);
       }),
-      document.getElementById("pdf-prev").addEventListener("click",function(){o>1&&(o--,$("#pdf-spinner").show(),f(o))}),
-      document.getElementById("pdf-next").addEventListener("click",function(){d&&o<d.numPages&&(o++,$("#pdf-spinner").show(),f(o))}),
+      document.getElementById("pdf-prev").addEventListener("click",function(){o>1&&(o--,f(o))}),
+      document.getElementById("pdf-next").addEventListener("click",function(){d&&o<d.numPages&&(o++,f(o))}),
       document.getElementById("pdf-zoom").addEventListener("input",function(){s=parseInt(this.value)/100,document.getElementById("pdf-zoom-val").textContent=this.value+"%",f(o)});
     }
     if(typeof pdfjsLib<"u")r();
@@ -4259,7 +3724,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 
 // ═══ M22 v2: CENTRAL DE ESTUDOS — painel + botão FORA do body ═══
 (function(){
-  const LS_CARDS='gdi-cards-v1',LS_GOAL='gdi-goal-min',LS_WATCH='gdi-watch-v1',LS_MAR='gdi-marathon',LS_MARINTRO='gdi-marathon-intro',LS_HIDDEN='gdi-hidden-courses-v1';
+  const LS_CARDS='gdi-cards-v1',LS_GOAL='gdi-goal-min',LS_WATCH='gdi-watch-v1',LS_MAR='gdi-marathon',LS_MARINTRO='gdi-marathon-intro';
   const log=(...a)=>{try{console.log('[GDI M22]',...a)}catch(_){}};
   const dec=s=>{try{return decodeURIComponent(String(s||''))}catch(_){return String(s||'')}};
   const norm=p=>dec(String(p||'').split('?')[0].replace(/\/+$/,''));
@@ -4300,13 +3765,9 @@ window.GDI_MODULES.push({name:'debug',init:function(){
   }
   function collectCourses(){
     const d=stateD()||{};
-    // ★ cursos ocultos pelo usuário (não aparecem em "Meus Cursos")
-    const hidden=lsGet(LS_HIDDEN,[]);
-    const isHidden=ck=>hidden.some(h=>low(h)===low(ck));
     const map=new Map();
     const add=(p,at,wd)=>{
       const ck=courseKeyOf(p);if(!ck)return;
-      if(isHidden(ck))return; // ★ pula cursos ocultos
       let c=map.get(ck);
       if(!c){c={key:ck,lastAt:0,lessons:new Set(),watched:0};map.set(ck,c);}
       c.lessons.add(low(p));
@@ -4318,18 +3779,6 @@ window.GDI_MODULES.push({name:'debug',init:function(){
     for(const k in r)add(k,r[k]&&r[k].at,false);
     (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)add(h.path,h.at,false)});
     return [...map.values()].filter(c=>c.lessons.size).sort((a,b)=>b.lastAt-a.lastAt);
-  }
-  // ★ helpers para ocultar/restaurar cursos
-  function hideCourse(ck){
-    const hidden=lsGet(LS_HIDDEN,[]);
-    if(!hidden.some(h=>low(h)===low(ck)))hidden.push(ck);
-    lsSet(LS_HIDDEN,hidden);
-  }
-  function unhideCourse(ck){
-    lsSet(LS_HIDDEN,lsGet(LS_HIDDEN,[]).filter(h=>low(h)!==low(ck)));
-  }
-  function listHiddenCourses(){
-    return lsGet(LS_HIDDEN,[]);
   }
   const GW=/^(aula|aulas|v\u00eddeo|videos?|li[cç][aã]o|li[cç][oõ]es|licoes|lesson|class|modulo|m\u00f3dulo|module|parte|pt|cap|capitulo|ext|ep|live|arquivo|file)$/i;
   function isGeneric(n){
@@ -4528,267 +3977,37 @@ window.GDI_MODULES.push({name:'debug',init:function(){
 
   async function renderCursos(box){
     const cs=collectCourses();
-    const hidden=listHiddenCourses();
-    if(!cs.length){
-      box.innerHTML=`<div class="gdi-notes-empty" style="padding:60px;text-align:center;">
-        <i class="bi bi-mortarboard" style="font-size:48px;display:block;margin-bottom:14px;color:var(--ferreto-text-faint,#6b7488);"></i>
-        Nenhum estudo registrado ainda.<br>
-        <span style="font-size:12px;">Assista uma aula para começar!</span>
-        ${hidden.length?`<div style="margin-top:24px;padding:14px;background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;text-align:left;">
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-eye-slash"></i> ${hidden.length} curso${hidden.length>1?'s':''} oculto${hidden.length>1?'s':''}</b>
-          <button id="gdi-restore-courses" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-arrow-counterclockwise"></i> Restaurar cursos ocultos</button>
-        </div>`:''}
-      </div>`;
-      const restoreBtn=box.querySelector('#gdi-restore-courses');
-      if(restoreBtn)restoreBtn.onclick=()=>{
-        if(confirm('Restaurar todos os '+hidden.length+' curso(s) oculto(s)?')){
-          lsSet(LS_HIDDEN,[]);
-          showToast('Cursos restaurados');
-          renderCursos(box);
-        }
-      };
-      return;
-    }
-    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-      <b style="color:var(--ferreto-text,#f0f6fc);font-size:14px;">${cs.length} curso${cs.length>1?'s':''} em andamento</b>
-      ${hidden.length?`<button id="gdi-show-hidden" class="gdi-mode-btn" style="font-size:11px;"><i class="bi bi-eye-slash"></i> ${hidden.length} oculto${hidden.length>1?'s':''}</button>`:''}
-    </div>
-    <div class="gdi-courses"></div>`;
-    const grid=box.querySelector('.gdi-courses');
-
-    // ★ botão "mostrar ocultos" (no header da lista)
-    const showHiddenBtn=box.querySelector('#gdi-show-hidden');
-    if(showHiddenBtn)showHiddenBtn.onclick=()=>{
-      showHiddenCoursesModal(box);
-    };
-
-    // Mostra até 20 cursos
+    if(!cs.length){box.innerHTML='<div class="gdi-notes-empty" style="padding:60px;text-align:center;"><i class="bi bi-mortarboard" style="font-size:48px;display:block;margin-bottom:14px;color:var(--ferreto-text-faint,#6b7488);"></i>Nenhum estudo registrado ainda.<br><span style="font-size:12px;">Assista uma aula para começar!</span></div>';return;}
+    box.innerHTML='<div class="gdi-courses"></div>';
+    const grid=box.firstChild;
+    // Mostra até 20 cursos (era 12) — cards são leves
     cs.slice(0,20).forEach(c=>{
       const name=cleanCourseName(c.key);
       const drive=driveNameOf(c.key);
       const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
       const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
       const el=document.createElement('div');el.className='gdi-course';
-      el.style.cursor='pointer';
       el.innerHTML=`
-        <div class="gdi-course-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <b title="${escHtml(courseName(c.key))}" style="flex:1;min-width:0;">${escHtml(name)}</b>
-          <button class="gdi-course-remove" title="Ocultar curso" style="background:transparent;border:0;color:var(--ferreto-text-muted,#8b949e);cursor:pointer;font-size:14px;padding:2px 6px;flex:none;border-radius:6px;transition:all .15s;"><i class="bi bi-x-lg"></i></button>
-        </div>
+        <b title="${escHtml(courseName(c.key))}">${escHtml(name)}</b>
         ${drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;display:block;margin-top:2px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:''}
         <small>${c.lessons.size} aula${c.lessons.size>1?'s':''}${c.watched?` · <b style="color:#3fb950;">${c.watched} ✓</b>`:''} · última: ${c.lastAt?dateBr(c.lastAt):'—'}</small>
         ${c.lessons.size>0?`<div style="height:5px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:3px;overflow:hidden;margin:8px 0 12px;"><div style="height:5px;width:${progress}%;background:${progressColor};border-radius:3px;transition:width .3s;"></div></div>
         <small style="color:var(--ferreto-text-muted,#8b949e);font-size:10px;display:block;margin-bottom:8px;">${progress}% concluído</small>`:''}
-        <button class="gdi-btn gdi-btn-primary gdi-course-continue" style="font-size:12px;width:100%;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>`;
+        <button class="gdi-btn gdi-btn-primary" style="font-size:12px;width:100%;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando…</button>`;
       grid.appendChild(el);
-
-      const contBtn=el.querySelector('.gdi-course-continue');
+      const btn=el.querySelector('button');
       bestIn(c.key).then(target=>{
         if(target){
-          contBtn.disabled=false;
-          contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
-          contBtn.onclick=(e)=>{e.stopPropagation();location.href=target+(target.includes('?')?'&':'?')+'a=view';};
+          btn.disabled=false;
+          btn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,30))}`;
+          btn.onclick=()=>{location.href=target+(target.includes('?')?'&':'?')+'a=view';};
         }else{
-          contBtn.disabled=true;
-          contBtn.className='gdi-mode-btn gdi-course-continue';
-          contBtn.style.width='100%';contBtn.style.justifyContent='center';
-          contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
+          btn.disabled=true;
+          btn.className='gdi-mode-btn';
+          btn.style.width='100%';btn.style.justifyContent='center';
+          btn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
         }
       });
-
-      // ★ botão remover (ocultar)
-      const removeBtn=el.querySelector('.gdi-course-remove');
-      if(removeBtn){
-        removeBtn.onmouseenter=()=>{removeBtn.style.color='#ff8b8b';removeBtn.style.background='rgba(255,107,107,.15)';};
-        removeBtn.onmouseleave=()=>{removeBtn.style.color='var(--ferreto-text-muted,#8b949e)';removeBtn.style.background='transparent';};
-        removeBtn.onclick=(e)=>{
-          e.stopPropagation();
-          if(confirm('Ocultar "'+name+'" da sua lista de cursos?\n\nO curso não será excluído — você pode restaurá-lo depois. Apenas desaparece da lista "Meus Cursos".')){
-            hideCourse(c.key);
-            showToast('Curso ocultado');
-            renderCursos(box);
-          }
-        };
-      }
-
-      // ★ clicar no card (não nos botões) abre detalhes
-      el.onclick=(e)=>{
-        if(e.target.closest('button'))return; // não abre detalhes se clicou em botão
-        openCourseDetail(box,c);
-      };
-    });
-  }
-
-  // ★ Modal de cursos ocultos
-  function showHiddenCoursesModal(box){
-    const hidden=listHiddenCourses();
-    if(!hidden.length){showToast('Nenhum curso oculto');return;}
-    // monta lista de cursos ocultos com info básica
-    const d=stateD()||{};
-    const items=hidden.map(ck=>({
-      key:ck,
-      name:cleanCourseName(ck),
-      drive:driveNameOf(ck)
-    }));
-    box.innerHTML=`<div style="max-width:680px;margin:0 auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--ferreto-border,#21262d);">
-        <b style="color:var(--ferreto-text,#f0f6fc);font-size:15px;"><i class="bi bi-eye-slash"></i> Cursos ocultos (${hidden.length})</b>
-        <button id="gdi-hidden-back" class="gdi-mode-btn" style="font-size:12px;"><i class="bi bi-arrow-left"></i> Voltar</button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        ${items.map(it=>`
-          <div class="gdi-note" style="display:flex;align-items:center;gap:10px;">
-            <i class="bi bi-folder-x" style="color:var(--ferreto-text-muted,#8b949e);font-size:16px;flex:none;"></i>
-            <div style="flex:1;min-width:0;">
-              <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(it.name)}</b>
-              ${it.drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:10px;">${escHtml(it.drive)}</small>`:''}
-            </div>
-            <button class="gdi-mode-btn gdi-restore-one" data-ck="${escHtml(it.key)}" style="font-size:11px;"><i class="bi bi-arrow-counterclockwise"></i> Restaurar</button>
-          </div>
-        `).join('')}
-      </div>
-      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--ferreto-border,#21262d);display:flex;gap:8px;justify-content:flex-end;">
-        <button id="gdi-restore-all" class="gdi-btn gdi-btn-primary" style="font-size:12px;"><i class="bi bi-arrow-counterclockwise"></i> Restaurar todos</button>
-      </div>
-    </div>`;
-    box.querySelector('#gdi-hidden-back').onclick=()=>renderCursos(box);
-    box.querySelectorAll('.gdi-restore-one').forEach(b=>{
-      b.onclick=()=>{
-        unhideCourse(b.dataset.ck);
-        showToast('Curso restaurado');
-        showHiddenCoursesModal(box);
-      };
-    });
-    box.querySelector('#gdi-restore-all').onclick=()=>{
-      if(confirm('Restaurar todos os '+hidden.length+' cursos?')){
-        lsSet(LS_HIDDEN,[]);
-        showToast('Todos os cursos restaurados');
-        renderCursos(box);
-      }
-    };
-  }
-
-  // ★ Painel de detalhes do curso (abre ao clicar no card)
-  function openCourseDetail(box,c){
-    const name=cleanCourseName(c.key);
-    const drive=driveNameOf(c.key);
-    const progress=c.lessons.size>0?Math.round(c.watched/c.lessons.size*100):0;
-    const progressColor=progress>=80?'#3fb950':progress>=40?'#ffd43b':'var(--ferreto-primary,#ff8b9f)';
-    const remaining=c.lessons.size-c.watched;
-
-    // coleta aulas individuais do curso
-    const d=stateD()||{};
-    const pre=low(c.key);
-    const inC=p=>{const l=low(p);return l===pre||l.indexOf(pre+'/')===0;};
-    const lessons=[];
-    const w=(d&&d.watched)||{},r=(d&&d.resume)||{};
-    const seen=new Set();
-    const addLesson=(p,watched,resume)=>{
-      const lp=low(p);
-      if(seen.has(lp))return;
-      if(!inC(p))return;
-      seen.add(lp);
-      lessons.push({path:String(p).split('?')[0],name:realName(p),watched,resumed:!!resume});
-    };
-    for(const k in w)addLesson(k,true,r[k]);
-    for(const k in r)if(!seen.has(low(k)))addLesson(k,false,r[k]);
-    (Array.isArray(d.history)?d.history:[]).forEach(h=>{if(h&&h.path)addLesson(h.path,false,null);});
-    lessons.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{numeric:true}));
-
-    box.innerHTML=`<div style="max-width:760px;margin:0 auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--ferreto-border,#21262d);">
-        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-          <button id="gdi-detail-back" class="gdi-mode-btn" style="font-size:12px;flex:none;"><i class="bi bi-arrow-left"></i></button>
-          <i class="bi bi-folder-fill" style="color:var(--ferreto-primary,#ff8b9f);font-size:22px;flex:none;"></i>
-          <div style="min-width:0;">
-            <b style="color:var(--ferreto-text,#f0f6fc);font-size:16px;font-family:var(--ferreto-font-display,'Poppins',sans-serif);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</b>
-            ${drive?`<small style="color:var(--ferreto-secondary,#5ddeda);font-size:11px;"><i class="bi bi-hdd"></i> ${escHtml(drive)}</small>`:''}
-          </div>
-        </div>
-        <button id="gdi-detail-hide" class="gdi-mode-btn" style="font-size:11px;color:#ff8b8b;border-color:rgba(255,107,107,.3);" title="Ocultar curso"><i class="bi bi-eye-slash"></i> Ocultar</button>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:18px;">
-        <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:var(--ferreto-text,#f0f6fc);">${c.lessons.size}</div>
-          <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Aulas</div>
-        </div>
-        <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:#3fb950;">${c.watched}</div>
-          <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Assistidas</div>
-        </div>
-        <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:#ffd43b;">${remaining}</div>
-          <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Restantes</div>
-        </div>
-        <div style="background:var(--ferreto-surface-2,#161b22);border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:12px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:${progressColor};">${progress}%</div>
-          <div style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Concluído</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:18px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;">Progresso do curso</b>
-          <span style="color:var(--ferreto-text-muted,#8b949e);font-size:11px;">${c.watched}/${c.lessons.size}</span>
-        </div>
-        <div style="height:8px;background:var(--ferreto-surface-3,rgba(255,255,255,.08));border-radius:4px;overflow:hidden;">
-          <div style="height:8px;width:${progress}%;background:${progressColor};border-radius:4px;transition:width .3s;"></div>
-        </div>
-      </div>
-
-      ${c.lastAt?`<div style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ferreto-text-muted,#8b949e);">
-        <i class="bi bi-clock-history"></i> Última atividade: <b style="color:var(--ferreto-text,#e6edf3);">${dateBr(c.lastAt)}</b>
-      </div>`:''}
-
-      <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button id="gdi-detail-continue" class="gdi-btn gdi-btn-primary" style="font-size:12px;flex:1;justify-content:center;" disabled><i class="bi bi-hourglass-split"></i> Verificando próxima aula…</button>
-      </div>
-
-      <div>
-        <b style="color:var(--ferreto-text,#f0f6fc);font-size:13px;display:block;margin-bottom:8px;"><i class="bi bi-list-ul"></i> Aulas do curso (${lessons.length})</b>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${lessons.length?lessons.map(l=>`
-            <div class="gdi-note" style="display:flex;align-items:center;gap:10px;cursor:pointer;" data-path="${escHtml(l.path)}">
-              <i class="bi ${l.watched?'bi-check-circle-fill':'bi-play-circle'}" style="color:${l.watched?'#3fb950':'var(--ferreto-primary,#ff8b9f)'};font-size:18px;flex:none;"></i>
-              <span style="flex:1;min-width:0;color:var(--ferreto-text,#e6edf3);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(l.name)}</span>
-              ${l.watched?'<span style="font-size:10px;color:#3fb950;flex:none;">✓</span>':'<span style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);flex:none;">não vista</span>'}
-            </div>
-          `).join(''):'<div class="gdi-notes-empty">Nenhuma aula registrada ainda.</div>'}
-        </div>
-      </div>
-    </div>`;
-
-    // back
-    box.querySelector('#gdi-detail-back').onclick=()=>renderCursos(box);
-    // hide
-    box.querySelector('#gdi-detail-hide').onclick=()=>{
-      if(confirm('Ocultar "'+name+'" da sua lista de cursos?')){
-        hideCourse(c.key);
-        showToast('Curso ocultado');
-        renderCursos(box);
-      }
-    };
-    // continue
-    const contBtn=box.querySelector('#gdi-detail-continue');
-    bestIn(c.key).then(target=>{
-      if(target){
-        contBtn.disabled=false;
-        contBtn.innerHTML=`<i class="bi bi-play-fill"></i> Continuar: ${escHtml(realName(target).slice(0,40))}`;
-        contBtn.onclick=()=>{location.href=target+(target.includes('?')?'&':'?')+'a=view';};
-      }else{
-        contBtn.disabled=true;
-        contBtn.className='gdi-mode-btn';
-        contBtn.style.flex='1';contBtn.style.justifyContent='center';
-        contBtn.innerHTML='<i class="bi bi-check2-all" style="color:#3fb950;"></i> Tudo em dia!';
-      }
-    });
-    // clicar numa aula → abrir
-    box.querySelectorAll('[data-path]').forEach(el=>{
-      el.onclick=()=>{
-        const p=el.dataset.path;
-        if(p)location.href=p+(p.includes('?')?'&':'?')+'a=view';
-      };
     });
   }
   async function renderStats(box){
@@ -4889,33 +4108,18 @@ window.GDI_MODULES.push({name:'debug',init:function(){
           ${currentAula?`<span style="font-size:11px;color:var(--ferreto-text-muted,#8b949e);">aula atual: ${escHtml(realName(currentAula).slice(0,30))}</span>`:''}
         </div>
       </div>
-      <div id="gdi-fc-list" class="gdi-fc-grid-m22" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;"></div>`;
+      <div id="gdi-fc-list" style="display:flex;flex-direction:column;gap:6px;max-width:640px;"></div>`;
     const list=box.querySelector('#gdi-fc-list');
     function drawList(){
       const all=cards();
-      if(!all.length){list.innerHTML='<div class="gdi-notes-empty" style="grid-column:1/-1;">Nenhum cart\u00e3o ainda \u2014 crie o primeiro acima, ou abra uma aula e clique em "Resumo Meggy" na barra de materiais para gerar flashcards automaticamente.</div>';return;}
-      list.innerHTML='';
+      list.innerHTML=all.length?'':'<div class="gdi-notes-empty">Nenhum cart\u00e3o ainda \u2014 crie o primeiro acima.</div>';
       all.slice().reverse().forEach(c=>{
-        const card=document.createElement('div');
-        card.className='gdi-fc-card';
-        card.style.height='160px';
-        card.innerHTML=`
-          <div class="gdi-fc-card-inner">
-            <div class="gdi-fc-card-face gdi-fc-card-front">
-              <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-              <div class="gdi-fc-card-text">${escHtml(String(c.f).slice(0,200))}</div>
-              <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
-            </div>
-            <div class="gdi-fc-card-face gdi-fc-card-back">
-              <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-              <div class="gdi-fc-card-text">${escHtml(String(c.b).slice(0,300))}</div>
-              <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
-            </div>
-          </div>
-          <button class="gdi-fc-card-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
-        card.onclick=(e)=>{if(e.target.closest('.gdi-fc-card-del'))return;card.classList.toggle('gdi-fc-flipped');};
-        card.querySelector('.gdi-fc-card-del').onclick=(e)=>{e.stopPropagation();saveCards(cards().filter(x=>x.id!==c.id));drawList();showToast('Cartão excluído');};
-        list.appendChild(card);
+        const row=document.createElement('div');row.className='gdi-note';
+        row.innerHTML=`<span style="flex:1;word-break:break-word;"><b style="color:var(--ferreto-text,#f0f6fc);">${escHtml(String(c.f).slice(0,70))}</b><br><span style="color:var(--ferreto-text-muted,#8b949e);">${escHtml(String(c.b).slice(0,90))}</span></span>
+          <span style="font-size:10px;color:var(--ferreto-text-muted,#8b949e);white-space:nowrap;">${(c.due||0)<=Date.now()?'<b style="color:#ffd43b;">hoje</b>':dateBr(c.due)}</span>
+          <button class="gdi-note-del" title="Excluir"><i class="bi bi-x-lg"></i></button>`;
+        row.querySelector('button').onclick=()=>{saveCards(cards().filter(x=>x.id!==c.id));drawList();};
+        list.appendChild(row);
       });
     }
     drawList();
@@ -4924,7 +4128,7 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       const b=box.querySelector('#gdi-fc-b').value.trim();
       if(!f||!b){showToast('Preencha frente e verso');return;}
       const all=cards();
-      all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',lesson:currentAula?realName(currentAula):'',at:Date.now(),box:0,due:Date.now()+86400000});
+      all.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),f,b,path:currentAula||'',at:Date.now(),box:0,due:Date.now()+86400000});
       saveCards(all);
       box.querySelector('#gdi-fc-f').value='';box.querySelector('#gdi-fc-b').value='';
       drawList();showToast('Cart\u00e3o adicionado');
@@ -4950,32 +4154,17 @@ window.GDI_MODULES.push({name:'debug',init:function(){
       const c=queue[i];
       box.innerHTML=`
         <div style="text-align:center;color:var(--ferreto-text-muted,#8b949e);font-size:12px;margin-bottom:10px;">Cart\u00e3o ${i+1}/${queue.length} \u00b7 [espa\u00e7o] vira \u00b7 [1] esqueci \u00b7 [2] quase \u00b7 [3] lembrei</div>
-        <div class="gdi-fc-card gdi-fc-card-large" id="gdi-fc-card" style="margin:0 auto 14px;">
-          <div class="gdi-fc-card-inner">
-            <div class="gdi-fc-card-face gdi-fc-card-front">
-              <div class="gdi-fc-card-label"><i class="bi bi-question-circle"></i> PERGUNTA</div>
-              <div class="gdi-fc-card-text">${escHtml(c.f)}</div>
-              <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para virar</div>
-            </div>
-            <div class="gdi-fc-card-face gdi-fc-card-back">
-              <div class="gdi-fc-card-label"><i class="bi bi-check-circle"></i> RESPOSTA</div>
-              <div class="gdi-fc-card-text">${escHtml(c.b)}</div>
-              <div class="gdi-fc-card-hint"><i class="bi bi-arrow-repeat"></i> clique para voltar</div>
-            </div>
-          </div>
+        <div class="gdi-fc" id="gdi-fc-card" title="Clique para virar">
+          <div style="font-size:18px;color:var(--ferreto-text,#f0f6fc);text-align:center;">${escHtml(c.f)}</div>
+          <div id="gdi-fc-back2" style="display:none;font-size:15px;color:var(--ferreto-secondary,#7aa2ff);border-top:1px solid var(--ferreto-border,#21262d);padding-top:12px;text-align:center;">${escHtml(c.b)}</div>
         </div>
         <div id="gdi-fc-btns" style="display:none;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
           <button class="gdi-mode-btn" data-g="1">1 \u00b7 Esqueci</button>
           <button class="gdi-mode-btn" data-g="2">2 \u00b7 Quase</button>
           <button class="gdi-btn gdi-btn-primary" data-g="3">3 \u00b7 Lembrei</button>
         </div>`;
-      const card=box.querySelector('#gdi-fc-card'),btns=box.querySelector('#gdi-fc-btns');
-      let flipped=false;
-      const flip=()=>{
-        if(flipped)return;flipped=true;
-        card.classList.add('gdi-fc-flipped');
-        btns.style.display='flex';
-      };
+      const card=box.querySelector('#gdi-fc-card'),bk=box.querySelector('#gdi-fc-back2'),btns=box.querySelector('#gdi-fc-btns');
+      const flip=()=>{bk.style.display='';btns.style.display='flex';};
       card.onclick=flip;
       box.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>grade(+b.dataset.g));
       FC.flip=flip;
