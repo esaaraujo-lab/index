@@ -1160,15 +1160,20 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     _chainCache[key].allText=allText;
     _chainCache[key].pdfTexts=pdfTexts;
 
-    // 1+2) RESUMO e PÍLULAS em PARALELO (são independentes — corta tempo pela metade)
-    const tasks=[];
+    // 1) RESUMO (se não tem)
     if(!_chainCache[key].summary){
-      tasks.push(callIsa('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos do material. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado. Não omita nenhum tema importante:\n\n'+allText.slice(0,20000)).then(r=>{if(r&&r.trim()){_chainCache[key].summary=r;saveIsaSummary(lesson,r);}}).catch(e=>console.warn('[Meggy] resumo falhou',e.message)));
+      const resp=await callIsa('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos do material. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado. Não omita nenhum tema importante:\n\n'+allText.slice(0,20000));
+      if(resp&&resp.trim()){
+        _chainCache[key].summary=resp;
+        saveIsaSummary(lesson,resp);
+      }
     }
+
+    // 2) PÍLULAS (se não tem) — resumo simples e direto
     if(!_chainCache[key].mindmap){
-      tasks.push(callIsa('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas os pontos-chave que cabem numa revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000)).then(r=>{if(r&&r.trim())_chainCache[key].mindmap=r;}).catch(e=>console.warn('[Meggy] pílulas falhou',e.message)));
+      const resp=await callIsa('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas os pontos-chave que cabem numa revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000));
+      if(resp&&resp.trim())_chainCache[key].mindmap=resp;
     }
-    if(tasks.length>0)await Promise.allSettled(tasks);
 
     // 3) QUESTÕES (se ainda não gerou) — até 20 por material
     if(!_chainCache[key].questionsGenerated){
@@ -1186,13 +1191,12 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           }
         }
       }
-      // depois, gera questões via Meggy para cada PDF em PARALELO (todos ao mesmo tempo)
-      const qPromises=pdfTexts.map(pdf=>callIsa('Baseado neste material, gere 10 questões de concurso público em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+pdf.text.slice(0,15000)).catch(e=>{console.warn('[Meggy] questões falharam',e.message);return null;}));
-      const qResults=await Promise.allSettled(qPromises);
-      qResults.forEach(res=>{
-        if(res.status!=='fulfilled'||!res.value)return;
+      // depois, gera questões via Meggy para cada PDF (até 20 cada)
+      for(let pi=0;pi<pdfTexts.length;pi++){
+        const pdf=pdfTexts[pi];
         try{
-          const arr=parseJsonArray(res.value);
+          const resp=await callIsa('Baseado neste material, gere 10 questões de concurso público em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+pdf.text.slice(0,15000));
+          const arr=parseJsonArray(resp);
           arr.forEach(q=>{
             if(!q||!q.statement)return;
             let cleanQ;
@@ -1209,8 +1213,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
               }
             }
           });
-        }catch(e){console.warn('[Meggy] parse questões falhou',e.message);}
-      });
+        }catch(e){console.warn('[Meggy] questões falharam para PDF',pi,e.message);}
+      }
       _chainCache[key].questions=allCleanQ;
       // flashcards automáticos
       if(allCleanQ.length)autoCreateFlashcards(allCleanQ,lesson);
