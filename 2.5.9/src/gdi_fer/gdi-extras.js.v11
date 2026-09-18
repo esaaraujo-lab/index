@@ -1371,7 +1371,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       const q=queue[idx];
       const isTF=q.type==='tf';
       const optCount=isTF?2:(q.options?.length||4);
-      bodyEl.innerHTML=`<div style="max-width:760px;position:relative;">
+      bodyEl.innerHTML=`<div style="max-width:760px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">${esc(lesson)} · ${idx+1}/${queue.length}</span>
           <span style="color:var(--ferreto-text-muted,#8b949e);font-size:12px;">✓ ${hits} ✗ ${misses}</span>
@@ -1382,25 +1382,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         </div>
         <div id="gdi-q-opts" style="display:flex;flex-direction:column;gap:8px;"></div>
         <div id="gdi-q-feedback" style="margin-top:14px;"></div>
-        <button id="gdi-q-skip" title="Pular para próxima questão" style="position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(135deg,#ff8b9f,#c026d3);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -4px rgba(255,139,159,.5);z-index:100;transition:transform .15s;"><i class="bi bi-arrow-right"></i></button>
       </div>`;
-      // ★ seta fixa para pular questão (mesmo sem responder)
-      const skipBtn=bodyEl.querySelector('#gdi-q-skip');
-      if(skipBtn){
-        skipBtn.onmouseenter=()=>{skipBtn.style.transform='scale(1.1)';};
-        skipBtn.onmouseleave=()=>{skipBtn.style.transform='scale(1)';};
-        skipBtn.onclick=()=>{
-          // se ainda não respondeu, marca como errada (pulo = não sabe)
-          const feedbackEl=bodyEl.querySelector('#gdi-q-feedback');
-          if(feedbackEl&&!feedbackEl.innerHTML){
-            misses++;
-            markAnswered(q.id);
-            if(window.__gdiGradeQ)window.__gdiGradeQ(q.id,false);
-          }
-          if(idx+1<queue.length){idx++;draw();}
-          else{idx++;draw();} // vai pro resultado
-        };
-      }
       const optsEl=bodyEl.querySelector('#gdi-q-opts');
       const options=q.options||(isTF?['Certo','Errado']:['a','b','c','d']);
       options.forEach((opt,i)=>{
