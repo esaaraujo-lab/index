@@ -639,8 +639,8 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-questions" title="Gerar questões com a Meggy (IA)">
           <i class="bi bi-patch-question"></i><span>Questões Meggy</span>
         </div>
-        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-mindmap" title="Gerar pílulas com a Meggy (IA)">
-          <i class="bi bi-capsule"></i><span>Pílulas</span>
+        <div class="gdi-mat-tab gdi-mat-isa" data-mat="isa-mindmap" title="Gerar mapa mental com a Meggy (IA)">
+          <i class="bi bi-diagram-3"></i><span>Mapa Mental</span>
         </div>`;
       if(statusEl)statusEl.textContent=items.length+' PDF'+(items.length>1?'s':'');
       const isMobile=Os.isMobile;
@@ -1103,169 +1103,115 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     return n;
   }
 
-  // ── GERAÇÃO EM CADEIA: resumo + pílulas + questões ──
-  // Qualquer aba clicada (Resumo/Questões/Pílulas) dispara a geração
-  // dos 3 em cadeia se ainda não existirem. Cada um é salvo no Drive.
-  // As questões ciclam entre TODOS os PDFs, gerando até 20 por material.
-
-  // Cache em memória para evitar regenerar na mesma sessão
-  let _chainCache={};
-
-  // Extrai questões que já existem dentro do PDF (lista de exercícios)
-  function extractQuestionsFromText(text){
-    const questions=[];
-    // padrão: "1." ou "1)" seguido de texto até "?"
-    const re=/(\d+[\).]\s+)([^?]+\?)/gi;
-    let m;
-    while((m=re.exec(text))!==null&&questions.length<20){
-      const q=m[2].trim();
-      if(q.length>20&&q.length<500)questions.push(q);
-    }
-    return questions;
-  }
-
-  // Gera os 3 materiais em cadeia (se ainda não existem)
-  // trigger: 'summary' | 'questions' | 'mindmap' (qual aba foi clicada)
-  async function generateAll(items,lesson,trigger){
-    const key=lessonKey();
-    // se já tem tudo no cache em memória, pula
-    if(_chainCache[key]&&_chainCache[key].summary&&_chainCache[key].mindmap&&_chainCache[key].questionsGenerated){
-      return _chainCache[key];
-    }
-
-    // verifica cache do Drive
-    const cached=await cacheGet();
-    if(!_chainCache[key])_chainCache[key]={};
-    if(cached){
-      _chainCache[key].summary=cached.summary||null;
-      _chainCache[key].mindmap=cached.mindmap||null;
-      _chainCache[key].cachedQuestions=cached.questions||[];
-    }
-
-    // extrai texto de TODOS os PDFs (concatena para resumo e pílulas)
-    let allText='';
-    const pdfTexts=[];
-    for(const item of items){
-      try{
-        const txt=await extractPdfText(item.url);
-        if(txt&&txt.trim().length>50){
-          allText+=(allText?'\n\n---\n\n':'')+txt;
-          pdfTexts.push({name:item.name,text:txt});
-        }
-      }catch(_){}
-    }
-    if(!allText||allText.trim().length<50){
-      throw new Error('Não foi possível extrair texto dos PDFs.');
-    }
-    _chainCache[key].allText=allText;
-    _chainCache[key].pdfTexts=pdfTexts;
-
-    // 1) RESUMO (se não tem)
-    if(!_chainCache[key].summary){
-      const resp=await callIsa('Leia este material de aula e faça um resumo COMPLETO e estruturado em Markdown. Cubra TODOS os tópicos do material. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado. Não omita nenhum tema importante:\n\n'+allText.slice(0,20000));
-      if(resp&&resp.trim()){
-        _chainCache[key].summary=resp;
-        saveIsaSummary(lesson,resp);
-      }
-    }
-
-    // 2) PÍLULAS (se não tem) — resumo simples e direto
-    if(!_chainCache[key].mindmap){
-      const resp=await callIsa('Crie "Pílulas" deste material — um resumo ultra-conciso em bullets. Apenas os pontos-chave que cabem numa revisão rápida. Máximo 15 bullets. Formato:\n# Pílulas\n- Ponto-chave 1\n- Ponto-chave 2\n...\n\nConteúdo:\n'+allText.slice(0,20000));
-      if(resp&&resp.trim())_chainCache[key].mindmap=resp;
-    }
-
-    // 3) QUESTÕES (se ainda não gerou) — até 20 por material
-    if(!_chainCache[key].questionsGenerated){
-      _chainCache[key].questionsGenerated=true;
-      const allCleanQ=[];
-      // primeiro, extrai questões que já existem no PDF (lista de exercícios)
-      for(const pdf of pdfTexts){
-        const existing=extractQuestionsFromText(pdf.text);
-        for(const q of existing){
-          // não pode saber a resposta de questões extraídas — pula se não tem gabarito
-          // mas salva no banco como "questão aberta" para revisão
-          const all=lsGet(LQ,[]);
-          if(!all.some(x=>x.statement===q)){
-            addQ({subject:lesson,type:'open',statement:q,options:[],correct:0,explanation:'Questão extraída do material. Resolva manualmente.',source:'PDF-extract'});
-          }
-        }
-      }
-      // depois, gera questões via Meggy para cada PDF (até 20 cada)
-      for(let pi=0;pi<pdfTexts.length;pi++){
-        const pdf=pdfTexts[pi];
-        try{
-          const resp=await callIsa('Baseado neste material, gere 10 questões de concurso público em JSON array. Misture:\n- 6 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 4 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+pdf.text.slice(0,15000));
-          const arr=parseJsonArray(resp);
-          arr.forEach(q=>{
-            if(!q||!q.statement)return;
-            let cleanQ;
-            if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-              cleanQ={type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||'')};
-            }else if(Array.isArray(q.options)){
-              cleanQ={type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||'')};
-            }
-            if(cleanQ){
-              const all=lsGet(LQ,[]);
-              if(!all.some(x=>x.statement===cleanQ.statement)){
-                addQ({subject:lesson,...cleanQ,source:'ISA-PDF'});
-                allCleanQ.push(cleanQ);
-              }
-            }
-          });
-        }catch(e){console.warn('[Meggy] questões falharam para PDF',pi,e.message);}
-      }
-      _chainCache[key].questions=allCleanQ;
-      // flashcards automáticos
-      if(allCleanQ.length)autoCreateFlashcards(allCleanQ,lesson);
-    }
-
-    // salva tudo no Drive
-    const existing=await cacheGet();
-    cacheSave(
-      _chainCache[key].summary||existing?.summary||null,
-      _chainCache[key].questions||existing?.questions||null,
-      lesson
-    );
-    // também salva pílulas (mindmap) no cache estendendo o objeto
-    if(_chainCache[key].mindmap){
-      try{
-        await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({key:lessonKey(),summary:_chainCache[key].summary,questions:_chainCache[key].questions,mindmap:_chainCache[key].mindmap,lessonName:lesson})});
-      }catch(_){}
-    }
-    // compartilha
-    if(_chainCache[key].summary){
-      saveSharedSummary(lesson,_chainCache[key].summary,_chainCache[key].questions||null);
-    }
-
-    return _chainCache[key];
-  }
-
-  // ── Summary flow (com cadeia) ──
+  // ── Summary flow (com auto-geração de questões em paralelo) ──
   async function summary(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
+    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula para resumir.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
-    bodyEl.__items=items;bodyEl.__lesson=lesson;
-    setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões + pílulas…');
+
+    // 1) verifica cache no Drive — se tem resumo, mostra direto
+    setLoading(bodyEl,'Verificando cache no Drive…');
+    const cached=await cacheGet();
+    if(cached&&cached.summary){
+      saveIsaSummary(lesson,cached.summary);
+      renderSummaryCard(bodyEl,lesson,cached.summary,true);
+      showToast('Resumo carregado do cache do Drive');
+      // se também tem questões no cache, carrega no banco silenciosamente
+      if(cached.questions&&Array.isArray(cached.questions)&&cached.questions.length){
+        let qn=0;
+        cached.questions.forEach(q=>{
+          if(q&&q.statement&&Array.isArray(q.options)){
+            addQ({subject:lesson,statement:String(q.statement),options:q.options.map(String),
+              correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'});
+            qn++;
+          }
+        });
+        if(qn>0){
+          autoCreateFlashcards(cached.questions,lesson);
+          showToast(qn+' questões e flashcards carregados do cache');
+        }
+      }
+      return;
+    }
+
+    // 2) extrai texto do PDF
+    setLoading(bodyEl,'Extraindo texto do PDF…');
+    let text;
     try{
-      const result=await generateAll(items,lesson,'summary');
-      if(!result.summary){setError(bodyEl,'Meggy não conseguiu gerar o resumo.');return;}
-      renderSummaryCard(bodyEl,lesson,result.summary,false);
-      // badge com tudo que foi gerado
-      const qCount=result.questions?result.questions.length:0;
+      text=await extractPdfText(items[0].url);
+    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
+    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
+
+    // 3) gera resumo E questões em paralelo (duas chamadas à Meggy ao mesmo tempo)
+    setLoading(bodyEl,'Meggy está lendo o material e criando resumo + questões…');
+    const summaryPrompt='Leia este material de aula e faça um resumo estruturado em Markdown com os pontos principais. Organize em seções com ## títulos, use **negrito** para destaques e listas quando apropriado:\n\n'+text;
+    const questionsPrompt='Baseado neste material de aula, gere 5 questões de concurso público em formato JSON array. Misture estilos:\n- 3 questões de múltipla escolha (4 alternativas): {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."} (correct = índice 0-3)\n- 2 questões de certo/errado (estilo CEBRASPE/CESPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."} (correct = 1 para Certo, 0 para Errado)\nNível concurso público brasileiro. Sem comentários, só JSON array:\n\n'+text;
+
+    let resp=null,qResp=null;
+    // tenta ambas em paralelo; se uma falha, continua com a outra
+    const [sumResult,qResult]=await Promise.allSettled([
+      callIsa(summaryPrompt),
+      callIsa(questionsPrompt)
+    ]);
+    if(sumResult.status==='fulfilled')resp=sumResult.value;
+    if(qResult.status==='fulfilled')qResp=qResult.value;
+
+    // 4) processa resumo
+    if(!resp||!resp.trim()){
+      setError(bodyEl,'Meggy não conseguiu gerar o resumo. Tente novamente.');
+      return;
+    }
+    saveIsaSummary(lesson,resp);
+
+    // 5) processa questões (se vieram)
+    let qn=0;
+    let cleanQArr=[];
+    if(qResp){
+      try{
+        const arr=parseJsonArray(qResp);
+        cleanQArr=arr.filter(q=>q&&q.statement).map(q=>{
+          // suporta mc (múltipla escolha) e tf (certo/errado CEBRASPE)
+          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
+            // certo/errado: options = ["Certo","Errado"], correct = 0 ou 1
+            return{type:'tf',statement:String(q.statement),
+              options:['Certo','Errado'],
+              correct:Math.max(0,Math.min(1,Number(q.correct)||0)),
+              explanation:String(q.explanation||'')};
+          }
+          // múltipla escolha (padrão)
+          return{type:'mc',statement:String(q.statement),
+            options:Array.isArray(q.options)?q.options.map(String):['a','b','c','d'],
+            correct:Math.max(0,Math.min(3,Number(q.correct)||0)),
+            explanation:String(q.explanation||'')};
+        });
+        cleanQArr.forEach(q=>{
+          addQ({subject:lesson,...q,source:'ISA-PDF'});
+          qn++;
+        });
+        // cria flashcards automáticos das questões
+        if(qn>0){
+          const fcN=autoCreateFlashcards(cleanQArr,lesson);
+          showToast(qn+' questões + '+fcN+' flashcards criados');
+        }
+      }catch(e){
+        // questões falharam mas o resumo funcionou — não bloqueia
+        console.warn('[Meggy] questões falharam:',e.message);
+      }
+    }
+
+    // 6) salva tudo no Drive (resumo + questões) — cache pessoal E compartilhado
+    cacheSave(resp,cleanQArr.length?cleanQArr:null,lesson);
+    saveSharedSummary(lesson,resp,cleanQArr.length?cleanQArr:null);
+
+    // 7) mostra o resumo com badge "questões geradas"
+    renderSummaryCard(bodyEl,lesson,resp,false);
+    if(qn>0){
+      // adiciona badge de questões no topo do card
       const badge=document.createElement('div');
-      badge.style.cssText='background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#3fb950;flex-wrap:wrap;';
-      let badgeHtml='<i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> ';
-      const parts=[];
-      if(result.summary)parts.push('✓ Resumo');
-      if(result.mindmap)parts.push('✓ Pílulas');
-      if(qCount>0)parts.push('✓ '+qCount+' questões');
-      badgeHtml+=parts.join(' · ')+' + flashcards';
-      badge.innerHTML=badgeHtml;
-      bodyEl.querySelector('.gdi-mat-isa-result')?.insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
-      showToast('Resumo + pílulas + '+qCount+' questões gerados!');
-    }catch(e){setError(bodyEl,e.message);return;}
+      badge.style.cssText='background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#3fb950;';
+      badge.innerHTML='<i class="bi bi-check-circle-fill"></i> '+qn+' questões + flashcards criados automaticamente! Abra a Central → Questões para resolver.';
+      bodyEl.querySelector('.gdi-mat-isa-result').insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
+    }
+    showToast('Resumo salvo no Drive'+(qn>0?' + '+qn+' questões':''));
   }
 
   // ── Track answered questions (evita repetir) ──
@@ -1273,17 +1219,22 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
   function getAnsweredIds(){try{return JSON.parse(localStorage.getItem(ANSWERED_KEY)||'[]')}catch(_){return []}}
   function markAnswered(id){const arr=getAnsweredIds();if(!arr.includes(id)){arr.push(id);if(arr.length>500)arr.shift();try{localStorage.setItem(ANSWERED_KEY,JSON.stringify(arr))}catch(_){}}}
 
-  // ── Questions flow: gera tudo em cadeia + abre quiz ──
+  // ── Questions flow: gera + já abre quiz interativo ──
+  // Ao clicar na aba "Questões Meggy": carrega do cache (se houver),
+  // gera novas se não houver, e IMEDIATAMENTE abre o quiz interativo.
+  // No fim do quiz: botão "Gerar mais 5 questões" para continuar.
+  // Nunca repete questões já respondidas pelo usuário.
   async function questions(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
+    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
-    bodyEl.__items=items;bodyEl.__lesson=lesson;
-    setLoading(bodyEl,'Meggy está lendo todos os materiais e criando resumo + pílulas + questões…');
-    try{
-      await generateAll(items,lesson,'questions');
-    }catch(e){setError(bodyEl,e.message);return;}
-    // carrega questões do cache se existirem
+    // salva items para "Gerar mais"
+    bodyEl.__items=items;
+    bodyEl.__lesson=lesson;
+
+    // 1) verifica cache no Drive — carrega questões existentes silenciosamente
+    setLoading(bodyEl,'Verificando questões disponíveis…');
     const cached=await cacheGet();
+    let hasCached=false;
     if(cached&&cached.questions&&Array.isArray(cached.questions)&&cached.questions.length){
       cached.questions.forEach(q=>{
         if(q&&q.statement){
@@ -1294,19 +1245,31 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
             cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
           }
           if(cleanQ){
+            // só adiciona se não existe (dedup por statement)
             const all=lsGet(LQ,[]);
             if(!all.some(x=>x.statement===cleanQ.statement))addQ(cleanQ);
           }
         }
       });
+      hasCached=true;
     }
+
+    // 2) se não tem cache, gera novas questões
+    if(!hasCached){
+      await generateQuestions(items,bodyEl,lesson);
+    }
+
+    // 3) coleta questões do banco para esta matéria, NÃO respondidas ainda
     startQuizFromBank(bodyEl,lesson);
   }
 
-  // ── generateQuestions: gera mais questões de um PDF específico (para "Gerar mais 5") ──
+  // ── Gera questões via Meggy (usa PDFs diferentes a cada vez) ──
+  // Cicla entre todos os PDFs disponíveis para variar as questões.
+  // Se só tem 1 PDF, usa ele (a Meggy gera questões diferentes cada vez).
   if(!window.__gdiPdfCursor)window.__gdiPdfCursor=0;
   async function generateQuestions(items,bodyEl,lesson){
     if(!items||!items.length)return false;
+    // escolhe um PDF diferente a cada vez (cicla entre os disponíveis)
     const pdfIdx=window.__gdiPdfCursor%items.length;
     window.__gdiPdfCursor++;
     const pdfItem=items[pdfIdx];
@@ -1315,6 +1278,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     try{
       text=await extractPdfText(pdfItem.url);
     }catch(e){
+      // se falhar neste PDF, tenta o próximo
       for(let i=1;i<items.length;i++){
         const next=items[(pdfIdx+i)%items.length];
         try{
@@ -1322,16 +1286,18 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
           if(text&&text.trim().length>=50)break;
         }catch(_){}
       }
-      if(!text||text.trim().length<50){setError(bodyEl,'Falha ao extrair texto.');return false;}
+      if(!text||text.trim().length<50){setError(bodyEl,'Falha ao extrair texto de todos os PDFs.');return false;}
     }
-    if(!text||text.trim().length<50){setError(bodyEl,'PDF sem texto extraível.');return false;}
-    setLoading(bodyEl,'Meggy está criando questões…');
+    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível. Tentando outro material…');return false;}
+    setLoading(bodyEl,'Meggy está criando questões no estilo concurso…');
     let resp;
     try{
-      resp=await callIsa('Baseado neste material, gere 5 questões de concurso público em JSON array. Misture:\n- 3 múltipla escolha: {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."}\n- 2 certo/errado (CEBRASPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."}\nSem comentários, só JSON:\n\n'+text.slice(0,15000));
+      resp=await callIsa('Baseado neste material de aula, gere 5 questões de concurso público em formato JSON array. Misture estilos:\n- 3 questões de múltipla escolha (4 alternativas): {"type":"mc","statement":"...","options":["a","b","c","d"],"correct":0,"explanation":"..."} (correct = índice 0-3)\n- 2 questões de certo/errado (estilo CEBRASPE/CESPE): {"type":"tf","statement":"...","correct":1,"explanation":"..."} (correct = 1 para Certo, 0 para Errado)\nNível concurso público brasileiro. Sem comentários, só JSON array:\n\n'+text);
     }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return false;}
     let arr;
-    try{arr=parseJsonArray(resp);}catch(e){setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
+    try{
+      arr=parseJsonArray(resp);
+    }catch(e){setError(bodyEl,'Meggy retornou formato inválido: '+e.message);return false;}
     const cleanArr=[];
     arr.forEach(q=>{
       if(!q||!q.statement)return;
@@ -1342,6 +1308,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
       }
       if(cleanQ){
+        // só adiciona se não existe (dedup por statement)
         const all=lsGet(LQ,[]);
         if(!all.some(x=>x.statement===cleanQ.statement)){
           addQ(cleanQ);
@@ -1349,12 +1316,13 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
         }
       }
     });
+    // salva no cache do Drive (merge)
     if(cleanArr.length){
       const existing=await cacheGet();
       const merged=[...((existing&&existing.questions)||[]),...cleanArr];
       cacheSave(existing?.summary||null,merged,lesson);
     }
-    showToast(cleanArr.length+' questões geradas!');
+    showToast(cleanArr.length+' questões geradas'+(items.length>1?' (material '+(pdfIdx+1)+'/'+items.length+')':'')+'!');
     return cleanArr.length>0;
   }
 
@@ -1486,55 +1454,50 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
     draw();
   }
 
-  // ── Pílulas flow (antes "Mapa Mental") — gera em cadeia ──
+  // ── Mental map flow ──
   async function mindmap(items,bodyEl,lessonName){
-    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
+    if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível nesta aula para gerar mapa mental.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
-    bodyEl.__items=items;bodyEl.__lesson=lesson;
-    setLoading(bodyEl,'Meggy está lendo o material e criando pílulas + resumo + questões…');
+    // extrai texto do PDF
+    setLoading(bodyEl,'Extraindo texto do PDF…');
+    let text;
     try{
-      const result=await generateAll(items,lesson,'mindmap');
-      if(!result.mindmap){setError(bodyEl,'Meggy não conseguiu gerar as pílulas.');return;}
-      bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-            <i class="bi bi-capsule" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
-            <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Pílulas · ${esc(lesson)}</b>
-          </div>
-          <button id="gdi-mm-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+      text=await extractPdfText(items[0].url);
+    }catch(e){setError(bodyEl,'Falha ao extrair texto do PDF: '+e.message);return;}
+    if(!text||text.trim().length<50){setError(bodyEl,'Este PDF não contém texto extraível (provavelmente é um scan de imagem). Tente outro material.');return;}
+    setLoading(bodyEl,'Meggy está criando o mapa mental…');
+    let resp;
+    try{
+      resp=await callIsa('Crie um mapa mental em Markdown hierárquico deste material de aula. Use indentação com marcadores (-) para ramificações. Comece com o tema central como # título, depois ramificações principais com ##, e detalhes com sub-itens indentados. Máximo 3 níveis de profundidade. Formato:\n# Tema Central\n## Ramo 1\n- Detalhe 1\n- Detalhe 2\n## Ramo 2\n- Sub-item\n  - Detalhe\n\nConteúdo:\n'+text);
+    }catch(e){setError(bodyEl,'Meggy indisponível: '+e.message);return;}
+    if(!resp||!resp.trim()){setError(bodyEl,'Meggy retornou uma resposta vazia. Tente novamente.');return;}
+    // renderiza mapa mental com indentação visual
+    bodyEl.innerHTML=`<div class="gdi-mat-isa-result" style="max-width:760px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,rgba(255,139,159,.12),rgba(93,222,218,.06));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="bi bi-diagram-3" style="color:var(--ferreto-primary,#ff8b9f);font-size:20px;flex:none;"></i>
+          <b style="color:var(--ferreto-text,#f0f6fc);font-family:var(--ferreto-font-display,'Poppins',sans-serif);font-size:15px;">Mapa Mental · ${esc(lesson)}</b>
         </div>
-        <div class="gdi-isa-summary-body gdi-mental-map" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;overflow-y:auto;max-height:calc(100vh - 320px);">
-          ${renderMd(result.mindmap)}
-        </div>
-      </div>`;
-      bodyEl.querySelector('#gdi-mm-dl').onclick=()=>downloadAsPdf('Pílulas · '+lesson,result.mindmap);
-      // badge com tudo que foi gerado em cadeia
-      const qCount=result.questions?result.questions.length:0;
-      if(result.summary||qCount>0){
-        const badge=document.createElement('div');
-        badge.style.cssText='background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#3fb950;';
-        const parts=[];
-        if(result.summary)parts.push('✓ Resumo');
-        if(qCount>0)parts.push('✓ '+qCount+' questões');
-        badge.innerHTML='<i class="bi bi-check-circle-fill"></i> <b>Gerado em cadeia:</b> '+parts.join(' · ');
-        bodyEl.querySelector('.gdi-mat-isa-result')?.insertBefore(badge,bodyEl.querySelector('.gdi-mat-isa-result').firstChild);
-      }
-      showToast('Pílulas geradas!');
-    }catch(e){setError(bodyEl,e.message);return;}
+        <button id="gdi-mm-dl" title="Baixar em PDF" style="background:var(--ferreto-surface-2,rgba(255,255,255,.06));border:1px solid var(--ferreto-border,#30363d);color:var(--ferreto-text,#e6edf3);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+      </div>
+      <div class="gdi-isa-summary-body gdi-mental-map" style="background:var(--ferreto-surface-2,rgba(255,255,255,.03));border:1px solid var(--ferreto-border,#21262d);border-radius:14px;padding:20px 24px;color:var(--ferreto-text,#e6edf3);font-size:14px;line-height:1.8;overflow-y:auto;max-height:calc(100vh - 320px);">
+        ${renderMd(resp)}
+      </div>
+    </div>`;
+    bodyEl.querySelector('#gdi-mm-dl').onclick=()=>downloadAsPdf('Mapa Mental · '+lesson,resp);
+    showToast('Mapa mental gerado!');
   }
 
-  // ── Regenerate: força regeração de tudo (limpa cache em memória + Drive) ──
+  // ── Regenerate: força regeração do resumo + questões (ignora cache) ──
   async function regenerate(items,bodyEl,lessonName){
     if(!items||!items.length){setError(bodyEl,'Nenhum PDF disponível.');return;}
     const lesson=realLessonName(lessonName||items[0].name);
-    // limpa cache em memória
-    _chainCache={};
-    // limpa cache do Drive
+    // limpa cache do Drive para esta aula
     try{
       await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({key:lessonKey(),summary:null,questions:null,lessonName:lesson})});
     }catch(_){}
-    // regenera tudo em cadeia
+    // chama summary() que vai regenerar tudo
     await summary(items,bodyEl,lessonName);
   }
 
