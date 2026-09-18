@@ -1150,7 +1150,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       return _chainCache[key];
     }
 
-    // verifica cache do Drive PRIMEIRO (antes de extrair PDF)
+    // verifica cache do Drive
     const cached=await cacheGet();
     if(!_chainCache[key])_chainCache[key]={};
     if(cached){
@@ -1159,33 +1159,7 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       _chainCache[key].cachedQuestions=cached.questions||[];
     }
 
-    // ★ Se já tem resumo + pílulas + questões no Drive, carrega e NÃO regenera
-    if(_chainCache[key].summary&&_chainCache[key].mindmap&&cached&&cached.questions&&cached.questions.length){
-      _chainCache[key].questionsGenerated=true;
-      _chainCache[key].questions=cached.questions;
-      // carrega questões no banco local se ainda não estão
-      cached.questions.forEach(q=>{
-        if(q&&q.statement){
-          let cleanQ;
-          if(q.type==='tf'||(!q.options&&q.correct!==undefined)){
-            cleanQ={subject:lesson,type:'tf',statement:String(q.statement),options:['Certo','Errado'],correct:Math.max(0,Math.min(1,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-          }else if(Array.isArray(q.options)){
-            cleanQ={subject:lesson,type:'mc',statement:String(q.statement),options:q.options.map(String),correct:Math.max(0,Math.min(3,Number(q.correct)||0)),explanation:String(q.explanation||''),source:'ISA-PDF'};
-          }
-          if(cleanQ){
-            const all=lsGet(LQ,[]);
-            if(!all.some(x=>x.statement===cleanQ.statement))addQ(cleanQ);
-          }
-        }
-      });
-      // flashcards do cache
-      if(cached.questions.length)autoCreateFlashcards(cached.questions,lesson);
-      saveIsaSummary(lesson,_chainCache[key].summary);
-      console.log('[Meggy] cache completo do Drive — sem retrabalho');
-      return _chainCache[key];
-    }
-
-    // só extrai PDF se precisa gerar algo
+    // extrai texto de TODOS os PDFs
     let allText='';
     const pdfTexts=[];
     for(const item of items){
@@ -1285,18 +1259,19 @@ body.gdi-fm .gdi-mat-body{height:calc(100dvh - 180px);min-height:480px;}
       autoCreateFlashcards(_chainCache[key].questions,lesson);
     }
 
-    // salva TUDO no Drive em um único POST (resumo + pílulas + questões)
-    try{
-      await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          key:lessonKey(),
-          summary:_chainCache[key].summary||null,
-          questions:_chainCache[key].questions||null,
-          mindmap:_chainCache[key].mindmap||null,
-          lessonName:lesson
-        })});
-    }catch(_){}
-    // compartilha no pool de resumos
+    // salva tudo no Drive
+    const existing=await cacheGet();
+    cacheSave(
+      _chainCache[key].summary||existing?.summary||null,
+      _chainCache[key].questions||existing?.questions||null,
+      lesson
+    );
+    if(_chainCache[key].mindmap){
+      try{
+        await fetch('/api/ai/cache',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({key:lessonKey(),summary:_chainCache[key].summary,questions:_chainCache[key].questions,mindmap:_chainCache[key].mindmap,lessonName:lesson})});
+      }catch(_){}
+    }
     if(_chainCache[key].summary){
       saveSharedSummary(lesson,_chainCache[key].summary,_chainCache[key].questions||null);
     }
